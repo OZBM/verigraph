@@ -1,0 +1,13 @@
+[package]
+name = "vg-mesh"
+description = "Registry: store, index, query, ingestion gate, HTTP API."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }
+vg-store = { path = "../vg-store" }
+vg-types = { path = "../vg-types" }
+vg-smt = { path = "../vg-smt" }

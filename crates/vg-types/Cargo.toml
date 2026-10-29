@@ -1,0 +1,10 @@
+[package]
+name = "vg-types"
+description = "Type checker, effect and capability checker, resource accounting."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }

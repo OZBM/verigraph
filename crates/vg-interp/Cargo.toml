@@ -1,0 +1,11 @@
+[package]
+name = "vg-interp"
+description = "Reference interpreter: the executable semantics and the test oracle."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }
+vg-types = { path = "../vg-types" }

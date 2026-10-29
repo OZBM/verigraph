@@ -1,0 +1,57 @@
+// expect: verify
+// Reference solution for examples/audio_limiter.prompt.md. Must verify (G3, M1).
+module audio_limiter;
+
+@MESH_QUERY @sha256 {
+  signature: (Slice<u8>) -> (Array<u8, 32>);
+  effects: [];
+  post: result == spec:sha256(arg0);
+  intent: "SHA-256 digest of a byte slice";
+}
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);           // excess over the knee, >= 0
+    %3  = FSUB(1.0:f32, knee);         // exact for knee in [0.5, 1]
+    %4  = FDIV(%2, %3);                // t; overflows to +inf for huge x
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);           // u = 1 - 1/(1+t), in [0, 1]
+    %8  = FMA(%3, %7, knee);           // knee + (1 - knee) * u
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);          // linear below the knee
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}
+
+NODE @limit_frame [intent: "Limit a 512x2 stereo frame and digest it", export] {
+  SIGNATURE: (frame: Tensor<f32, [512, 2]>) -> (Tensor<f32, [512, 2]>, Array<u8, 32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  forall(i in 0..512, c in 0..2) { is_finite(frame[i, c]) };
+    POST: forall(i in 0..512, c in 0..2) { result.0[i, c] >= -1.0 && result.0[i, c] <= 1.0
+                                           && ((frame[i, c] >= 0.0) == (result.0[i, c] >= 0.0)) }
+          && result.1 == spec:sha256(as_bytes(result.0));
+    COST: heap_bytes == 0 && arena_bytes == 0;
+    BUDGET: latency_p99_us <= 500;
+  }
+  LEARNABLE {
+    knee: f32 in [0.5, 0.99];          // frozen in the MVP; a loss arrives with the tuner (P9, R-07)
+  }
+  BODY {
+    %0 = SIMD_MAP(@soft_knee, frame, knee);
+    %1 = AS_BYTES(%0);
+    %2 = CALL_HASH(@sha256, %1);
+    RETURN(%0, %2);
+  }
+}

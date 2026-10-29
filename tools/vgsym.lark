@@ -1,0 +1,62 @@
+// Executable reference for the VG-Sym grammar in docs/03-vg-sym.md (Lark: Earley parser, basic lexer).
+// The basic lexer is deterministic and takes the longest match, as vg-core's lexer must, so vg-core's
+// parser must accept and reject exactly what this grammar does on tests/corpus. Every word spelled out
+// in the rules below is a reserved keyword: Lark lexes it as IDENT or OPNAME, then retypes it.
+start: "module" IDENT ";" item*
+?item: mesh_query | node_def | spec_def
+mesh_query: "@MESH_QUERY" LABEL "{" "signature" ":" fn_type ";" "effects" ":" effects ";" ("pre" ":" formula ";")? "post" ":" formula ";" ("intent" ":" STRING ";")? "}"
+spec_def: "SPEC" LABEL node_body
+node_def: "NODE" LABEL attrs? node_body
+node_body: "{" "SIGNATURE" ":" params "->" results ";" "EFFECTS" ":" effects ";" "CONTRACT" "{" clause* "}" learnable? "BODY" "{" stmt+ "}" "}"
+attrs: "[" attr ("," attr)* "]"
+attr: "intent" ":" STRING | "export" | "inline"
+params: "(" (IDENT ":" type ("," IDENT ":" type)*)? ")"
+results: "(" type ("," type)* ")"
+fn_type: "(" (type ("," type)*)? ")" "->" results
+clause: "PRE" ":" formula ";" | "POST" ":" formula ";" | "INVARIANT" LABEL "(" IDENT "," IDENT ")" ":" formula ";" | "DECREASES" ":" formula ";" | "COST" ":" formula ";" | "BUDGET" ":" formula ";"
+learnable: "LEARNABLE" "{" (IDENT ":" float_type "in" "[" signed "," signed "]" ("loss" ":" LABEL)? ";")+ "}"
+stmt: binding ("," binding)* "=" op "(" args? ")" ";" | "RETURN" "(" value ("," value)* ")" ";"
+binding: port (":" type)?
+op: (OPNAME | effect) ("." mode)?
+mode: IDENT | scalar_type
+args: arg ("," arg)*
+arg: (IDENT "=")? (value | LABEL)
+?value: port | IDENT | literal
+port: PORT
+literal: signed ":" scalar_type | "true" | "false" | array ":" type
+signed: "-"? number
+?number: INT | DECIMAL
+array: "[" element ("," element)* "]"
+?element: signed | "true" | "false" | array
+effects: "[" (effect ("," effect)*)? "]"
+effect: "ARENA" | "CLOCK" | "FILE_READ" | "FILE_WRITE" | "NET_READ" | "NET_WRITE" | "GPU" | "NONDET" | "PARAM_UPDATE" | "TELEMETRY" | "HOST_CALL" | "SPAWN"
+type: scalar_type | "Bool" | "Eff" | handle | ("Array" | "Tensor") "<" type "," shape ">" | "Slice" "<" type ">" | "Tuple" "<" type ("," type)* ">" | "Result" "<" type "," type ">" | "Arena" "<" INT ">" | "{" IDENT ":" type "|" formula "}"
+shape: dim | "[" dim ("," dim)* "]"
+dim: INT | IDENT
+handle: "FileIn" | "FileOut" | "Socket" | "Clock" | "GpuQueue"
+scalar_type: int_type | float_type
+int_type: "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
+float_type: "f16" | "bf16" | "f32" | "f64"
+?formula: or_ ("==>" formula)?
+?or_: and_ ("||" and_)*
+?and_: cmp ("&&" cmp)*
+?cmp: sum (cmp_op sum)?
+cmp_op: "==" | "!=" | "<=" | ">=" | "<" | ">"
+?sum: prod (("+" | "-") prod)*
+?prod: unary (("*" | "/" | "%") unary)*
+?unary: ("!" | "-") unary | postfix
+?postfix: primary ("[" formula ("," formula)* "]" | "." INT)*
+?primary: value | number | "result" | call | "(" formula ")" | "forall" "(" range_ ("," range_)* ")" "{" formula "}"
+range_: IDENT "in" sum ".." sum
+call: (("spec" | "fold") ":")? IDENT "(" (formula ("," formula)*)? ")"
+LABEL: "@" /[a-z_][A-Za-z0-9_]*/
+IDENT: /[a-z_][A-Za-z0-9_]*/
+OPNAME: /[A-Z][A-Z0-9_]*(?![A-Za-z0-9_])/
+PORT: /%[0-9]+/
+INT: /[0-9]+/
+DECIMAL: /[0-9]+(\.[0-9]+([eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)/
+STRING: /"([^"\\]|\\.)*"/
+COMMENT: /\/\/[^\n]*/
+%import common.WS
+%ignore WS
+%ignore COMMENT

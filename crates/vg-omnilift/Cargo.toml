@@ -1,0 +1,14 @@
+[package]
+name = "vg-omnilift"
+description = "C and Rust to LLVM IR to VG-IR, with equivalence checks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }
+vg-types = { path = "../vg-types" }
+vg-interp = { path = "../vg-interp" }
+vg-smt = { path = "../vg-smt" }
+vg-codegen = { path = "../vg-codegen" }

@@ -1,0 +1,11 @@
+# Tool versions for VeriGraph builds, checked by scripts/check-toolchain.sh.
+# Format: <tool> <version>. "none" means no acceptable version was installed on the
+# owner's machine when this file was written; pin it here once one is installed.
+# Recorded 2026-10-24 on macOS (Darwin 27.2.0, arm64) by W0.
+rustc     1.90.0
+# Only Apple clang 17.0.0 (clang-1700.3.19.1) is installed; AGENTS.md section 4 requires clang 19 or newer.
+clang     none
+z3        none
+cvc5      none
+bitwuzla  none
+wasi-sdk  none

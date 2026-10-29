@@ -1,0 +1,12 @@
+[package]
+name = "vg-codegen"
+description = "Proof erasure, LLVM IR emission, clang driver, OS sandbox manifests."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }
+vg-types = { path = "../vg-types" }
+vg-smt = { path = "../vg-smt" }

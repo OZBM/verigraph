@@ -1,0 +1,24 @@
+[package]
+name = "vg-cli"
+description = "The vg command, plus vg mcp, an MCP server any AI agent can call."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "vg"
+path = "src/main.rs"
+
+[dependencies]
+vg-core = { path = "../vg-core" }
+vg-store = { path = "../vg-store" }
+vg-types = { path = "../vg-types" }
+vg-interp = { path = "../vg-interp" }
+vg-smt = { path = "../vg-smt" }
+vg-codegen = { path = "../vg-codegen" }
+vg-rt = { path = "../vg-rt" }
+vg-decode = { path = "../vg-decode" }
+vg-telemetry = { path = "../vg-telemetry" }
+vg-mesh = { path = "../vg-mesh" }
+vg-omnilift = { path = "../vg-omnilift" }

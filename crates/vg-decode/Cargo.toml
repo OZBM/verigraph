@@ -1,0 +1,12 @@
+[package]
+name = "vg-decode"
+description = "Grammar export (Tier 1), incremental checker (Tier 2), SMT guard (Tier 3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }
+vg-types = { path = "../vg-types" }
+vg-smt = { path = "../vg-smt" }

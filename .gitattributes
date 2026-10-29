@@ -1,0 +1,2 @@
+# PROGRESS.md is append-only, so a union merge keeps every branch's new lines (AGENTS.md, section 1).
+PROGRESS.md merge=union

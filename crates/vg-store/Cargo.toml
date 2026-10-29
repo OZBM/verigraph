@@ -1,0 +1,10 @@
+[package]
+name = "vg-store"
+description = "Content-addressed object store and index, like .git/objects."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vg-core = { path = "../vg-core" }
