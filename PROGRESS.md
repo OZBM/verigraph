@@ -6,6 +6,7 @@ Agents append; nobody rewrites history. Add lines, never edit or delete one, so 
 ## In progress
 
 2026-10-29 · W0 · Spec deepening requested by the owner, with Gemini in parallel: normative semantics, opcode reference, agent interface, conformance and gates; ADRs for every spec change; literature and mathematics survey folded into the research tracks · plan: write docs/13-16, align docs 00-12, ROADMAP, README and the skill, check every citation against its source, run tools/check_examples.py and scripts/gate-g0.sh
+2026-10-29 · W0 · Fix the scripts/gate-g0.sh bugs found by the independent G0 review (reports/gate-g0-review.md: B1-B7, G-1, G-2, G-4) · plan: port the review's adversarial harness as scripts/test-gate-g0.sh, with a stub gh that also answers the jobs query; the gate then reads every CI run and both jobs for HEAD, checks the docs and tracks R-01 to R-14 in HEAD by first line, compares crate names from cargo metadata, and fails on a dirty tree, a cargo alias for clippy or fmt, or an unwritable report; ci.yml asserts each runner's host triple
 
 ## Done
 
@@ -15,6 +16,7 @@ Agents append; nobody rewrites history. Add lines, never edit or delete one, so 
 
 2026-10-29 · W0 · Owner decision recorded: the repository stays private during the MVP and goes public at M1, after the license is chosen · docs/12 open question ticked; ROADMAP task M1.4 added
 2026-10-29 · W0 · Private repository github.com/OZBM/verigraph created and main pushed; CI green on linux-x86_64 and macos-arm64 for commit 29d25ea (run 40837848645); `make gate-g0` exits 0, every G0 criterion holds, awaiting the owner's approval · reports/gate-g0.md
+2026-10-29 · W0 · scripts/gate-g0.sh fixed for the G0 review's B1-B7, G-1, G-2 and G-4 (G-3 and G-5 left as they are): criterion 2 needs at least one `ci` run for HEAD, every run `success`, and in each run both jobs, linux-x86_64 and macos-arm64, `success` (from `gh run view --json jobs`), with the evidence on one line; ci.yml asserts each runner's host triple from the matrix; criterion 3 reads its 33 docs, tracks R-01 to R-14 by name among them, from HEAD and checks each first line; crate names come from `cargo metadata`; the gate fails on a tree that is not HEAD (git status with untracked files, or files marked assume-unchanged or skip-worktree), on a cargo alias for clippy or fmt (cargo's own warning, so every config file cargo reads counts) and on an unwritable report; failing commands show their real exit code · scripts/test-gate-g0.sh, the review's harness turned into a regression test whose stub gh (jq) also answers the jobs query: 33 checks, 0 failed expectations; exit 0 only for c00, c09, c18, c21 and c23; c01-c03 show exit 101, 1 and 101; c20 unchanged; against e4dc6e3's gate the same script counts 59 failed expectations. Read-only gh on run 40837987092 (e4dc6e3): the new CI row is met and byte-identical to the stub's. cargo fmt, clippy and test exit 0. Not run: CI on this commit (not pushed), so `make gate-g0` here reports criterion 2 not met (`no run found`) and reports/gate-g0.md is not regenerated
 
 ## Blocked
 
