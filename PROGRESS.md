@@ -14,6 +14,7 @@ Agents append; nobody rewrites history. Add lines, never edit or delete one, so 
 2026-10-29 · W8 · docs/research/SURVEY-2026-10.md and new track R-14 (intent validation); R-01, R-02, R-04, R-08, R-09, R-10 and R-12 updated with verified sources · every arXiv id checked against the arXiv API; LLVM LangRef and the WebAssembly spec read for ADR 0002. Gemini 4 Argon jobs ended on exhausted credits with no output; Gemini 3.8 Flash delivered a 53-finding spec audit (2 rejected with reasons in the survey, the rest merged or already covered), a cross-target memo and a 25-paper sweep (one wrong author list corrected; unread entries left out)
 
 2026-10-29 · W0 · Owner decision recorded: the repository stays private during the MVP and goes public at M1, after the license is chosen · docs/12 open question ticked; ROADMAP task M1.4 added
+2026-10-29 · W0 · Private repository github.com/OZBM/verigraph created and main pushed; CI green on linux-x86_64 and macos-arm64 for commit 29d25ea (run 40837848645); `make gate-g0` exits 0, every G0 criterion holds, awaiting the owner's approval · reports/gate-g0.md
 
 ## Blocked
 
@@ -24,6 +25,7 @@ _Format: question, options, recommendation._
 2026-10-29 · W0 · Approve ADRs 0002-0010 before G1 freezes the format? Options: approve all; approve with changes; reject some. Recommendation: approve all; each closes a gap that would have let two workstreams build incompatible things or let a wrong program verify (docs/12).
 2026-10-29 · W0 · Linux x86_64 CPU baseline? Options: x86-64-v3 (AVX2, FMA, BMI2), or x86-64-v2, where FMA becomes a slow libcall. Recommendation: x86-64-v3, checked at startup (docs/06).
 2026-10-29 · W0 · Gate wording: add docs/16's distinctness families to G1, and count a G5 task as solved only when the node verifies against the task's reference contract? Options: both, one, neither. Recommendation: both; without them a hash-merging bug passes G1 and a `POST: true` passes G5.
+2026-10-29 · W0 · Approve G0 (reports/gate-g0.md)? Options: approve now; run the Gate review prompt (PROMPTS.md) in a fresh session first. Recommendation: the review first, as README step 5 says.
 2026-10-29 · W0 · macOS sandbox mechanism? Options: `sandbox_init` with a generated profile (deprecated by Apple, works with argv paths), or App Sandbox entitlements (supported, fixed paths only). Recommendation: let P4.6 test both on the pinned macOS; docs/04 limits macOS roots to fixed paths until then.
 
 ## Token log
