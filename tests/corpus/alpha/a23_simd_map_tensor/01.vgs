@@ -1,0 +1,28 @@
+module a23_simd_map_tensor;
+
+NODE @scale_elem [intent: "Kernel scaling a single float element"] {
+  SIGNATURE: (elem: f32, factor: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(elem) && is_finite(factor);
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FMUL(elem, factor);
+    RETURN(%0);
+  }
+}
+
+NODE @map_tensor_gain [intent: "Apply scale_elem over 2D tensor"] {
+  SIGNATURE: (t: Tensor<f32, [4, 2]>, gain: f32) -> (Tensor<f32, [4, 2]>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4, j in 0..2) { is_finite(t[i, j]) };
+    PRE: is_finite(gain);
+    POST: forall(i in 0..4, j in 0..2) { is_finite(result[i, j]) };
+  }
+  BODY {
+    %0 = SIMD_MAP(@scale_elem, t, gain);
+    RETURN(%0);
+  }
+}

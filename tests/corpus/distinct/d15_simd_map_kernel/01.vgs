@@ -1,0 +1,32 @@
+// 01: SIMD_MAP uses @inc kernel
+module d15_simd_map_kernel;
+
+NODE @inc {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @double {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = MUL.wrap(x, 2:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @apply_map {
+  SIGNATURE: (arr: Array<u32, 4>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SIMD_MAP(@inc, arr);
+    RETURN(%0);
+  }
+}

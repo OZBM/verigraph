@@ -1,0 +1,43 @@
+module a43_multi_result_call;
+
+NODE @div_mod_pair [intent: "Calculate quotient and remainder"] {
+  SIGNATURE: (n: u32, d: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d > 0;
+    POST: result.0 <= n && result.1 < d;
+    COST: ops <= 3;
+  }
+  BODY {
+    %0 = DIV.wrap(n, d);
+    %1 = MOD.wrap(n, d);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @combine_results [intent: "Combine div and mod into linear form"] {
+  SIGNATURE: (q: u32, r: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0 = MUL.wrap(q, 10:u32);
+    %1 = ADD.wrap(%0, r);
+    RETURN(%1);
+  }
+}
+
+NODE @calc_div_mod_packed [intent: "Chain multi-result call"] {
+  SIGNATURE: (num: u32, den: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: den > 0;
+    COST: ops <= 10;
+  }
+  BODY {
+    %0, %1 = CALL_HASH(@div_mod_pair, num, den);
+    %2 = CALL_HASH(@combine_results, %0, %1);
+    RETURN(%2);
+  }
+}

@@ -1,0 +1,48 @@
+module learnable_refinement_pipeline;
+
+NODE @compute_metric [intent: "Multiply float by scale and check threshold with commuted FMUL"] {
+  SIGNATURE: (val: f32, scale: f32) -> (Tuple<f32, Bool>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(val) && is_finite(scale);
+  }
+  BODY {
+    %0 = FMUL(scale, val);
+    %1 = GT.f(%0, 1.0:f32);
+    %2 = TUPLE(%0, %1);
+    RETURN(%2);
+  }
+}
+
+NODE @check_index [intent: "Shift validated index"] {
+  SIGNATURE: (idx: {v: u8 | v < 64}) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: idx < 64;
+  }
+  BODY {
+    %0 = CAST.u32(idx);
+    %1 = SHL.wrap(%0, 2:u32);
+    RETURN(%1);
+  }
+}
+
+NODE @pipeline_main [intent: "Compose kernel calls with learnable gain and reordered calls", export] {
+  SIGNATURE: (data: Array<f32, 2>, channel_id: {v: u8 | v < 64}) -> (f32, Bool, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..2) { is_finite(data[i]) };
+    COST: ops <= 30;
+  }
+  LEARNABLE {
+    gain: f32 in [0.5, 2.0];
+  }
+  BODY {
+    %10 = INDEX(data, 0:u64);
+    %14 = CALL_HASH(@check_index, channel_id);
+    %11 = CALL_HASH(@compute_metric, %10, gain);
+    %12 = PROJ(%11, 0:u32);
+    %13 = PROJ(%11, 1:u32);
+    RETURN(%12, %13, %14);
+  }
+}

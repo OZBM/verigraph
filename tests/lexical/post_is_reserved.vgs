@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (post: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: result == post; }
+  BODY { RETURN(post); }
+}

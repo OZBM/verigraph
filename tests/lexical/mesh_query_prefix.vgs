@@ -1,0 +1,2 @@
+module m;
+@MESH_QUERYX @q { signature: () -> (u8); effects: []; post: true; }

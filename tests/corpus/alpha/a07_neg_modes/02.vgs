@@ -1,0 +1,18 @@
+module a07_neg_modes;
+
+NODE @neg_examples [intent: "Integer negation in checked wrap and sat modes"] {
+  SIGNATURE: (signed_val: i32, unsigned_val: u32) -> (i32, i32, i32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: signed_val > -2147483648:i32;
+    PRE: signed_val <= 1000:i32;
+    POST: result.0 == -signed_val && result.1 == -signed_val && result.2 == -signed_val;
+  }
+  BODY {
+    %10 = NEG.checked(signed_val);
+    %11 = NEG.wrap(signed_val);
+    %12 = NEG.sat(signed_val);
+    %13 = NEG.wrap(unsigned_val);
+    RETURN(%10, %11, %12, %13);
+  }
+}

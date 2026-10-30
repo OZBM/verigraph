@@ -1,0 +1,71 @@
+// Every section of the .vgir format and every MVP clause kind: TYPES (nested, f16, Tensor, Result,
+// Eff, Clock), SIGNATURE with θ, CONSTS (integers, floats, -0.0, an f16 tensor, formula Ints),
+// OPS with modes and several results, OPERANDS of all five kinds, RESULTS, CALLS (a kernel, a SPEC,
+// a loss), CONTRACT (PRE, POST, COST, BUDGET, INVARIANT naming a port, a refinement) and LEARNABLE.
+module sections;
+
+SPEC @spec_inc {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @step [intent: "fold kernel"] {
+  SIGNATURE: (acc: u32, v: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = XOR(acc, v);
+    RETURN(%0);
+  }
+}
+
+NODE @widen {
+  SIGNATURE: (h: f16) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CAST.f32(h);
+    RETURN(%0);
+  }
+}
+
+NODE @loss {
+  SIGNATURE: (g: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FMUL(g, g);
+    RETURN(%0);
+  }
+}
+
+NODE @all [intent: "one node, every section", export] {
+  SIGNATURE: (e: Eff, c: Clock, xs: Array<u32, 4>, k: {v: u32 | v < 100}) -> (Eff, u32, Result<u64, u32>, Tensor<f32, [2, 2]>);
+  EFFECTS: [CLOCK];
+  CONTRACT {
+    PRE: forall(i in 0..4) { xs[i] <= 1000 };
+    POST: result.1 == fold:step(0:u32, xs, 4) || spec:spec_inc(k) > k;
+    POST: forall(i in 0..2, j in 0..i + 1) { result.3[i, j] >= -0.0 || is_nan(result.3[i, j]) };
+    COST: ops <= 64 && arena_bytes == 0;
+    BUDGET: latency_p99_us <= 5;
+    INVARIANT @inv(n, acc): n <= 4 && acc <= %3;
+  }
+  LEARNABLE {
+    gain: f32 in [-0.5, 2.0] loss: @loss;
+  }
+  BODY {
+    %0, %1 = CLOCK_READ(e, c);
+    %3 = SUB.sat(k, 7:u32);
+    %4 = FOLD_BOUNDED(@step, xs, init=0:u32, invariant=@inv);
+    %5 = CAST.u64(%4);
+    %6: Result<u64, u32> = OK(%5);
+    %7 = IDENTITY([[1.5, -0.0], [65504, 0.25]]:Tensor<f16, [2, 2]>);
+    %8 = SIMD_MAP(@widen, %7);
+    RETURN(%0, %4, %6, %8);
+  }
+}

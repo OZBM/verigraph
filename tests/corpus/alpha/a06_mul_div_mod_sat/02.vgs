@@ -1,0 +1,16 @@
+module a06_mul_div_mod_sat;
+
+NODE @calc_sat [intent: "Saturating 16-bit arithmetic ops"] {
+  SIGNATURE: (u: i16, v: i16) -> (i16, i16, i16);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: v != 0:i16;
+  }
+  BODY {
+    // Commutative swap on MUL.sat
+    %10 = MUL.sat(v, u);
+    %11 = DIV.sat(u, v);
+    %12 = MOD.sat(u, v);
+    RETURN(%10, %11, %12);
+  }
+}

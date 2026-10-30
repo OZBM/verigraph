@@ -1,0 +1,20 @@
+module a11_unsigned_compares;
+
+NODE @unsigned_cmp [intent: "Unsigned 32-bit comparisons"] {
+  SIGNATURE: (lhs: u32, rhs: u32) -> (Bool, Bool, Bool, Bool, Bool, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lhs == rhs;
+    POST: result.0 && result.1 && result.2 && !result.3 && !result.4 && !result.5;
+  }
+  BODY {
+    // Commutative swaps on EQ and NE
+    %10 = EQ(rhs, lhs);
+    %11 = LE.u(lhs, rhs);
+    %12 = GE.u(lhs, rhs);
+    %13 = NE(rhs, lhs);
+    %14 = LT.u(lhs, rhs);
+    %15 = GT.u(lhs, rhs);
+    RETURN(%10, %11, %12, %13, %14, %15);
+  }
+}

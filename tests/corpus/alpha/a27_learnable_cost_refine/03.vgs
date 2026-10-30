@@ -1,0 +1,23 @@
+module a27_learnable_cost_refine;
+
+NODE @learnable_affine [intent: "Variant with split cost, identity, and swapped fadd"] {
+  SIGNATURE: (x: {v: u32 | v < 100}) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: heap_bytes == 0 && arena_bytes == 0;
+    COST: ops <= 10;
+    POST: is_finite(result);
+  }
+  LEARNABLE {
+    weight: f32 in [-2.0, 2.0];
+    bias: f32 in [0.0, 1.0];
+  }
+  BODY {
+    %99 = FADD(1.0:f32, 2.0:f32);
+    %0 = CAST.f32(x);
+    %50 = IDENTITY(%0);
+    %1 = FMUL(%50, weight);
+    %2 = FADD(bias, %1);
+    RETURN(%2);
+  }
+}

@@ -1,0 +1,31 @@
+// expect: reject @soft_knee/POST.0
+// First draft of @soft_knee. EXPECTED: rejected (G3, M1).
+// POST.0 fails with a counterexample such as x = 3.0e38, knee = 0.5:
+// t = %4 overflows to +inf, %6 = inf / inf = NaN, and FMIN, FMA, SELECT and
+// FCLAMP all propagate the NaN. The repair is in examples/audio_limiter.vgs.
+module soft_knee_draft;
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1], first draft"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);                // t; overflows to +inf for huge x
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(%4, %5);                // BUG: inf / inf is NaN
+    %7  = FMIN(%6, 1.0:f32);           // does not help: IEEE minimum propagates NaN
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}

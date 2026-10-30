@@ -1,0 +1,12 @@
+// 01: ADD with checked mode (ADD.checked)
+module d03_int_arith_modes;
+
+NODE @add_modes {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.checked(a, b);
+    RETURN(%0);
+  }
+}

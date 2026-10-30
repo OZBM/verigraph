@@ -1,0 +1,17 @@
+module a05_mul_div_mod_wrap;
+
+NODE @calc_wrap [intent: "Wrapping 32-bit multiplication and division"] {
+  SIGNATURE: (x: i32, y: i32) -> (i32, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: y != 0:i32;
+  }
+  BODY {
+    // Commutative swaps on MUL.wrap and ADD.wrap
+    %10 = MUL.wrap(y, x);
+    %11 = DIV.wrap(x, y);
+    %12 = MOD.wrap(x, y);
+    %13 = ADD.wrap(%12, %11);
+    RETURN(%10, %13);
+  }
+}

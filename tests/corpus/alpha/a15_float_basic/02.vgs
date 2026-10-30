@@ -1,0 +1,24 @@
+module a15_float_basic;
+
+NODE @float_ops [intent: "Equivalence variant with swapped commutative operands"] {
+  SIGNATURE: (x: f32, y: f32) -> (f32, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(y) && y != 0.0;
+    POST: is_finite(result.0);
+  }
+  BODY {
+    %10 = FADD(y, x);
+    %11 = FSUB(x, y);
+    %12 = FMUL(%11, %10);
+    %13 = FDIV(%12, y);
+    %14 = FNEG(%13);
+    %15 = FABS(%14);
+    %16 = FMIN(100.0:f32, %15);
+    %17 = FMAX(-100.0:f32, %16);
+    %18 = LT.f(x, y);
+    %19 = SELECT(%18, %17, %10);
+    %20 = EQ(%11, %10);
+    RETURN(%19, %20);
+  }
+}

@@ -1,0 +1,8 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: f32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: true; }
+  LEARNABLE { g: f32 in [-0.5, 2e3] loss: @l; h: bf16 in [0, 1]; }
+  BODY { RETURN(x); }
+}

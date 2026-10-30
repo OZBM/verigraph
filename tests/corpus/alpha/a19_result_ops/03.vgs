@@ -1,0 +1,46 @@
+module a19_result_ops;
+
+NODE @wrap_and_unwrap [intent: "Variant with duplicated is_ok and split post"] {
+  SIGNATURE: (input_val: u32) -> (u32, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result.0 == input_val;
+    POST: result.1;
+  }
+  BODY {
+    %0: Result<u32, u8> = OK(input_val);
+    %1 = IS_OK(%0);
+    %51 = IS_OK(%0);
+    %2 = GET_OK(%0);
+    RETURN(%2, %51);
+  }
+}
+
+NODE @wrap_and_unwrap_err [intent: "Wrap error and unwrap"] {
+  SIGNATURE: (code: u8) -> (u8, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result.0 == code;
+    POST: !result.1;
+  }
+  BODY {
+    %0: Result<u32, u8> = ERR(code);
+    %1 = IS_OK(%0);
+    %2 = GET_ERR(%0);
+    RETURN(%2, %1);
+  }
+}
+
+NODE @test_results [intent: "Caller with dead op and identity"] {
+  SIGNATURE: (arg_val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == arg_val;
+  }
+  BODY {
+    %99 = ADD.wrap(arg_val, 1:u32);
+    %0, %1 = CALL_HASH(@wrap_and_unwrap, arg_val);
+    %50 = IDENTITY(%0);
+    RETURN(%50);
+  }
+}

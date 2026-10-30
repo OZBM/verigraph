@@ -1,0 +1,43 @@
+module a22_multi_node_call;
+
+NODE @calc_core [intent: "Compute sum and difference with swapped add"] {
+  SIGNATURE: (a: f32, b: f32) -> (f32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(a) && is_finite(b);
+    POST: is_finite(result.0) && is_finite(result.1);
+  }
+  BODY {
+    %10 = FADD(b, a);
+    %11 = FSUB(a, b);
+    RETURN(%10, %11);
+  }
+}
+
+NODE @scale_core [intent: "Scale with swapped multiplication operands"] {
+  SIGNATURE: (sum_in: f32, diff_in: f32, factor: f32) -> (f32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(sum_in) && is_finite(diff_in) && is_finite(factor);
+    POST: is_finite(result.0) && is_finite(result.1);
+  }
+  BODY {
+    %10 = FMUL(factor, sum_in);
+    %11 = FMUL(factor, diff_in);
+    RETURN(%10, %11);
+  }
+}
+
+NODE @run_pipeline [intent: "Pipeline calling renamed callees"] {
+  SIGNATURE: (x: f32, y: f32, scale: f32) -> (f32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(y) && is_finite(scale);
+    POST: is_finite(result.0) && is_finite(result.1);
+  }
+  BODY {
+    %10, %11 = CALL_HASH(@calc_core, x, y);
+    %12, %13 = CALL_HASH(@scale_core, %10, %11, scale);
+    RETURN(%12, %13);
+  }
+}

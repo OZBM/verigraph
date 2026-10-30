@@ -1,0 +1,27 @@
+module a24_fold_bounded_inv;
+
+NODE @fold_kernel [intent: "Kernel with swapped add operands"] {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc <= 100000 && x <= 1000;
+  }
+  BODY {
+    %10 = ADD.wrap(x, acc);
+    RETURN(%10);
+  }
+}
+
+NODE @run_fold [intent: "Fold with renamed invariant and bound names"] {
+  SIGNATURE: (items: Array<u32, 4>, initial: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @inv_oopInvariant(k, acc_val): acc_val >= 0;
+    PRE: initial == 0:u32;
+    POST: result >= 0;
+  }
+  BODY {
+    %10 = FOLD_BOUNDED(@fold_kernel, items, init=initial, invariant=@inv_oopInvariant);
+    RETURN(%10);
+  }
+}

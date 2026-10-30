@@ -1,0 +1,25 @@
+module generate_literal_count;
+
+NODE @kernel_table [intent: "Kernel generating scaled table entry"] {
+  SIGNATURE: (idx: u64, step: u64) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %9 = IDENTITY(step);
+    %0 = MUL.sat(idx, %9);
+    RETURN(%0);
+  }
+}
+
+NODE @gen_table [intent: "Generate 8-element table using literal count", export] {
+  SIGNATURE: (step: u64) -> (Array<u64, 8>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: forall(entry_idx in 0..8) { result[entry_idx] >= 0 };
+  }
+  BODY {
+    %900 = ADD.sat(step, 1:u64);
+    %0 = GENERATE(@kernel_table, 8:u64, step);
+    RETURN(%0);
+  }
+}

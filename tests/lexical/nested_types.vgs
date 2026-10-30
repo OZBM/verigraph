@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: Tuple<Array<u8, 2>, Result<Slice<u8>, u32>>) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: true; }
+  BODY { RETURN(x); }
+}

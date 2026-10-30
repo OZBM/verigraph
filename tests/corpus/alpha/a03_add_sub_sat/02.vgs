@@ -1,0 +1,15 @@
+module a03_add_sub_sat;
+
+NODE @pixel_blend [intent: "Saturating 8-bit pixel blending"] {
+  SIGNATURE: (px_a: u8, px_b: u8, b_val: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    // Commutative swaps on ADD.sat
+    %20 = ADD.sat(px_b, px_a);
+    %21 = SUB.sat(%20, b_val);
+    %22 = ADD.sat(1:u8, %21);
+    RETURN(%22);
+  }
+}

@@ -1,0 +1,23 @@
+module a04_mul_div_mod_checked;
+
+NODE @div_rem_checked {
+  SIGNATURE: (n: u32, d: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d > 0:u32 && n <= 65535:u32 && d <= 65535:u32;
+    POST: result.1 <= n && result.2 < d;
+  }
+  BODY {
+    // Reorder independent statements
+    %1 = DIV.checked(n, d);
+    %2 = MOD.checked(n, d);
+    // Duplicate pure op %2
+    %15 = MOD.checked(n, d);
+    // Dead pure op
+    %9 = MUL.checked(d, 1:u32);
+    // Bind port n through IDENTITY
+    %8 = IDENTITY(n);
+    %0 = MUL.checked(%8, d);
+    RETURN(%0, %1, %15);
+  }
+}

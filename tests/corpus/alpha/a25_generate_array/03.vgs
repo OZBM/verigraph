@@ -1,0 +1,29 @@
+module a25_generate_array;
+
+NODE @gen_cell [intent: "Generate cell with split pre"] {
+  SIGNATURE: (step_i: u64, offset: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: step_i >= 0;
+    PRE: step_i < 10;
+  }
+  BODY {
+    %0 = CAST.u32(step_i);
+    %1 = ADD.wrap(%0, offset);
+    RETURN(%1);
+  }
+}
+
+NODE @make_array [intent: "Variant with identity length and dead op"] {
+  SIGNATURE: (seed: u32) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: seed < 1000;
+  }
+  BODY {
+    %99 = ADD.wrap(seed, 10:u32);
+    %50 = IDENTITY(4:u64);
+    %0 = GENERATE(@gen_cell, %50, seed);
+    RETURN(%0);
+  }
+}

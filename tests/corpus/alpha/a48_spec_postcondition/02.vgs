@@ -1,0 +1,45 @@
+module a48_spec_postcondition;
+
+SPEC @spec_abs_diff {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0;
+  }
+  BODY {
+    %0 = SUB.sat(a, b);
+    %1 = NEG.sat(%0);
+    %2 = GE.s(a, b);
+    %3 = SELECT(%2, %0, %1);
+    RETURN(%3);
+  }
+}
+
+NODE @abs_diff [intent: "Implementation of absolute difference variant 2"] {
+  SIGNATURE: (u: i32, v: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == spec:spec_abs_diff(u, v);
+  }
+  BODY {
+    %0 = SUB.sat(u, v);
+    %1 = NEG.sat(%0);
+    %2 = GE.s(u, v);
+    %3 = SELECT(%2, %0, %1);
+    RETURN(%3);
+  }
+}
+
+NODE @calc_distance [intent: "Manhattan distance along 3 points"] {
+  SIGNATURE: (p1: i32, p2: i32, p3: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0;
+  }
+  BODY {
+    %10 = CALL_HASH(@abs_diff, p1, p2);
+    %11 = CALL_HASH(@abs_diff, p2, p3);
+    %12 = ADD.sat(%11, %10);
+    RETURN(%12);
+  }
+}

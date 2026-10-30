@@ -1,0 +1,24 @@
+module a12_signed_compares;
+
+NODE @signed_cmp {
+  SIGNATURE: (x: i32, y: i32) -> (Bool, Bool, Bool, Bool, Bool, Bool);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    // Reordered comparisons
+    %4 = EQ(x, y);
+    %5 = NE(x, y);
+    %0 = LT.s(x, y);
+    // Duplicate pure op %0
+    %90 = LT.s(x, y);
+    // Dead pure op
+    %80 = LT.s(x, 0:i32);
+    %1 = LE.s(x, y);
+    // Bind y via IDENTITY
+    %82 = IDENTITY(y);
+    %2 = GT.s(x, %82);
+    %3 = GE.s(x, y);
+    RETURN(%90, %1, %2, %3, %4, %5);
+  }
+}

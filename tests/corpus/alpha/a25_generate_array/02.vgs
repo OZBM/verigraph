@@ -1,0 +1,26 @@
+module a25_generate_array;
+
+NODE @cell_init [intent: "Generate cell with swapped add operands"] {
+  SIGNATURE: (idx: u64, base_val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: idx >= 0 && idx < 10;
+  }
+  BODY {
+    %10 = CAST.u32(idx);
+    %11 = ADD.wrap(base_val, %10);
+    RETURN(%11);
+  }
+}
+
+NODE @build_table [intent: "Generate array with renamed kernel"] {
+  SIGNATURE: (base: u32) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: base < 1000;
+  }
+  BODY {
+    %10 = GENERATE(@cell_init, 4:u64, base);
+    RETURN(%10);
+  }
+}

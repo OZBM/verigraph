@@ -1,0 +1,53 @@
+module a51_generate_assert_guard;
+
+NODE @gen_kernel [intent: "Generate array elements"] {
+  SIGNATURE: (idx: u64, factor: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 10000;
+  }
+  BODY {
+    %0 = CAST.u32(idx);
+    %1 = MUL.wrap(factor, %0);
+    RETURN(%1);
+  }
+}
+
+NODE @branch_small [intent: "Branch for small values"] {
+  SIGNATURE: (val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 50;
+  }
+  BODY {
+    %900 = IDENTITY(1:u32);
+    %0 = ADD.sat(val, %900);
+    RETURN(%0);
+  }
+}
+
+NODE @branch_large [intent: "Branch for large values"] {
+  SIGNATURE: (val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 1000;
+  }
+  BODY {
+    %0 = ADD.sat(val, 100:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @generate_and_select [intent: "Generate array and branch guard variant 2"] {
+  SIGNATURE: (mult: u32, flag: Bool) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 1000;
+  }
+  BODY {
+    %10 = GENERATE(@gen_kernel, 4:u64, mult);
+    %11 = INDEX(%10, 0:u64);
+    %12 = ASSERT_GUARD(flag, @branch_small, %11, else=@branch_large);
+    RETURN(%12);
+  }
+}

@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: result == fold:step(0:i32, x, 1); }
+  BODY { RETURN(x); }
+}

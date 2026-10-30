@@ -1,0 +1,42 @@
+module a47_refinement_types;
+
+NODE @bound_u8 [intent: "Clamp input to 100"] {
+  SIGNATURE: (input_val: u8) -> ({v: u8 | v <= 100});
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 100;
+  }
+  BODY {
+    %901 = IDENTITY(100:u8);
+    %0 = LE.u(input_val, %901);
+    %1 = SELECT(%0, input_val, %901);
+    RETURN(%1);
+  }
+}
+
+NODE @scale_refined [intent: "Scale refined u8 into refined u16"] {
+  SIGNATURE: (n: {val: u8 | val <= 100}) -> ({out_val: u16 | out_val <= 200});
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 200;
+  }
+  BODY {
+    %0 = CAST.u16(n);
+    %1 = MUL.checked(%0, 2:u16);
+    RETURN(%1);
+  }
+}
+
+NODE @process_refined [intent: "Chain refined functions"] {
+  SIGNATURE: (raw: u8) -> (u16);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 200;
+  }
+  BODY {
+    %900 = ADD.wrap(5:u16, 5:u16);
+    %0 = CALL_HASH(@bound_u8, raw);
+    %1 = CALL_HASH(@scale_refined, %0);
+    RETURN(%1);
+  }
+}

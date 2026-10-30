@@ -1,0 +1,21 @@
+module a10_rotates;
+
+NODE @rot_demo {
+  SIGNATURE: (x: u32, r: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    // Reorder independent op %1 before %0
+    %1 = ROTR(x, r);
+    %0 = ROTL(x, r);
+    // Duplicate pure op %0
+    %15 = ROTL(x, r);
+    // Dead pure op
+    %9 = ROTR(x, 0:u32);
+    // Bind rotate amount via IDENTITY
+    %8 = IDENTITY(32:u32);
+    %2 = ROTL(%15, %8);
+    RETURN(%0, %1, %2);
+  }
+}

@@ -1,0 +1,12 @@
+// 02: Uses negative zero literal -0.0:f32
+module d05_float_zero_sign;
+
+NODE @add_zero {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FADD(x, -0.0:f32);
+    RETURN(%0);
+  }
+}

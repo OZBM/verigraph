@@ -1,0 +1,39 @@
+module a26_assert_guard_branch;
+
+NODE @on_positive [intent: "Handle non-negative case"] {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:i32);
+    RETURN(%0);
+  }
+}
+
+NODE @on_negative [intent: "Handle negative case"] {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 0;
+  }
+  BODY {
+    %0 = NEG.sat(x);
+    RETURN(%0);
+  }
+}
+
+NODE @dispatch_guard [intent: "Guard dispatch using ASSERT_GUARD.branch"] {
+  SIGNATURE: (val: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: val > -1000 && val < 1000;
+    POST: result >= 0;
+  }
+  BODY {
+    %0 = GE.s(val, 0:i32);
+    %1 = ASSERT_GUARD.branch(%0, @on_positive, val, else=@on_negative);
+    RETURN(%1);
+  }
+}

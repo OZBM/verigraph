@@ -1,0 +1,36 @@
+module simd_map_array;
+
+NODE @kernel_scale_clamp [intent: "Scale sample and clamp to [-2, 2]"] {
+  SIGNATURE: (x: f32, gain: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    PRE: gain >= 0.5 && gain <= 2.0;
+    POST: result >= -2.0 && result <= 2.0;
+  }
+  BODY {
+    %2 = IDENTITY(-2.0:f32);
+    %3 = IDENTITY(2.0:f32);
+    %0 = FMUL(x, gain);
+    %1 = FCLAMP(%0, %2, %3);
+    RETURN(%1);
+  }
+}
+
+NODE @process_array [intent: "Apply kernel_scale_clamp across array with broadcast gain", export] {
+  SIGNATURE: (samples: Array<f32, 4>) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(idx in 0..4) { is_finite(samples[idx]) };
+    POST: forall(idx in 0..4) { result[idx] >= -2.0 && result[idx] <= 2.0 };
+    COST: ops <= 20;
+  }
+  LEARNABLE {
+    gain: f32 in [0.5, 2.0];
+  }
+  BODY {
+    %900 = FADD(gain, 1.0:f32);
+    %0 = SIMD_MAP(@kernel_scale_clamp, samples, gain);
+    RETURN(%0);
+  }
+}

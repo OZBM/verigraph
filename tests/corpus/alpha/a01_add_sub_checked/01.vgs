@@ -1,0 +1,17 @@
+module a01_add_sub_checked;
+
+NODE @calc_checked {
+  SIGNATURE: (x: u32, y: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 1000:u32 && y <= 1000:u32 && x >= y;
+    POST: result.0 >= x && result.1 <= x;
+  }
+  BODY {
+    %0 = ADD.checked(x, y);
+    %1 = SUB.checked(x, y);
+    %2 = ADD.checked(%0, 10:u32);
+    %3 = ADD.checked(%1, %2);
+    RETURN(%2, %3);
+  }
+}

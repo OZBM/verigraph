@@ -1,0 +1,17 @@
+module a09_shifts_checked_wrap;
+
+NODE @shift_demo {
+  SIGNATURE: (val_u: u32, val_s: i32, sh: u32) -> (u32, u32, i32, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: sh < 32:u32 && sh >= 0:u32;
+    POST: result.0 == result.1 && result.2 == result.3;
+  }
+  BODY {
+    %0 = SHL.checked(val_u, sh);
+    %1 = SHL.wrap(val_u, sh);
+    %2 = SHR.checked(val_s, sh);
+    %3 = SHR.wrap(val_s, sh);
+    RETURN(%0, %1, %2, %3);
+  }
+}

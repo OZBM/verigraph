@@ -1,0 +1,18 @@
+module a14_cast_primitives;
+
+NODE @cast_primitives [intent: "Primitive scalar casting operations"] {
+  SIGNATURE: (byte_in: u8, word_in: u32, flag_in: Bool, int_in: i32) -> (u32, u8, u32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: word_in <= 255:u32;
+    PRE: word_in >= 0:u32;
+    POST: result.1 <= 255:u8;
+  }
+  BODY {
+    %10 = CAST.u32(byte_in);
+    %11 = CAST.u8(word_in);
+    %12 = CAST.u32(flag_in);
+    %13 = CAST.f32(int_in);
+    RETURN(%10, %11, %12, %13);
+  }
+}

@@ -1,0 +1,23 @@
+module a05_mul_div_mod_wrap;
+
+NODE @calc_wrap {
+  SIGNATURE: (a: i32, b: i32) -> (i32, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: b != 0:i32;
+  }
+  BODY {
+    // Reordered statements
+    %1 = DIV.wrap(a, b);
+    // Bind port b through IDENTITY
+    %8 = IDENTITY(b);
+    %2 = MOD.wrap(a, %8);
+    %3 = ADD.wrap(%1, %2);
+    // Dead pure op
+    %9 = MUL.wrap(a, 0:i32);
+    %0 = MUL.wrap(a, b);
+    // Duplicate pure op %0
+    %15 = MUL.wrap(a, b);
+    RETURN(%15, %3);
+  }
+}

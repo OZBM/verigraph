@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: i8) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: result == x; }
+  BODY { %0 = ADD.wrap(x, -128:i8); RETURN(%0); }
+}

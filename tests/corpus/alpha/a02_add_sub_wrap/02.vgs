@@ -1,0 +1,15 @@
+module a02_add_sub_wrap;
+
+NODE @hash_step [intent: "Wrapping 32-bit hash step"] {
+  SIGNATURE: (seed: u32, val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    // Commutative swaps on ADD.wrap
+    %10 = ADD.wrap(val, seed);
+    %11 = SUB.wrap(%10, 1640531527:u32);
+    %12 = ADD.wrap(seed, %11);
+    RETURN(%12);
+  }
+}

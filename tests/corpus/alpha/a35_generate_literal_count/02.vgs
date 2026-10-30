@@ -1,0 +1,24 @@
+module generate_literal_count;
+
+NODE @make_multiple [intent: "Kernel generating scaled table entry"] {
+  SIGNATURE: (idx: u64, step: u64) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    // Commutative operand swap on MUL.sat
+    %0 = MUL.sat(step, idx);
+    RETURN(%0);
+  }
+}
+
+NODE @gen_table [intent: "Generate 8-element table using literal count", export] {
+  SIGNATURE: (scale: u64) -> (Array<u64, 8>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: forall(i in 0..8) { result[i] >= 0 };
+  }
+  BODY {
+    %99 = GENERATE(@make_multiple, 8:u64, scale);
+    RETURN(%99);
+  }
+}

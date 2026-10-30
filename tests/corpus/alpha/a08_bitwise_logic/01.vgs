@@ -1,0 +1,15 @@
+module a08_bitwise_logic;
+
+NODE @bitwise_ops {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = AND(a, b);
+    %1 = OR(a, b);
+    %2 = XOR(a, b);
+    %3 = NOT(a);
+    RETURN(%0, %1, %2, %3);
+  }
+}

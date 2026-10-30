@@ -1,0 +1,20 @@
+module result_and_cast;
+
+NODE @result_and_cast_demo [intent: "Demonstrate Result types and scalar type casts with reordered statements", export] {
+  SIGNATURE: (x: u32, float_val: f32) -> (u64, u8, f64, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 255;
+  }
+  BODY {
+    %11: Result<u32, u8> = ERR(5:u8);
+    %10: Result<u32, u8> = OK(x);
+    %17 = CAST.f64(float_val);
+    %12 = IS_OK(%10);
+    %14 = GET_ERR(%11);
+    %13 = GET_OK(%10);
+    %15 = CAST.u64(%13);
+    %16 = CAST.u8(%13);
+    RETURN(%15, %16, %17, %12);
+  }
+}

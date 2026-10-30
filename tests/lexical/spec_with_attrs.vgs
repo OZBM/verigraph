@@ -1,0 +1,2 @@
+module m;
+SPEC @s [export] { SIGNATURE: (x: u8) -> (u8); EFFECTS: []; CONTRACT { } BODY { RETURN(x); } }

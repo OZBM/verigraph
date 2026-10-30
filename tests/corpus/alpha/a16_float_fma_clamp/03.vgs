@@ -1,0 +1,21 @@
+module a16_float_fma_clamp;
+
+NODE @fma_clamp_eval [intent: "Variant with renamed params and identity bounds"] {
+  SIGNATURE: (x: f64, s: f64, b: f64) -> (f64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(s) && is_finite(b) && b >= 0.0;
+    POST: is_finite(result);
+  }
+  BODY {
+    %99 = FMUL(2.0:f64, 3.0:f64);
+    %0 = FMA(x, s, b);
+    %50 = IDENTITY(-10.0:f64);
+    %51 = IDENTITY(10.0:f64);
+    %1 = FCLAMP(%0, %50, %51);
+    %2 = FCOPYSIGN(%1, x);
+    %3 = FSQRT(b);
+    %4 = FADD(%2, %3);
+    RETURN(%4);
+  }
+}

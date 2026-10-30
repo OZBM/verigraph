@@ -1,0 +1,19 @@
+module collections_and_bytes;
+
+NODE @collection_ops [intent: "Collection manipulations and byte conversion with reordered statements", export] {
+  SIGNATURE: (idx: {v: u64 | v < 3}, replacement: u16, extra: Array<u16, 2>) -> (u16, Array<u16, 3>, u64, Slice<u16>, Array<u16, 5>, Slice<u8>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: idx < 3;
+  }
+  BODY {
+    %10 = IDENTITY([10, 20, 30]:Array<u16, 3>);
+    %16 = AS_BYTES(%10);
+    %13 = LEN(%10);
+    %11 = INDEX(%10, idx);
+    %12 = UPDATE(%10, idx, replacement);
+    %15 = CONCAT(%10, extra);
+    %14 = SLICE(%10, 0:u64, 2:u64);
+    RETURN(%11, %12, %13, %14, %15, %16);
+  }
+}

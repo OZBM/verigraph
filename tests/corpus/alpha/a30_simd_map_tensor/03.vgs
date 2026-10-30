@@ -1,0 +1,32 @@
+module simd_map_tensor;
+
+NODE @shrink_kernel [intent: "Soft threshold kernel for single float"] {
+  SIGNATURE: (x: f32, thresh: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(thresh) && thresh >= 0.0;
+    POST: is_finite(result);
+  }
+  BODY {
+    %9 = IDENTITY(0.0:f32);
+    %0 = FABS(x);
+    %1 = FSUB(%0, thresh);
+    %2 = FMAX(%1, %9);
+    %3 = FCOPYSIGN(%2, x);
+    RETURN(%3);
+  }
+}
+
+NODE @filter_matrix [intent: "Apply soft threshold to 4x2 matrix with broadcast bias", export] {
+  SIGNATURE: (mat: Tensor<f32, [4, 2]>, bias: f32) -> (Tensor<f32, [4, 2]>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(bias) && bias >= 0.0 && forall(row in 0..4, col in 0..2) { is_finite(mat[row, col]) };
+    POST: forall(row in 0..4, col in 0..2) { result[row, col] >= -1000.0 && result[row, col] <= 1000.0 };
+  }
+  BODY {
+    %900 = FADD(bias, 1.0:f32);
+    %0 = SIMD_MAP(@shrink_kernel, mat, bias);
+    RETURN(%0);
+  }
+}

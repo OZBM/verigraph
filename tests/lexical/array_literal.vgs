@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: result == x; }
+  BODY { %0 = IDENTITY([1, -2, 3]:Array<i32, 3>); %1 = INDEX(%0, 0:u64); RETURN(%1); }
+}

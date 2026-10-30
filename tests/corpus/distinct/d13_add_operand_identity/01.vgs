@@ -1,0 +1,12 @@
+// 01: Adds x to itself (ADD.wrap(x, x))
+module d13_add_operand_identity;
+
+NODE @double_or_add {
+  SIGNATURE: (x: u32, y: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, x);
+    RETURN(%0);
+  }
+}

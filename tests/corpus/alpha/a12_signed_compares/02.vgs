@@ -1,0 +1,18 @@
+module a12_signed_compares;
+
+NODE @signed_cmp [intent: "Signed 32-bit comparisons"] {
+  SIGNATURE: (p: i32, q: i32) -> (Bool, Bool, Bool, Bool, Bool, Bool);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %20 = LT.s(p, q);
+    %21 = LE.s(p, q);
+    %22 = GT.s(p, q);
+    %23 = GE.s(p, q);
+    // Commutative swaps on EQ and NE
+    %24 = EQ(q, p);
+    %25 = NE(q, p);
+    RETURN(%20, %21, %22, %23, %24, %25);
+  }
+}

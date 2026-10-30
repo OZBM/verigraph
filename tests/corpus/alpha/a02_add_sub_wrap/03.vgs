@@ -1,0 +1,20 @@
+module a02_add_sub_wrap;
+
+NODE @hash_step {
+  SIGNATURE: (h: u32, k: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = ADD.wrap(h, k);
+    // Duplicate pure op
+    %15 = ADD.wrap(h, k);
+    // Dead pure op
+    %9 = SUB.wrap(k, h);
+    // Bind constant via IDENTITY
+    %8 = IDENTITY(1640531527:u32);
+    %1 = SUB.wrap(%15, %8);
+    %2 = ADD.wrap(%1, h);
+    RETURN(%2);
+  }
+}

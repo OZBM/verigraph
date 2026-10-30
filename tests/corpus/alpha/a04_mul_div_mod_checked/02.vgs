@@ -1,0 +1,18 @@
+module a04_mul_div_mod_checked;
+
+NODE @div_rem_checked [intent: "Checked multiplication division and modulo"] {
+  SIGNATURE: (num: u32, den: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: den > 0:u32;
+    PRE: num <= 65535:u32 && den <= 65535:u32;
+    POST: result.1 <= num && result.2 < den;
+  }
+  BODY {
+    // Commutative swap on MUL.checked
+    %10 = MUL.checked(den, num);
+    %11 = DIV.checked(num, den);
+    %12 = MOD.checked(num, den);
+    RETURN(%10, %11, %12);
+  }
+}

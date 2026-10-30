@@ -1,0 +1,12 @@
+// 01: Computes a / b (FDIV(a, b))
+module d02_fdiv_operand_swap;
+
+NODE @divide {
+  SIGNATURE: (a: f32, b: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FDIV(a, b);
+    RETURN(%0);
+  }
+}

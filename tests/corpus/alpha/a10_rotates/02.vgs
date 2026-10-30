@@ -1,0 +1,14 @@
+module a10_rotates;
+
+NODE @rot_demo [intent: "Bitwise 32-bit rotations"] {
+  SIGNATURE: (val: u32, shift: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %10 = ROTL(val, shift);
+    %20 = ROTR(val, shift);
+    %30 = ROTL(%10, 32:u32);
+    RETURN(%10, %20, %30);
+  }
+}

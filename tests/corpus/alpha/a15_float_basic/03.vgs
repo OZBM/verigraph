@@ -1,0 +1,27 @@
+module a15_float_basic;
+
+NODE @float_ops [intent: "Equivalence variant with renamed params and identity"] {
+  SIGNATURE: (a: f32, b: f32) -> (f32, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(a) && is_finite(b);
+    PRE: b != 0.0;
+    POST: is_finite(result.0);
+  }
+  BODY {
+    %99 = FADD(1.0:f32, 2.0:f32);
+    %0 = FADD(a, b);
+    %1 = FSUB(a, b);
+    %8 = LT.f(a, b);
+    %2 = FMUL(%0, %1);
+    %3 = FDIV(%2, b);
+    %4 = FNEG(%3);
+    %5 = FABS(%4);
+    %50 = IDENTITY(100.0:f32);
+    %6 = FMIN(%5, %50);
+    %7 = FMAX(%6, -100.0:f32);
+    %9 = SELECT(%8, %7, %0);
+    %10 = EQ(%0, %1);
+    RETURN(%9, %10);
+  }
+}

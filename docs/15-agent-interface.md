@@ -72,6 +72,7 @@ type Diagnostic = {
 | VG-S0006 | Label defined twice |
 | VG-S0007 | Recursion or a call cycle; REC_CALL is [ALPHA] |
 | VG-S0008 | RETURN missing, repeated, or not the last statement |
+| VG-S0009 | `@MESH_QUERY` label with no resolution in vg.lock, so no hash to call (ADR 0001) |
 | VG-S0101 | Unknown opcode |
 | VG-S0102 | Mode missing, unknown, or not allowed for this opcode |
 | VG-S0103 | Wrong number of arguments |

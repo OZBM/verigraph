@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: true; }
+  BODY { %0 = CAST.u32(x); %1 = ASSERT_GUARD.branch(true, @f, x, else=@g); %2 = FOLD_BOUNDED(@k, x, init=0:i32, invariant=@i); RETURN(%2); }
+}

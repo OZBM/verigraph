@@ -1,0 +1,25 @@
+module a01_add_sub_checked;
+
+NODE @calc_checked {
+  SIGNATURE: (x: u32, y: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 1000:u32 && y <= 1000:u32 && x >= y;
+    POST: result.0 >= x && result.1 <= x;
+  }
+  BODY {
+    // Reordered independent op %1 before %0
+    %1 = SUB.checked(x, y);
+    %0 = ADD.checked(x, y);
+    // Duplicate pure op %0
+    %6 = ADD.checked(x, y);
+    // Bind literal through IDENTITY
+    %4 = IDENTITY(10:u32);
+    // Use duplicated op and identity-bound port
+    %2 = ADD.checked(%6, %4);
+    // Dead pure op
+    %5 = ADD.checked(x, 0:u32);
+    %3 = ADD.checked(%1, %2);
+    RETURN(%2, %3);
+  }
+}

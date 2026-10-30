@@ -1,0 +1,12 @@
+// 01: Parameter order is (x: i32, y: i32)
+module d07_param_reorder;
+
+NODE @make_pair {
+  SIGNATURE: (x: i32, y: i32) -> (Tuple<i32, i32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = TUPLE(x, y);
+    RETURN(%0);
+  }
+}

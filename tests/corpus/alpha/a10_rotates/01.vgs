@@ -1,0 +1,14 @@
+module a10_rotates;
+
+NODE @rot_demo {
+  SIGNATURE: (x: u32, r: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = ROTL(x, r);
+    %1 = ROTR(x, r);
+    %2 = ROTL(%0, 32:u32);
+    RETURN(%0, %1, %2);
+  }
+}

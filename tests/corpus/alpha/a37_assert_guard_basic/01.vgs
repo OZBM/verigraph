@@ -1,0 +1,34 @@
+module assert_guard_basic;
+
+NODE @fast_div [intent: "Checked division when denominator is non-zero"] {
+  SIGNATURE: (x: i32, denom: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: denom != 0;
+  }
+  BODY {
+    %0 = DIV.checked(x, denom);
+    RETURN(%0);
+  }
+}
+
+NODE @fallback_div [intent: "Fallback division returning zero"] {
+  SIGNATURE: (x: i32, denom: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = IDENTITY(0:i32);
+    RETURN(%0);
+  }
+}
+
+NODE @guarded_division [intent: "Guarded division dispatcher", export] {
+  SIGNATURE: (x: i32, denom: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = NE(denom, 0:i32);
+    %1 = ASSERT_GUARD(%0, @fast_div, x, denom, else=@fallback_div);
+    RETURN(%1);
+  }
+}

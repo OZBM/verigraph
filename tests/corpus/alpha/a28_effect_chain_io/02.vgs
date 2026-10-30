@@ -1,0 +1,13 @@
+module a28_effect_chain_io;
+
+NODE @io_pipeline [intent: "IO pipeline with renamed ports"] {
+  SIGNATURE: (e: Eff, fin: FileIn, fout: FileOut, clk: Clock, payload: Slice<u8>) -> (Eff, Result<u64, u32>, u64);
+  EFFECTS: [ARENA, CLOCK, FILE_READ, FILE_WRITE];
+  CONTRACT {}
+  BODY {
+    %10, %11 = CLOCK_READ(e, clk);
+    %12, %13 = FILE_READ(%10, fin, 512:u64);
+    %14, %15 = FILE_WRITE(%12, fout, payload);
+    RETURN(%14, %15, %11);
+  }
+}

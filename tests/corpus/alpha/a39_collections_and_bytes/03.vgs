@@ -1,0 +1,22 @@
+module collections_and_bytes;
+
+NODE @inspect_collections [intent: "Collection manipulations and byte conversion", export] {
+  SIGNATURE: (idx: {item_idx: u64 | item_idx < 3}, new_val: u16, extra: Array<u16, 2>) -> (u16, Array<u16, 3>, u64, Slice<u16>, Array<u16, 5>, Slice<u8>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: idx < 3;
+  }
+  BODY {
+    %900 = ADD.wrap(idx, 1:u64);
+    %20 = IDENTITY(0:u64);
+    %21 = IDENTITY(2:u64);
+    %0 = IDENTITY([10, 20, 30]:Array<u16, 3>);
+    %1 = INDEX(%0, idx);
+    %2 = UPDATE(%0, idx, new_val);
+    %3 = LEN(%0);
+    %4 = SLICE(%0, %20, %21);
+    %5 = CONCAT(%0, extra);
+    %6 = AS_BYTES(%0);
+    RETURN(%1, %2, %3, %4, %5, %6);
+  }
+}

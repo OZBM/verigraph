@@ -1,0 +1,19 @@
+module a11_unsigned_compares;
+
+NODE @unsigned_cmp {
+  SIGNATURE: (a: u32, b: u32) -> (Bool, Bool, Bool, Bool, Bool, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a == b;
+    POST: result.0 && result.1 && result.2 && !result.3 && !result.4 && !result.5;
+  }
+  BODY {
+    %0 = EQ(a, b);
+    %1 = LE.u(a, b);
+    %2 = GE.u(a, b);
+    %3 = NE(a, b);
+    %4 = LT.u(a, b);
+    %5 = GT.u(a, b);
+    RETURN(%0, %1, %2, %3, %4, %5);
+  }
+}

@@ -1,0 +1,12 @@
+// 03: ADD with sat mode (ADD.sat)
+module d03_int_arith_modes;
+
+NODE @add_modes {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.sat(a, b);
+    RETURN(%0);
+  }
+}

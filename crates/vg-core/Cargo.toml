@@ -5,3 +5,14 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+
+[features]
+# The seeded program generator of docs/16 (P1.11), for property, differential and fuzz tests.
+gen = []
+
+[dependencies]
+blake3 = "1"
+
+[dev-dependencies]
+# The integration tests use the generator.
+vg-core = { path = ".", features = ["gen"] }

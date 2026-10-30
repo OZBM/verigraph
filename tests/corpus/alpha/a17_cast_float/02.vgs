@@ -1,0 +1,18 @@
+module a17_cast_float;
+
+NODE @convert_num [intent: "Variant with reordered ops and swapped operands"] {
+  SIGNATURE: (in_f32: f32, in_u32: u32) -> (f64, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(in_f32) && in_f32 >= -1000.0 && in_f32 <= 1000.0;
+    POST: is_finite(result.0);
+  }
+  BODY {
+    %20 = CAST.f64(in_f32);
+    %21 = CAST.f32(in_u32);
+    %24 = FMUL(2.0:f64, %20);
+    %22 = FADD(%21, in_f32);
+    %23 = CAST.i32(%22);
+    RETURN(%24, %23);
+  }
+}

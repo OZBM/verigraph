@@ -1,0 +1,49 @@
+module a52_cast_float_int_modes;
+
+NODE @clamp_and_sign [intent: "Clamp float and apply copysign"] {
+  SIGNATURE: (val: f32, sign_val: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(val);
+    PRE: is_finite(sign_val);
+    POST: is_finite(result);
+  }
+  BODY {
+    %902 = IDENTITY(-50.0:f32);
+    %901 = IDENTITY(50.0:f32);
+    %0 = FCLAMP(val, %902, %901);
+    %1 = FCOPYSIGN(%0, sign_val);
+    RETURN(%1);
+  }
+}
+
+NODE @float_to_sat_int [intent: "Convert float to u32 with sat arithmetic"] {
+  SIGNATURE: (x: f32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && x >= 0.0 && x <= 1000.0;
+    POST: result <= 2000;
+  }
+  BODY {
+    %900 = FADD(1.0:f32, 2.0:f32);
+    %0 = FSQRT(x);
+    %1 = CAST.u32(%0);
+    %2 = MUL.wrap(%1, 2:u32);
+    %3 = ADD.sat(%2, 5:u32);
+    RETURN(%3);
+  }
+}
+
+NODE @process_measurement [intent: "Measurement processing pipeline"] {
+  SIGNATURE: (reading: f32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(reading) && reading >= 0.0 && reading <= 1000.0;
+  }
+  BODY {
+    %903 = IDENTITY(1.0:f32);
+    %0 = CALL_HASH(@clamp_and_sign, reading, %903);
+    %1 = CALL_HASH(@float_to_sat_int, %0);
+    RETURN(%1);
+  }
+}

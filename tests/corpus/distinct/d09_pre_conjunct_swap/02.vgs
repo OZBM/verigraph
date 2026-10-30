@@ -1,0 +1,14 @@
+// 02: Swapped conjuncts in PRE: y > 0 && x > 0
+module d09_pre_conjunct_swap;
+
+NODE @positive_add {
+  SIGNATURE: (x: i32, y: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: y > 0 && x > 0;
+  }
+  BODY {
+    %0 = ADD.wrap(x, y);
+    RETURN(%0);
+  }
+}

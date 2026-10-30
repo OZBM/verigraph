@@ -1,0 +1,32 @@
+module a18_tuple_proj;
+
+NODE @pack_pair [intent: "Pack two floats into a tuple"] {
+  SIGNATURE: (p: f32, q: f32) -> (Tuple<f32, f32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(p) && is_finite(q);
+  }
+  BODY {
+    %0 = TUPLE(p, q);
+    RETURN(%0);
+  }
+}
+
+NODE @unpack_and_sum [intent: "Variant with identity tuple and duplicated projection"] {
+  SIGNATURE: (u: f32, v: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(u) && is_finite(v);
+    POST: is_finite(result);
+  }
+  BODY {
+    %99 = FMUL(u, v);
+    %0 = CALL_HASH(@pack_pair, u, v);
+    %50 = IDENTITY(%0);
+    %1 = PROJ(%50, 0:u32);
+    %51 = PROJ(%50, 0:u32);
+    %2 = PROJ(%50, 1:u32);
+    %3 = FADD(%51, %2);
+    RETURN(%3);
+  }
+}

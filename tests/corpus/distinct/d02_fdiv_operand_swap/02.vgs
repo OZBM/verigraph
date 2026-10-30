@@ -1,0 +1,12 @@
+// 02: Swapped operands of non-commutative FDIV: computes b / a (FDIV(b, a))
+module d02_fdiv_operand_swap;
+
+NODE @divide {
+  SIGNATURE: (a: f32, b: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FDIV(b, a);
+    RETURN(%0);
+  }
+}

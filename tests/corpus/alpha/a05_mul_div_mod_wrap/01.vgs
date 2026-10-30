@@ -1,0 +1,16 @@
+module a05_mul_div_mod_wrap;
+
+NODE @calc_wrap {
+  SIGNATURE: (a: i32, b: i32) -> (i32, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: b != 0:i32;
+  }
+  BODY {
+    %0 = MUL.wrap(a, b);
+    %1 = DIV.wrap(a, b);
+    %2 = MOD.wrap(a, b);
+    %3 = ADD.wrap(%1, %2);
+    RETURN(%0, %3);
+  }
+}

@@ -1,0 +1,28 @@
+module generate_port_count;
+
+NODE @float_ramp [intent: "Kernel generating floating-point ramp"] {
+  SIGNATURE: (idx: u64, base: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(base);
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = CAST.f32(idx);
+    %1 = FADD(%0, base);
+    RETURN(%1);
+  }
+}
+
+NODE @create_ramp [intent: "Generate dynamic slice with port count", export] {
+  SIGNATURE: (count: u64, base: f32) -> (Slice<f32>);
+  EFFECTS: [ARENA];
+  CONTRACT {
+    PRE: is_finite(base);
+    COST: arena_bytes <= 4096;
+  }
+  BODY {
+    %0 = GENERATE(@float_ramp, count, base);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,33 @@
+module a21_as_bytes_hash;
+
+NODE @sum_byte_pair [intent: "Variant with split pre and identity index"] {
+  SIGNATURE: (raw_data: Slice<u8>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: len(raw_data) >= 1;
+    PRE: len(raw_data) >= 2;
+  }
+  BODY {
+    %50 = IDENTITY(0:u64);
+    %0 = INDEX(raw_data, %50);
+    %1 = INDEX(raw_data, 1:u64);
+    %2 = CAST.u32(%0);
+    %3 = CAST.u32(%1);
+    %4 = ADD.wrap(%2, %3);
+    RETURN(%4);
+  }
+}
+
+NODE @digest_floats [intent: "Variant with dead op and renamed bound var"] {
+  SIGNATURE: (samples: Array<f32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(k in 0..4) { is_finite(samples[k]) };
+  }
+  BODY {
+    %99 = ADD.wrap(1:u32, 2:u32);
+    %0 = AS_BYTES(samples);
+    %1 = CALL_HASH(@sum_byte_pair, %0);
+    RETURN(%1);
+  }
+}

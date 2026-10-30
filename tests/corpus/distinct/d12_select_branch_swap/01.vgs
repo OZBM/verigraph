@@ -1,0 +1,12 @@
+// 01: SELECT with true branch a and false branch b (SELECT(cond, a, b))
+module d12_select_branch_swap;
+
+NODE @pick {
+  SIGNATURE: (cond: Bool, a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SELECT(cond, a, b);
+    RETURN(%0);
+  }
+}

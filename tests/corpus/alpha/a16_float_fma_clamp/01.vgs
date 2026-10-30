@@ -1,0 +1,19 @@
+module a16_float_fma_clamp;
+
+NODE @fma_clamp_eval [intent: "Evaluate clamped FMA and square root"] {
+  SIGNATURE: (val: f64, scale: f64, bias: f64) -> (f64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(val) && is_finite(scale);
+    PRE: is_finite(bias) && bias >= 0.0;
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FMA(val, scale, bias);
+    %1 = FCLAMP(%0, -10.0:f64, 10.0:f64);
+    %2 = FCOPYSIGN(%1, val);
+    %3 = FSQRT(bias);
+    %4 = FADD(%2, %3);
+    RETURN(%4);
+  }
+}

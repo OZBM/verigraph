@@ -1,0 +1,15 @@
+module a28_effect_chain_io;
+
+NODE @timed_file_transfer [intent: "Variant with renamed params and identity max bytes"] {
+  SIGNATURE: (init_eff: Eff, in_handle: FileIn, out_handle: FileOut, clock_dev: Clock, buffer: Slice<u8>) -> (Eff, Result<u64, u32>, u64);
+  EFFECTS: [ARENA, CLOCK, FILE_READ, FILE_WRITE];
+  CONTRACT {}
+  BODY {
+    %99 = ADD.wrap(10:u64, 20:u64);
+    %0, %1 = CLOCK_READ(init_eff, clock_dev);
+    %50 = IDENTITY(512:u64);
+    %2, %3 = FILE_READ(%0, in_handle, %50);
+    %4, %5 = FILE_WRITE(%2, out_handle, buffer);
+    RETURN(%4, %5, %1);
+  }
+}

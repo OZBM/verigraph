@@ -1,0 +1,14 @@
+// The node ADR 0001 dissects byte by byte.
+module minimal;
+
+NODE @inc {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.wrap(x, 1:u8);
+    RETURN(%0);
+  }
+}

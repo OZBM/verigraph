@@ -1,0 +1,12 @@
+// 01: FMA computing a * b + c (FMA(a, b, c))
+module d14_fma_operand_swap;
+
+NODE @mul_add {
+  SIGNATURE: (a: f32, b: f32, c: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FMA(a, b, c);
+    RETURN(%0);
+  }
+}

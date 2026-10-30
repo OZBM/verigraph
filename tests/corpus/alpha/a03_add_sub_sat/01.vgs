@@ -1,0 +1,14 @@
+module a03_add_sub_sat;
+
+NODE @pixel_blend {
+  SIGNATURE: (p1: u8, p2: u8, bias: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = ADD.sat(p1, p2);
+    %1 = SUB.sat(%0, bias);
+    %2 = ADD.sat(%1, 1:u8);
+    RETURN(%2);
+  }
+}

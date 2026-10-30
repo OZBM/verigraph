@@ -1,0 +1,33 @@
+module simd_map_array;
+
+NODE @scale_clamp [intent: "Multiply sample by gain and clamp"] {
+  SIGNATURE: (x: f32, gain: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && gain >= 0.5 && gain <= 2.0;
+    POST: result >= -2.0 && result <= 2.0;
+  }
+  BODY {
+    // Commutative operand swap on FMUL and renamed ports
+    %10 = FMUL(gain, x);
+    %11 = FCLAMP(%10, -2.0:f32, 2.0:f32);
+    RETURN(%11);
+  }
+}
+
+NODE @process_array [intent: "Apply scale_clamp across array with broadcast gain", export] {
+  SIGNATURE: (signal: Array<f32, 4>) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { is_finite(signal[i]) };
+    POST: forall(i in 0..4) { result[i] >= -2.0 && result[i] <= 2.0 };
+    COST: ops <= 20;
+  }
+  LEARNABLE {
+    gain: f32 in [0.5, 2.0];
+  }
+  BODY {
+    %8 = SIMD_MAP(@scale_clamp, signal, gain);
+    RETURN(%8);
+  }
+}

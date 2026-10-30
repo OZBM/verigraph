@@ -1,0 +1,15 @@
+module a06_mul_div_mod_sat;
+
+NODE @calc_sat {
+  SIGNATURE: (x: i16, y: i16) -> (i16, i16, i16);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: y != 0:i16;
+  }
+  BODY {
+    %0 = MUL.sat(x, y);
+    %1 = DIV.sat(x, y);
+    %2 = MOD.sat(x, y);
+    RETURN(%0, %1, %2);
+  }
+}

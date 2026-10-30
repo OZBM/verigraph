@@ -1,0 +1,19 @@
+module a01_add_sub_checked;
+
+NODE @calc_checked [intent: "Checked addition and subtraction operations"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a <= 1000:u32 && b <= 1000:u32;
+    PRE: a >= b;
+    POST: result.0 >= a && result.1 <= a;
+  }
+  BODY {
+    // Swap commutative operands of ADD.checked
+    %10 = ADD.checked(b, a);
+    %11 = SUB.checked(a, b);
+    %12 = ADD.checked(%10, 10:u32);
+    %13 = ADD.checked(%12, %11);
+    RETURN(%12, %13);
+  }
+}

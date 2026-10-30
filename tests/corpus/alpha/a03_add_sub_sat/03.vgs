@@ -1,0 +1,20 @@
+module a03_add_sub_sat;
+
+NODE @pixel_blend {
+  SIGNATURE: (p1: u8, p2: u8, bias: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = ADD.sat(p1, p2);
+    // Duplicate pure op %0
+    %9 = ADD.sat(p1, p2);
+    // Dead pure op
+    %8 = SUB.sat(bias, 1:u8);
+    %1 = SUB.sat(%9, bias);
+    // Bind literal through IDENTITY
+    %7 = IDENTITY(1:u8);
+    %2 = ADD.sat(%1, %7);
+    RETURN(%2);
+  }
+}

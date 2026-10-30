@@ -1,0 +1,12 @@
+// 01: Strict less-than comparison (LT.s)
+module d04_lt_vs_le;
+
+NODE @compare {
+  SIGNATURE: (a: i32, b: i32) -> (Bool);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = LT.s(a, b);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,12 @@
+// 01: Adds constant 1:u32
+module d06_int_const_change;
+
+NODE @offset {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    RETURN(%0);
+  }
+}

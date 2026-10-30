@@ -1,0 +1,22 @@
+module a06_mul_div_mod_sat;
+
+NODE @calc_sat {
+  SIGNATURE: (x: i16, y: i16) -> (i16, i16, i16);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: y != 0:i16;
+  }
+  BODY {
+    // Reorder independent statements
+    %2 = MOD.sat(x, y);
+    // Bind x through IDENTITY
+    %8 = IDENTITY(x);
+    %0 = MUL.sat(%8, y);
+    %1 = DIV.sat(x, y);
+    // Duplicate pure op %1
+    %15 = DIV.sat(x, y);
+    // Dead pure op
+    %9 = MUL.sat(y, 1:i16);
+    RETURN(%0, %15, %2);
+  }
+}

@@ -1,0 +1,12 @@
+// 02: Array parameter length changed to 5 (Array<u32, 5>)
+module d11_array_length_change;
+
+NODE @first_elem {
+  SIGNATURE: (arr: Array<u32, 5>) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = INDEX(arr, 0:u64);
+    RETURN(%0);
+  }
+}

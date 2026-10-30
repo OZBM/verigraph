@@ -1,0 +1,14 @@
+// 01: POST conjunct order is result > 0 && result < 100
+module d08_post_conjunct_swap;
+
+NODE @range_check {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result > 0 && result < 100;
+  }
+  BODY {
+    %0 = IDENTITY(x);
+    RETURN(%0);
+  }
+}

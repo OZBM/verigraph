@@ -1,0 +1,16 @@
+module a04_mul_div_mod_checked;
+
+NODE @div_rem_checked {
+  SIGNATURE: (n: u32, d: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d > 0:u32 && n <= 65535:u32 && d <= 65535:u32;
+    POST: result.1 <= n && result.2 < d;
+  }
+  BODY {
+    %0 = MUL.checked(n, d);
+    %1 = DIV.checked(n, d);
+    %2 = MOD.checked(n, d);
+    RETURN(%0, %1, %2);
+  }
+}

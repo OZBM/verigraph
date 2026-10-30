@@ -1,0 +1,12 @@
+// 02: ADD with wrap mode (ADD.wrap)
+module d03_int_arith_modes;
+
+NODE @add_modes {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(a, b);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,17 @@
+module a07_neg_modes;
+
+NODE @neg_examples {
+  SIGNATURE: (s: i32, u: u32) -> (i32, i32, i32, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: s > -2147483648:i32 && s <= 1000:i32;
+    POST: result.0 == -s && result.1 == -s && result.2 == -s;
+  }
+  BODY {
+    %0 = NEG.checked(s);
+    %1 = NEG.wrap(s);
+    %2 = NEG.sat(s);
+    %3 = NEG.wrap(u);
+    RETURN(%0, %1, %2, %3);
+  }
+}

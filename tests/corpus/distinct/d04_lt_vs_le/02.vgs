@@ -1,0 +1,12 @@
+// 02: Less-than-or-equal comparison (LE.s)
+module d04_lt_vs_le;
+
+NODE @compare {
+  SIGNATURE: (a: i32, b: i32) -> (Bool);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = LE.s(a, b);
+    RETURN(%0);
+  }
+}

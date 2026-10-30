@@ -1,0 +1,39 @@
+module a44_clock_read_chain;
+
+NODE @read_timestamp [intent: "Sample monotonic clock"] {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0, %1 = CLOCK_READ(e, c);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @compute_delta [intent: "Compute elapsed nanoseconds"] {
+  SIGNATURE: (t1: u64, t2: u64) -> (u64);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0 = SUB.wrap(t2, t1);
+    RETURN(%0);
+  }
+}
+
+NODE @measure_interval [intent: "Measure interval between two clock samples"] {
+  SIGNATURE: (e0: Eff, clk: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT {
+    COST: ops <= 10;
+  }
+  BODY {
+    %901, %903 = CALL_HASH(@read_timestamp, e0, clk);
+    %902, %904 = CALL_HASH(@read_timestamp, %901, clk);
+    %900 = CALL_HASH(@compute_delta, %903, %904);
+    RETURN(%902, %900);
+  }
+}

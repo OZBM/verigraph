@@ -1,0 +1,24 @@
+module fold_bounded_fold_spec;
+
+NODE @add_step [intent: "Wrapping integer add accumulator step with commuted ADD"] {
+  SIGNATURE: (acc: i32, x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, acc);
+    RETURN(%0);
+  }
+}
+
+NODE @sum_elements [intent: "Fold array with fold: contract specification", export] {
+  SIGNATURE: (arr: Array<i32, 4>, zero: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @inv_fold(k, acc): acc == fold:add_step(zero, arr, k);
+    POST: result == fold:add_step(zero, arr, 4);
+  }
+  BODY {
+    %10 = FOLD_BOUNDED(@add_step, arr, init=zero, invariant=@inv_fold);
+    RETURN(%10);
+  }
+}

@@ -1,0 +1,41 @@
+module a55_three_node_call_chain_effects;
+
+NODE @get_timestamp [intent: "Read monotonic clock nanoseconds"] {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0, %1 = CLOCK_READ(e, c);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @write_status [intent: "Write log message slice to FileOut"] {
+  SIGNATURE: (e: Eff, fout: FileOut, msg: Slice<u8>) -> (Eff, Result<u64, u32>);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0, %1 = FILE_WRITE(e, fout, msg);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @timed_write_log [intent: "Measure write latency variant 2"] {
+  SIGNATURE: (e0: Eff, clk: Clock, fout: FileOut, buf: Slice<u8>) -> (Eff, Result<u64, u32>, u64);
+  EFFECTS: [CLOCK, FILE_WRITE];
+  CONTRACT {
+    COST: ops <= 10;
+  }
+  BODY {
+    %900 = MUL.wrap(10:u64, 20:u64);
+    %902, %906 = CALL_HASH(@get_timestamp, e0, clk);
+    %903, %905 = CALL_HASH(@write_status, %902, fout, buf);
+    %904, %907 = CALL_HASH(@get_timestamp, %903, clk);
+    %901 = SUB.wrap(%907, %906);
+    RETURN(%904, %905, %901);
+  }
+}

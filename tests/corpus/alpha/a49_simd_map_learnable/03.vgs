@@ -1,0 +1,45 @@
+module a49_simd_map_learnable;
+
+NODE @scale_sample [intent: "Kernel to scale one float sample"] {
+  SIGNATURE: (x: f32, scale: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    PRE: is_finite(scale);
+    POST: is_finite(result);
+  }
+  BODY {
+    %900 = FADD(0.0:f32, 0.0:f32);
+    %0 = FMUL(x, scale);
+    RETURN(%0);
+  }
+}
+
+NODE @scale_vector [intent: "SIMD map with learnable parameter"] {
+  SIGNATURE: (samples: Array<f32, 4>) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    COST: heap_bytes == 0 && arena_bytes == 0;
+    POST: mult >= 0.1;
+    POST: mult <= 5.0;
+  }
+  LEARNABLE {
+    mult: f32 in [0.1, 5.0];
+  }
+  BODY {
+    %0 = SIMD_MAP(@scale_sample, samples, mult);
+    RETURN(%0);
+  }
+}
+
+NODE @top_filter [intent: "Apply learnable filter vector"] {
+  SIGNATURE: (buf: Array<f32, 4>) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    COST: heap_bytes == 0 && arena_bytes == 0;
+  }
+  BODY {
+    %99 = CALL_HASH(@scale_vector, buf);
+    RETURN(%99);
+  }
+}

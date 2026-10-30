@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: Array<i32, 4>) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: forall(i in 0..4, j in i..4) { forall(k in 0..j) { x[k] <= x[j] } }; }
+  BODY { RETURN(x); }
+}

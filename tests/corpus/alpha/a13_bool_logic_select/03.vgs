@@ -1,0 +1,23 @@
+module a13_bool_logic_select;
+
+NODE @bool_select {
+  SIGNATURE: (cond1: Bool, cond2: Bool, val_t: u32, val_f: u32) -> (Bool, Bool, Bool, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: cond1 == true;
+    POST: result.3 == val_t;
+  }
+  BODY {
+    // Bind port val_f through IDENTITY
+    %88 = IDENTITY(val_f);
+    %3 = SELECT(cond1, val_t, %88);
+    // Duplicate pure op
+    %99 = BNOT(cond1);
+    %2 = BNOT(cond1);
+    // Dead pure op
+    %77 = BAND(cond1, true);
+    %1 = BOR(cond1, cond2);
+    %0 = BAND(cond1, cond2);
+    RETURN(%0, %1, %99, %3);
+  }
+}

@@ -1,0 +1,41 @@
+module a19_result_ops;
+
+NODE @ok_handler [intent: "Reordered ok handler"] {
+  SIGNATURE: (val: u32) -> (u32, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result.0 == val && result.1;
+  }
+  BODY {
+    %10: Result<u32, u8> = OK(val);
+    %12 = GET_OK(%10);
+    %11 = IS_OK(%10);
+    RETURN(%12, %11);
+  }
+}
+
+NODE @err_handler [intent: "Reordered err handler"] {
+  SIGNATURE: (err_code: u8) -> (u8, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result.0 == err_code && !result.1;
+  }
+  BODY {
+    %10: Result<u32, u8> = ERR(err_code);
+    %12 = GET_ERR(%10);
+    %11 = IS_OK(%10);
+    RETURN(%12, %11);
+  }
+}
+
+NODE @run_test [intent: "Caller calling ok_handler"] {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == x;
+  }
+  BODY {
+    %10, %11 = CALL_HASH(@ok_handler, x);
+    RETURN(%10);
+  }
+}

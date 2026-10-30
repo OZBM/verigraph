@@ -1,0 +1,24 @@
+module a15_float_basic;
+
+NODE @float_ops [intent: "Basic floating point arithmetic and relations"] {
+  SIGNATURE: (x: f32, y: f32) -> (f32, Bool);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(y) && y != 0.0;
+    POST: is_finite(result.0);
+  }
+  BODY {
+    %0 = FADD(x, y);
+    %1 = FSUB(x, y);
+    %2 = FMUL(%0, %1);
+    %3 = FDIV(%2, y);
+    %4 = FNEG(%3);
+    %5 = FABS(%4);
+    %6 = FMIN(%5, 100.0:f32);
+    %7 = FMAX(%6, -100.0:f32);
+    %8 = LT.f(x, y);
+    %9 = SELECT(%8, %7, %0);
+    %10 = EQ(%0, %1);
+    RETURN(%9, %10);
+  }
+}

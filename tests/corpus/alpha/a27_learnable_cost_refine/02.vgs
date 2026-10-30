@@ -1,0 +1,20 @@
+module a27_learnable_cost_refine;
+
+NODE @learnable_affine [intent: "Variant with renamed learnables and swapped fmul"] {
+  SIGNATURE: (input_x: {val_v: u32 | val_v < 100}) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: heap_bytes == 0 && arena_bytes == 0 && ops <= 10;
+    POST: is_finite(result);
+  }
+  LEARNABLE {
+    w_param: f32 in [-2.0, 2.0];
+    b_param: f32 in [0.0, 1.0];
+  }
+  BODY {
+    %10 = CAST.f32(input_x);
+    %11 = FMUL(w_param, %10);
+    %12 = FADD(%11, b_param);
+    RETURN(%12);
+  }
+}

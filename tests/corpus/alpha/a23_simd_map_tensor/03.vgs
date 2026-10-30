@@ -1,0 +1,29 @@
+module a23_simd_map_tensor;
+
+NODE @scale_elem [intent: "Kernel scaling a single float element"] {
+  SIGNATURE: (val: f32, mul: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(val) && is_finite(mul);
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FMUL(val, mul);
+    RETURN(%0);
+  }
+}
+
+NODE @map_tensor_gain [intent: "Variant with joined pre and identity gain"] {
+  SIGNATURE: (matrix: Tensor<f32, [4, 2]>, amp: f32) -> (Tensor<f32, [4, 2]>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(r in 0..4, c in 0..2) { is_finite(matrix[r, c]) } && is_finite(amp);
+    POST: forall(r in 0..4, c in 0..2) { is_finite(result[r, c]) };
+  }
+  BODY {
+    %99 = FMUL(amp, 2.0:f32);
+    %50 = IDENTITY(amp);
+    %0 = SIMD_MAP(@scale_elem, matrix, %50);
+    RETURN(%0);
+  }
+}

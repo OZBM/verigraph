@@ -1,0 +1,13 @@
+// 01: Writes d1 first, then d2 along the Eff chain
+module d10_file_write_order;
+
+NODE @write_two {
+  SIGNATURE: (e: Eff, h: FileOut, d1: Slice<u8>, d2: Slice<u8>) -> (Eff, Result<u64, u32>, Result<u64, u32>);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT { }
+  BODY {
+    %0, %1 = FILE_WRITE(e, h, d1);
+    %2, %3 = FILE_WRITE(%0, h, d2);
+    RETURN(%2, %1, %3);
+  }
+}

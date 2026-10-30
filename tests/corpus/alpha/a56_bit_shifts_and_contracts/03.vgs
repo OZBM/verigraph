@@ -1,0 +1,47 @@
+module a56_bit_shifts_and_contracts;
+
+NODE @mask_and_rotate [intent: "Rotate bits and apply mask"] {
+  SIGNATURE: (val: u32, shift: {s: u32 | s < 32}) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 4;
+  }
+  BODY {
+    %0 = ROTL(val, shift);
+    %1 = AND(4294967040:u32, %0);
+    %2 = NOT(%1);
+    RETURN(%2);
+  }
+}
+
+NODE @shift_and_combine [intent: "Bit shifts and xor combination"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 4;
+  }
+  BODY {
+    %900 = OR(1:u32, 2:u32);
+    %901 = IDENTITY(4:u32);
+    %0 = SHL.wrap(a, %901);
+    %1 = SHR.wrap(b, 4:u32);
+    %2 = XOR(%0, %1);
+    RETURN(%2);
+  }
+}
+
+NODE @bit_pipeline [intent: "Compose bitwise operations with refinement"] {
+  SIGNATURE: (xs: Array<u32, 2>, amt: {sh: u32 | sh < 16}) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..2) { xs[i] > 0 };
+    COST: ops <= 12;
+  }
+  BODY {
+    %1 = INDEX(xs, 1:u64);
+    %0 = INDEX(xs, 0:u64);
+    %2 = CALL_HASH(@mask_and_rotate, %0, amt);
+    %3 = CALL_HASH(@shift_and_combine, %1, %2);
+    RETURN(%3);
+  }
+}

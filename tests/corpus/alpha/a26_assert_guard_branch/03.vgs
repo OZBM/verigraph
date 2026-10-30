@@ -1,0 +1,42 @@
+module a26_assert_guard_branch;
+
+NODE @on_positive [intent: "Handle non-negative case"] {
+  SIGNATURE: (n: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n >= 0;
+  }
+  BODY {
+    %0 = ADD.checked(n, 1:i32);
+    RETURN(%0);
+  }
+}
+
+NODE @on_negative [intent: "Handle negative case"] {
+  SIGNATURE: (n: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n < 0;
+  }
+  BODY {
+    %0 = NEG.sat(n);
+    RETURN(%0);
+  }
+}
+
+NODE @dispatch_guard [intent: "Variant with split pre, identity, and dead op"] {
+  SIGNATURE: (num: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: num > -1000;
+    PRE: num < 1000;
+    POST: result >= 0;
+  }
+  BODY {
+    %99 = MUL.wrap(num, num);
+    %50 = IDENTITY(0:i32);
+    %0 = GE.s(num, %50);
+    %1 = ASSERT_GUARD.branch(%0, @on_positive, num, else=@on_negative);
+    RETURN(%1);
+  }
+}

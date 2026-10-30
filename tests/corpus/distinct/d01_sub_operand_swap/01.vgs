@@ -1,0 +1,12 @@
+// 01: Computes a - b (SUB.wrap(a, b))
+module d01_sub_operand_swap;
+
+NODE @diff {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SUB.wrap(a, b);
+    RETURN(%0);
+  }
+}

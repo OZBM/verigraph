@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { POST: result >= 1.5e; }
+  BODY { RETURN(x); }
+}

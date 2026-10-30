@@ -1,0 +1,44 @@
+module a54_result_tuple_ops;
+
+NODE @pack_pair [intent: "Pack two values into a tuple"] {
+  SIGNATURE: (a: u32, b: u16) -> (Tuple<u32, u16>);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0 = TUPLE(a, b);
+    RETURN(%0);
+  }
+}
+
+NODE @wrap_result [intent: "Wrap tuple in Result with flag"] {
+  SIGNATURE: (pair: Tuple<u32, u16>, flag: Bool) -> (Result<Tuple<u32, u16>, u32>);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 5;
+  }
+  BODY {
+    %900 = IDENTITY(404:u32);
+    %10: Result<Tuple<u32, u16>, u32> = OK(pair);
+    %11: Result<Tuple<u32, u16>, u32> = ERR(%900);
+    %12 = SELECT(flag, %10, %11);
+    RETURN(%12);
+  }
+}
+
+NODE @extract_or_fallback [intent: "Extract tuple or return error code variant 2"] {
+  SIGNATURE: (res: Result<Tuple<u32, u16>, u32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: ops <= 6;
+  }
+  BODY {
+    %0 = IS_OK(res);
+    %1 = GET_OK(res);
+    %2 = PROJ(%1, 0:u32);
+    %3 = GET_ERR(res);
+    %4 = SELECT(%0, %2, %3);
+    RETURN(%4);
+  }
+}

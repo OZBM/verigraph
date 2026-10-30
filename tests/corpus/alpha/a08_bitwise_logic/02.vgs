@@ -1,0 +1,16 @@
+module a08_bitwise_logic;
+
+NODE @bitwise_ops [intent: "Bitwise boolean logic on 32-bit integers"] {
+  SIGNATURE: (x_bits: u32, y_bits: u32) -> (u32, u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    // Commutative swaps on AND, OR, XOR
+    %10 = AND(y_bits, x_bits);
+    %20 = OR(y_bits, x_bits);
+    %30 = XOR(y_bits, x_bits);
+    %40 = NOT(x_bits);
+    RETURN(%10, %20, %30, %40);
+  }
+}

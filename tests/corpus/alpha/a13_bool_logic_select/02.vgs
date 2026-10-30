@@ -1,0 +1,18 @@
+module a13_bool_logic_select;
+
+NODE @bool_select [intent: "Boolean operators and multiplexer select"] {
+  SIGNATURE: (p: Bool, q: Bool, on_true: u32, on_false: u32) -> (Bool, Bool, Bool, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: p == true;
+    POST: result.3 == on_true;
+  }
+  BODY {
+    // Commutative swaps on BAND and BOR
+    %10 = BAND(q, p);
+    %11 = BOR(q, p);
+    %12 = BNOT(p);
+    %13 = SELECT(p, on_true, on_false);
+    RETURN(%10, %11, %12, %13);
+  }
+}

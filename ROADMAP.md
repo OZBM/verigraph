@@ -88,17 +88,17 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P0.7 reports/gate-g0.md
 
 ### P1 · Core IR — W1 — Oct 28 → Nov 6 — G1
-- [ ] P1.1 Data model in vg-core: Module, Node, Op, Operand, Type, Contract, EffectMask, Learnable
-- [ ] P1.2 VG-Sym lexer and parser for the grammar in docs/03-vg-sym.md; printer; parse, print, parse is the identity; agrees with tools/vgsym.lark on every corpus file
-- [ ] P1.3 Validator: arities and modes from the opcode table (docs/14), index ranges, acyclicity, single assignment, define-before-use (ADR 0005)
-- [ ] P1.4 Canonicalizer, steps 1–7 of docs/02-vg-ir-format.md
+- [x] P1.1 Data model in vg-core: Module, Node, Op, Operand, Type, Contract, EffectMask, Learnable
+- [x] P1.2 VG-Sym lexer and parser for the grammar in docs/03-vg-sym.md; printer; parse, print, parse is the identity; agrees with tools/vgsym.lark on every corpus file
+- [x] P1.3 Validator: arities and modes from the opcode table (docs/14), index ranges, acyclicity, single assignment, define-before-use (ADR 0005)
+- [x] P1.4 Canonicalizer, steps 1–7 of docs/02-vg-ir-format.md
 - [ ] P1.5 Hashes: op, body, contract, node, SCC, with the derive-key contexts in docs/02
-- [ ] P1.6 .vgir codec: 128-byte header, section directory, sections, golden files; ADR 0001 fixes the byte encodings
+- [x] P1.6 .vgir codec: 128-byte header, section directory, sections, golden files; ADR 0001 fixes the byte encodings
 - [ ] P1.7 vg-store: object store under .vg/objects, SQLite index, vg.lock
-- [ ] P1.8 Property tests: 50 or more alpha-equivalence families under random renaming and reordering
+- [x] P1.8 Property tests: 50 or more alpha-equivalence families under random renaming and reordering
 - [ ] P1.9 Fuzz targets: parser, codec, canonicalizer
 - [ ] P1.10 `vg asm`, `vg disasm`, `vg hash` (with W5)
-- [ ] P1.11 Program generator behind vg-core's `gen` feature, for property and differential tests (docs/16)
+- [x] P1.11 Program generator behind vg-core's `gen` feature, for property and differential tests (docs/16)
 
 ### P2 · Types and interpreter — W2 — Nov 2 → Nov 13 — G2
 - [ ] P2.1 Type checker for every MVP type and op (docs/04, docs/14), with the diagnostic codes of docs/15

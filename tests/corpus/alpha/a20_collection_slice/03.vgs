@@ -1,0 +1,33 @@
+module a20_collection_slice;
+
+NODE @slice_and_len [intent: "Inspect slice and length"] {
+  SIGNATURE: (input_arr: Array<u32, 4>) -> (u64);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == 2;
+  }
+  BODY {
+    %0 = SLICE(input_arr, 1:u64, 3:u64);
+    %1 = LEN(%0);
+    RETURN(%1);
+  }
+}
+
+NODE @array_transform [intent: "Variant with bound update literal and renamed bound vars"] {
+  SIGNATURE: (source_xs: Array<u32, 4>) -> (Array<u32, 8>, u64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(idx in 0..4) { source_xs[idx] < 100 };
+    POST: forall(idx in 0..8) { result.0[idx] <= 100 };
+  }
+  BODY {
+    %99 = LEN(source_xs);
+    %0 = IDENTITY([10, 20, 30, 40]:Array<u32, 4>);
+    %1 = CALL_HASH(@slice_and_len, source_xs);
+    %2 = INDEX(source_xs, 0:u64);
+    %50 = IDENTITY(99:u32);
+    %3 = UPDATE(source_xs, 0:u64, %50);
+    %4 = CONCAT(%3, %0);
+    RETURN(%4, %1);
+  }
+}

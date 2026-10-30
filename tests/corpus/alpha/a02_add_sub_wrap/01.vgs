@@ -1,0 +1,14 @@
+module a02_add_sub_wrap;
+
+NODE @hash_step {
+  SIGNATURE: (h: u32, k: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = ADD.wrap(h, k);
+    %1 = SUB.wrap(%0, 1640531527:u32);
+    %2 = ADD.wrap(%1, h);
+    RETURN(%2);
+  }
+}

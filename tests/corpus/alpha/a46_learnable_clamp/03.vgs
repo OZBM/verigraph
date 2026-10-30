@@ -1,0 +1,48 @@
+module a46_learnable_clamp;
+
+NODE @linear_step [intent: "Evaluate linear step with FMA"] {
+  SIGNATURE: (x: f32, m: f32, b: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    PRE: is_finite(m) && is_finite(b);
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FMA(x, m, b);
+    RETURN(%0);
+  }
+}
+
+NODE @model_layer [intent: "Learnable model layer"] {
+  SIGNATURE: (in_val: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(in_val);
+    POST: is_finite(result) && weight >= 0.5 && weight <= 2.0 && bias >= -1.0 && bias <= 1.0;
+  }
+  LEARNABLE {
+    weight: f32 in [0.5, 2.0];
+    bias: f32 in [-1.0, 1.0];
+  }
+  BODY {
+    %902 = IDENTITY(-10.0:f32);
+    %901 = IDENTITY(10.0:f32);
+    %0 = CALL_HASH(@linear_step, in_val, weight, bias);
+    %1 = FCLAMP(%0, %902, %901);
+    RETURN(%1);
+  }
+}
+
+NODE @evaluate_layer [intent: "Top level layer evaluator"] {
+  SIGNATURE: (sample: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(sample);
+  }
+  BODY {
+    %900 = FADD(1.0:f32, 2.0:f32);
+    %0 = CALL_HASH(@model_layer, sample);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,22 @@
+module a17_cast_float;
+
+NODE @convert_num [intent: "Variant with duplicated cast and identity scale"] {
+  SIGNATURE: (src_f: f32, src_u: u32) -> (f64, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(src_f);
+    PRE: src_f >= -1000.0 && src_f <= 1000.0;
+    POST: is_finite(result.0);
+  }
+  BODY {
+    %99 = ADD.wrap(src_u, 1:u32);
+    %0 = CAST.f64(src_f);
+    %51 = CAST.f64(src_f);
+    %1 = CAST.f32(src_u);
+    %2 = FADD(src_f, %1);
+    %3 = CAST.i32(%2);
+    %50 = IDENTITY(2.0:f64);
+    %4 = FMUL(%51, %50);
+    RETURN(%4, %3);
+  }
+}

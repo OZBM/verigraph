@@ -1,0 +1,30 @@
+module a24_fold_bounded_inv;
+
+NODE @accum_step [intent: "Accumulator step with split pre"] {
+  SIGNATURE: (running_sum: u32, item: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: running_sum <= 100000;
+    PRE: item <= 1000;
+  }
+  BODY {
+    %0 = ADD.wrap(running_sum, item);
+    RETURN(%0);
+  }
+}
+
+NODE @sum_bounded [intent: "Variant with identity init and dead op"] {
+  SIGNATURE: (arr: Array<u32, 4>, start_val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @acc_bound(step_idx, current_acc): current_acc >= 0;
+    PRE: start_val == 0:u32;
+    POST: result >= 0;
+  }
+  BODY {
+    %99 = ADD.wrap(1:u32, 2:u32);
+    %50 = IDENTITY(start_val);
+    %0 = FOLD_BOUNDED(@accum_step, arr, init=%50, invariant=@acc_bound);
+    RETURN(%0);
+  }
+}

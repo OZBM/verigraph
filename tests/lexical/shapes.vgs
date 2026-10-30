@@ -1,0 +1,7 @@
+module lex;
+NODE @n {
+  SIGNATURE: (x: Tensor<f32, 4>, y: Tensor<f32, [2, 3]>, z: Array<u8, [5]>, w: Array<u8, n>) -> (i32);
+  EFFECTS: [];
+  CONTRACT { POST: true; }
+  BODY { RETURN(x); }
+}

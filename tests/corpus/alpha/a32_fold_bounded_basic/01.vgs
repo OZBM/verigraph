@@ -1,0 +1,25 @@
+module fold_bounded_basic;
+
+NODE @accumulate_step [intent: "Step kernel: shift element and add to accumulator"] {
+  SIGNATURE: (acc: u64, elem: u64, shift: u32) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SHL.wrap(elem, shift);
+    %1 = ADD.wrap(acc, %0);
+    RETURN(%1);
+  }
+}
+
+NODE @sum_shifted_array [intent: "Bounded fold over array with invariant", export] {
+  SIGNATURE: (items: Array<u64, 4>, shift: u32) -> (u64);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @inv_sum(k, acc): acc >= 0;
+    POST: result >= 0;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@accumulate_step, items, shift, init=0:u64, invariant=@inv_sum);
+    RETURN(%0);
+  }
+}

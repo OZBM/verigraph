@@ -1,0 +1,28 @@
+module fold_bounded_body_port;
+
+NODE @kernel_add_sat [intent: "Saturating add of accumulator and element"] {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %900 = ADD.wrap(x, 1:u32);
+    %0 = ADD.sat(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @fold_with_port_bound [intent: "Fold slice with invariant referencing body port %0", export] {
+  SIGNATURE: (xs: Slice<u32>, base: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @inv_bound(k, acc): acc <= %0;
+    POST: result >= 0;
+  }
+  BODY {
+    %9 = IDENTITY(1000:u32);
+    %0 = ADD.wrap(base, %9);
+    %8 = IDENTITY(0:u32);
+    %1 = FOLD_BOUNDED(@kernel_add_sat, xs, init=%8, invariant=@inv_bound);
+    RETURN(%1);
+  }
+}

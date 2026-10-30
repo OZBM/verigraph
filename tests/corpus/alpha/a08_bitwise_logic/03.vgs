@@ -1,0 +1,21 @@
+module a08_bitwise_logic;
+
+NODE @bitwise_ops {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    // Reorder statements and bind a through IDENTITY
+    %88 = IDENTITY(a);
+    %3 = NOT(%88);
+    %2 = XOR(a, b);
+    // Duplicate pure op %2
+    %99 = XOR(a, b);
+    // Dead pure op
+    %77 = AND(a, 0:u32);
+    %1 = OR(a, b);
+    %0 = AND(a, b);
+    RETURN(%0, %1, %99, %3);
+  }
+}

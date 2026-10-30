@@ -1,0 +1,19 @@
+module a16_float_fma_clamp;
+
+NODE @fma_clamp_eval [intent: "Variant with swapped FMA and reordered sqrt"] {
+  SIGNATURE: (val: f64, scale: f64, bias: f64) -> (f64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(val) && is_finite(scale);
+    PRE: is_finite(bias) && bias >= 0.0;
+    POST: is_finite(result);
+  }
+  BODY {
+    %13 = FSQRT(bias);
+    %10 = FMA(scale, val, bias);
+    %11 = FCLAMP(%10, -10.0:f64, 10.0:f64);
+    %12 = FCOPYSIGN(%11, val);
+    %14 = FADD(%13, %12);
+    RETURN(%14);
+  }
+}

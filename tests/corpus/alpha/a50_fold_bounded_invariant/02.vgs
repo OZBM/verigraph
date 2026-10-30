@@ -1,0 +1,41 @@
+module a50_fold_bounded_invariant;
+
+NODE @accumulate_bounded [intent: "Kernel for bounded fold"] {
+  SIGNATURE: (acc: u32, elem: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc <= 100000 && elem <= 1000;
+    POST: result <= 101000;
+  }
+  BODY {
+    %0 = ADD.wrap(elem, acc);
+    RETURN(%0);
+  }
+}
+
+NODE @fold_sum [intent: "Bounded fold over array with invariant variant 2"] {
+  SIGNATURE: (arr: Array<u32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { arr[i] <= 1000 };
+    INVARIANT @loop_inv(k, total): total <= k * 1000;
+    POST: result <= 4000;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@accumulate_bounded, arr, init=0:u32, invariant=@loop_inv);
+    RETURN(%0);
+  }
+}
+
+NODE @run_fold [intent: "Top level fold runner"] {
+  SIGNATURE: (input_data: Array<u32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { input_data[i] <= 1000 };
+    POST: result <= 4000;
+  }
+  BODY {
+    %0 = CALL_HASH(@fold_sum, input_data);
+    RETURN(%0);
+  }
+}

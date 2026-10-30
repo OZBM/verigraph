@@ -1,0 +1,26 @@
+module simd_map_slice;
+
+NODE @mask_rot [intent: "Mask and rotate u32 element"] {
+  SIGNATURE: (x: u32, mask: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    // Commutative swaps on AND and XOR
+    %0 = AND(mask, x);
+    %1 = ROTL(%0, 3:u32);
+    %2 = XOR(mask, %1);
+    RETURN(%2);
+  }
+}
+
+NODE @transform_slice [intent: "Map mask_rot across slice with broadcast mask", export] {
+  SIGNATURE: (input_slice: Slice<u32>, mask: u32) -> (Slice<u32>);
+  EFFECTS: [ARENA];
+  CONTRACT {
+    COST: arena_bytes <= 4096;
+  }
+  BODY {
+    %10 = SIMD_MAP(@mask_rot, input_slice, mask);
+    RETURN(%10);
+  }
+}

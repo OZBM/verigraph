@@ -1,0 +1,20 @@
+module a27_learnable_cost_refine;
+
+NODE @learnable_affine [intent: "Affine transform with learnable weights and refinement type"] {
+  SIGNATURE: (x: {v: u32 | v < 100}) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: heap_bytes == 0 && arena_bytes == 0 && ops <= 10;
+    POST: is_finite(result);
+  }
+  LEARNABLE {
+    weight: f32 in [-2.0, 2.0];
+    bias: f32 in [0.0, 1.0];
+  }
+  BODY {
+    %0 = CAST.f32(x);
+    %1 = FMUL(%0, weight);
+    %2 = FADD(%1, bias);
+    RETURN(%2);
+  }
+}

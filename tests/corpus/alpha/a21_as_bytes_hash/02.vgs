@@ -1,0 +1,30 @@
+module a21_as_bytes_hash;
+
+NODE @read_bytes [intent: "Reordered byte index operations and swapped add"] {
+  SIGNATURE: (bytes: Slice<u8>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: len(bytes) >= 1 && len(bytes) >= 2;
+  }
+  BODY {
+    %11 = INDEX(bytes, 1:u64);
+    %13 = CAST.u32(%11);
+    %10 = INDEX(bytes, 0:u64);
+    %12 = CAST.u32(%10);
+    %14 = ADD.wrap(%13, %12);
+    RETURN(%14);
+  }
+}
+
+NODE @hash_array [intent: "Convert float array to bytes and digest"] {
+  SIGNATURE: (arr: Array<f32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { is_finite(arr[i]) };
+  }
+  BODY {
+    %10 = AS_BYTES(arr);
+    %11 = CALL_HASH(@read_bytes, %10);
+    RETURN(%11);
+  }
+}

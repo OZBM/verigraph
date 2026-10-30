@@ -1,0 +1,12 @@
+// 02: Swapped operands of non-commutative SUB: computes b - a (SUB.wrap(b, a))
+module d01_sub_operand_swap;
+
+NODE @diff {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SUB.wrap(b, a);
+    RETURN(%0);
+  }
+}

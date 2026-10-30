@@ -1,0 +1,30 @@
+module a21_as_bytes_hash;
+
+NODE @sum_byte_pair [intent: "Read first two bytes from slice and sum"] {
+  SIGNATURE: (bytes: Slice<u8>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: len(bytes) >= 1 && len(bytes) >= 2;
+  }
+  BODY {
+    %0 = INDEX(bytes, 0:u64);
+    %1 = INDEX(bytes, 1:u64);
+    %2 = CAST.u32(%0);
+    %3 = CAST.u32(%1);
+    %4 = ADD.wrap(%2, %3);
+    RETURN(%4);
+  }
+}
+
+NODE @digest_floats [intent: "Convert float array to bytes and digest"] {
+  SIGNATURE: (arr: Array<f32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { is_finite(arr[i]) };
+  }
+  BODY {
+    %0 = AS_BYTES(arr);
+    %1 = CALL_HASH(@sum_byte_pair, %0);
+    RETURN(%1);
+  }
+}

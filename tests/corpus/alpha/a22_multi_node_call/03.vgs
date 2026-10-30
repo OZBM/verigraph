@@ -1,0 +1,46 @@
+module a22_multi_node_call;
+
+NODE @math_core [intent: "Compute sum and difference with renamed params"] {
+  SIGNATURE: (p: f32, q: f32) -> (f32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(p) && is_finite(q);
+    POST: is_finite(result.0) && is_finite(result.1);
+  }
+  BODY {
+    %0 = FADD(p, q);
+    %1 = FSUB(p, q);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @math_scaler [intent: "Scale sum and difference with renamed params"] {
+  SIGNATURE: (s: f32, d: f32, f: f32) -> (f32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(s) && is_finite(d) && is_finite(f);
+    POST: is_finite(result.0) && is_finite(result.1);
+  }
+  BODY {
+    %0 = FMUL(s, f);
+    %1 = FMUL(d, f);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @pipeline_proc [intent: "Pipeline with identity scale and dead op"] {
+  SIGNATURE: (u: f32, v: f32, sc: f32) -> (f32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(u) && is_finite(v);
+    PRE: is_finite(sc);
+    POST: is_finite(result.0) && is_finite(result.1);
+  }
+  BODY {
+    %99 = FADD(u, v);
+    %0, %1 = CALL_HASH(@math_core, u, v);
+    %50 = IDENTITY(sc);
+    %2, %3 = CALL_HASH(@math_scaler, %0, %1, %50);
+    RETURN(%2, %3);
+  }
+}

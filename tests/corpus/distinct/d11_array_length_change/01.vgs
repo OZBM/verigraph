@@ -1,0 +1,12 @@
+// 01: Array parameter has length 4 (Array<u32, 4>)
+module d11_array_length_change;
+
+NODE @first_elem {
+  SIGNATURE: (arr: Array<u32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = INDEX(arr, 0:u64);
+    RETURN(%0);
+  }
+}

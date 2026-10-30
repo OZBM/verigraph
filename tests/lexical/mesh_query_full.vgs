@@ -1,0 +1,8 @@
+module m;
+@MESH_QUERY @sha256 {
+  signature: (Slice<u8>) -> (Array<u8, 32>);
+  effects: [];
+  pre: len(arg0) < 4096;
+  post: result == spec:sha256(arg0);
+  intent: "digest";
+}

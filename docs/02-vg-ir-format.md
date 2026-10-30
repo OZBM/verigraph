@@ -1,6 +1,6 @@
 # 02 · VG-IR format
 
-A VG-IR node is one function, stored as a canonical binary object with 16-byte-aligned sections. Its identity is a BLAKE3 hash over its canonical body, contract, signature and effects. The format and canonicalization freeze at G1; byte-level encodings are confirmed in docs/adr/0001-format-encodings.md during P1.
+A VG-IR node is one function, stored as a canonical binary object with 16-byte-aligned sections. Its identity is a BLAKE3 hash over its canonical body, contract, signature and effects. The format and canonicalization freeze at G1; byte-level encodings are fixed by docs/adr/0001-format-encodings.md, with golden files.
 
 ## Vocabulary
 
@@ -11,9 +11,9 @@ A *node* is the content-addressed unit: one function. Inside its body, *ops* are
 | Hash | Covers | BLAKE3 derive-key context |
 | --- | --- | --- |
 | op hash | opcode, mode, attributes, result types, operand hashes in port order | `VeriGraph 2026 op v2` |
-| body_hash | the canonical op graph (sections TYPES, CONSTS, OPS, OPERANDS, RESULTS, CALLS, LEARNABLE) | `VeriGraph 2026 body v2` |
-| contract_hash | the canonical CONTRACT section | `VeriGraph 2026 contract v2` |
-| node_hash | format_version, effect_mask, SIGNATURE, body_hash, contract_hash | `VeriGraph 2026 node v2` |
+| body_hash | the canonical op graph: the Merkle hashes of the outputs and the LEARNABLE box (ADR 0001) | `VeriGraph 2026 body v2` |
+| contract_hash | the canonical contract: each clause's formulas, with constants, callees and ports by hash (ADR 0001) | `VeriGraph 2026 contract v2` |
+| node_hash | format_version, effect_mask, the signature's types, body_hash, contract_hash | `VeriGraph 2026 node v2` |
 | scc hash | a group of mutually recursive nodes | `VeriGraph 2026 scc v2` |
 | spec_hash | a SPEC node used as a reference specification | `VeriGraph 2026 spec v2` |
 | obligation hash | one SMT query, as printed SMT-LIB2 | `VeriGraph 2026 obligation v2` |
@@ -50,17 +50,17 @@ Sections: ascending kind order, each on a 16-byte boundary, zero-padded
   0x7F DEBUG      names, spans, intent text, guard map; never hashed
 ```
 
-Proposed encodings, to confirm in ADR 0001:
+Encodings (ADR 0001 gives every byte, its amendments to this list, and the golden files that pin them):
 
-- **TYPES:** variable-length descriptors `{tag u8, argc u8, reserved u16, args u32[argc]}`. Tags: 0x01 Bool; 0x02 UInt(bits); 0x03 SInt(bits); 0x04 Float(bits); 0x05 BFloat16; 0x10 Array(elem, len); 0x11 Slice(elem); 0x12 Tensor(elem, dims…); 0x13 Tuple(members…); 0x14 Result(ok, err); 0x15 Arena(bytes) [ALPHA]; 0x16 Eff; 0x17 Handle(kind); 0x18 Refinement(base, formula offset); 0x06 Int, the unbounded integers of formulas, used only by CONTRACT constants. Type arguments are indices into TYPES; sizes are indices into CONSTS.
+- **TYPES:** variable-length descriptors `{tag u8, argc u8, reserved u16, args u32[argc]}`. Tags: 0x01 Bool; 0x02 UInt(bits); 0x03 SInt(bits); 0x04 Float(bits); 0x05 BFloat16; 0x10 Array(elem, len); 0x11 Slice(elem); 0x12 Tensor(elem, dims…); 0x13 Tuple(members…); 0x14 Result(ok, err); 0x15 Arena(bytes) [ALPHA]; 0x16 Eff; 0x17 Handle(kind); 0x18 Refinement(base, formula offset); 0x06 Int, the unbounded integers of formulas, used only by CONTRACT constants. Type arguments are indices into TYPES; bit widths, lengths, dimensions, arena sizes and handle kinds are u32 immediates, and nested types are numbered first.
 - **CONSTS:** `{type u32, len u32, bytes[len]}` padded to 4 bytes; floats keep their exact bits, except that NaN is always stored as the canonical NaN of docs/13 (ADR 0002); an Int constant stores its shortest two's-complement bytes, little-endian. Array and tensor constants store their elements in row-major order.
-- **Numbering of TYPES and CONSTS:** each distinct type and constant appears once, numbered in order of first reference while serializing SIGNATURE, then LEARNABLE, then each op in canonical order (its result types, then its constant operands), then CONTRACT.
+- **Numbering of TYPES and CONSTS:** each distinct type and constant appears once, numbered in order of first reference while serializing SIGNATURE, then LEARNABLE, then each op in canonical order (its result types, then its constant operands), then the node's outputs, then CONTRACT.
 - **OPS.attr** is 0 for every MVP op; docs/14 keeps every op's information in its opcode, mode, operands and result types.
-- **OPERANDS.src_kind:** 0 input (src_index = input position), 1 op result (src_index = op index, src_slot = result index), 2 constant (src_index = CONSTS index), 3 callee (src_index = CALLS index: a combinator's kernel, CALL_HASH's callee, ASSERT_GUARD's branches), 4 invariant (src_index = the INVARIANT clause's index in CONTRACT, for FOLD_BOUNDED's `invariant=`). Each VG-Sym argument becomes one operand, in argument order; named arguments come last, in the order the opcode table fixes.
+- **OPERANDS.src_kind:** 0 input (src_index = input position), 1 op result (src_index = op index, src_slot = result index), 2 constant (src_index = CONSTS index), 3 callee (src_index = CALLS index: a combinator's kernel, CALL_HASH's callee, ASSERT_GUARD's branches), 4 invariant (src_index = the INVARIANT clause's index in CONTRACT, for FOLD_BOUNDED's `invariant=`). Each VG-Sym argument becomes one operand, in argument order; named arguments come last, in the order the opcode table fixes. The node's outputs follow the ops' operands, one per result.
 - **CALLS and INVARIANT clauses:** sorted by hash, without duplicates, so declaration order never changes a hash.
 - **LEARNABLE:** `param` is the SIGNATURE index of the θ entry, `type` its float type, `lo` and `hi` CONSTS indices of the bounds in that type; `loss` is a CALLS index, or 0xFFFFFFFF when the parameter has no loss.
 - **SIGNATURE:** one 8-byte entry per value, `role` 0 for inputs in parameter order, then 1 for outputs in result order, then 2 for θ in LEARNABLE order (the implicit trailing inputs); `flags` is 0 in the MVP, and a refined type is simply a TYPES entry with tag 0x18.
-- **Static limits** (VG-T0118): a fixed-size type holds at most 2^32 − 1 elements and 16 MiB; larger data is a Slice. Array lengths and tensor dimensions are u64 constants.
+- **Static limits** (VG-T0118): a fixed-size type holds at most 2^32 − 1 elements and 16 MiB; larger data is a Slice. Array lengths and tensor dimensions are u32 immediates in TYPES; LEN still returns u64.
 - **Section directory:** `count` is the number of entries (types, constants, ops, operands, results, hashes, clauses or parameters) and `length` the section's bytes before padding; `flags` is 0.
 - **SPEC nodes** set header flag bit 2, and their header's node_hash field holds the spec_hash, computed over the same preimage with the `spec` context, so a spec and an implementation can never share an identity.
 
@@ -100,7 +100,7 @@ Semantics notes for the MVP (docs/13 and docs/14 are normative):
 4. Sort the operands of the ops docs/14 marks commutative by hash: ADD, MUL, AND, OR, XOR, EQ, NE, BAND, BOR, FADD, FMUL, FMIN, FMAX, and the first two operands of FMA. With one NaN (ADR 0002), float addition and multiplication are commutative bit for bit.
 5. Merge ops with equal hashes, and drop ops that no output, Eff chain or live INVARIANT depends on (ADR 0007).
 6. Number the ops by a post-order depth-first walk from the outputs, in port order. Unlike "topological order", this order is unique for a given graph.
-7. Serialize the sections deterministically and hash them.
+7. Serialize the sections deterministically; the hashes come from the structure, not from table positions (ADR 0001).
 
 Canonicalization is idempotent: canonicalizing a canonical node changes no byte. G1 tests this on every corpus file.
 

@@ -1,0 +1,35 @@
+module assert_guard_branch;
+
+NODE @mode_then [intent: "Arithmetic ops for high branch"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.checked(a, b);
+    %1 = MUL.checked(a, b);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @mode_else [intent: "Bitwise and diff ops for low branch"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    // Reordered independent pure statements
+    %1 = AND(a, b);
+    %0 = SUB.wrap(a, b);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @select_operation [intent: "Branch guard dispatching two results", export] {
+  SIGNATURE: (cond: Bool, a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %900 = BOR(cond, false);
+    %0, %1 = ASSERT_GUARD.branch(cond, @mode_then, a, b, else=@mode_else);
+    RETURN(%0, %1);
+  }
+}

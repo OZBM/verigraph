@@ -1,0 +1,41 @@
+module a45_file_read_write_chain;
+
+NODE @read_header [intent: "Read header slice from file"] {
+  SIGNATURE: (e: Eff, fin: FileIn) -> (Eff, Result<Slice<u8>, u32>);
+  EFFECTS: [ARENA, FILE_READ];
+  CONTRACT {
+    COST: arena_bytes <= 16;
+  }
+  BODY {
+    %903 = IDENTITY(16:u64);
+    %0, %1 = FILE_READ(e, fin, %903);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @write_payload [intent: "Write byte slice to file"] {
+  SIGNATURE: (e: Eff, fout: FileOut, bytes: Slice<u8>) -> (Eff, Result<u64, u32>);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT {
+    COST: ops <= 2;
+  }
+  BODY {
+    %0, %1 = FILE_WRITE(e, fout, bytes);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @relay_block [intent: "Read and write chain variant 2"] {
+  SIGNATURE: (e0: Eff, fin: FileIn, fout: FileOut) -> (Eff, Result<u64, u32>);
+  EFFECTS: [ARENA, FILE_READ, FILE_WRITE];
+  CONTRACT {
+    COST: arena_bytes <= 16;
+  }
+  BODY {
+    %900 = IDENTITY([65, 66]:Array<u8, 2>);
+    %906 = SLICE(%900, 0:u64, 2:u64);
+    %901, %904 = CALL_HASH(@read_header, e0, fin);
+    %902, %905 = CALL_HASH(@write_payload, %901, fout, %906);
+    RETURN(%902, %905);
+  }
+}

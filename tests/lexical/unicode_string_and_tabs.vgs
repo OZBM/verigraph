@@ -1,0 +1,2 @@
+module m;
+	NODE @n [intent: "clé → \"ok\" \\"] { SIGNATURE: (x: u8) -> (u8); EFFECTS: []; CONTRACT { } BODY { RETURN(x); } } // end

@@ -1,0 +1,29 @@
+module a18_tuple_proj;
+
+NODE @pack_pair [intent: "Pack two floats into a tuple"] {
+  SIGNATURE: (a: f32, b: f32) -> (Tuple<f32, f32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(a) && is_finite(b);
+  }
+  BODY {
+    %0 = TUPLE(a, b);
+    RETURN(%0);
+  }
+}
+
+NODE @unpack_and_sum [intent: "Call pack_pair and unpack with PROJ"] {
+  SIGNATURE: (x: f32, y: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(y);
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = CALL_HASH(@pack_pair, x, y);
+    %1 = PROJ(%0, 0:u32);
+    %2 = PROJ(%0, 1:u32);
+    %3 = FADD(%1, %2);
+    RETURN(%3);
+  }
+}

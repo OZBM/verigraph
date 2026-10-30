@@ -1,0 +1,17 @@
+module a12_signed_compares;
+
+NODE @signed_cmp {
+  SIGNATURE: (x: i32, y: i32) -> (Bool, Bool, Bool, Bool, Bool, Bool);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = LT.s(x, y);
+    %1 = LE.s(x, y);
+    %2 = GT.s(x, y);
+    %3 = GE.s(x, y);
+    %4 = EQ(x, y);
+    %5 = NE(x, y);
+    RETURN(%0, %1, %2, %3, %4, %5);
+  }
+}

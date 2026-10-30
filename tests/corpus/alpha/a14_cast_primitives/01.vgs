@@ -1,0 +1,17 @@
+module a14_cast_primitives;
+
+NODE @cast_primitives {
+  SIGNATURE: (b: u8, w: u32, flag: Bool, i: i32) -> (u32, u8, u32, f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: w <= 255:u32 && w >= 0:u32;
+    POST: result.1 <= 255:u8;
+  }
+  BODY {
+    %0 = CAST.u32(b);
+    %1 = CAST.u8(w);
+    %2 = CAST.u32(flag);
+    %3 = CAST.f32(i);
+    RETURN(%0, %1, %2, %3);
+  }
+}

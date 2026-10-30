@@ -1,0 +1,18 @@
+module a09_shifts_checked_wrap;
+
+NODE @shift_demo [intent: "Checked and wrapping shift operators"] {
+  SIGNATURE: (u_data: u32, s_data: i32, amt: u32) -> (u32, u32, i32, i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: amt < 32:u32;
+    PRE: amt >= 0:u32;
+    POST: result.0 == result.1 && result.2 == result.3;
+  }
+  BODY {
+    %10 = SHL.checked(u_data, amt);
+    %11 = SHL.wrap(u_data, amt);
+    %12 = SHR.checked(s_data, amt);
+    %13 = SHR.wrap(s_data, amt);
+    RETURN(%10, %11, %12, %13);
+  }
+}

@@ -1,0 +1,33 @@
+module assert_guard_branch;
+
+NODE @branch_high [intent: "Arithmetic ops for high branch with commuted operands"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.checked(b, a);
+    %1 = MUL.checked(b, a);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @branch_low [intent: "Bitwise and diff ops for low branch with commuted AND"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SUB.wrap(a, b);
+    %1 = AND(b, a);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @select_operation [intent: "Branch guard dispatching two results", export] {
+  SIGNATURE: (cond: Bool, a: u32, b: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %10, %11 = ASSERT_GUARD.branch(cond, @branch_high, a, b, else=@branch_low);
+    RETURN(%10, %11);
+  }
+}

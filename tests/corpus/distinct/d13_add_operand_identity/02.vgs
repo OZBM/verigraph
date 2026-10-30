@@ -1,0 +1,12 @@
+// 02: Adds x and y instead of x and x (ADD.wrap(x, y))
+module d13_add_operand_identity;
+
+NODE @double_or_add {
+  SIGNATURE: (x: u32, y: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, y);
+    RETURN(%0);
+  }
+}

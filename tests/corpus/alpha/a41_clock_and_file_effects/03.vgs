@@ -1,0 +1,42 @@
+module clock_and_file_effects;
+
+NODE @get_clock_time [intent: "Read monotonic clock nanoseconds"] {
+  SIGNATURE: (e0: Eff, clk: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %902, %908 = CLOCK_READ(e0, clk);
+    RETURN(%902, %908);
+  }
+}
+
+NODE @transfer_stream [intent: "Read slice from input file and append to output file"] {
+  SIGNATURE: (e0: Eff, fin: FileIn, fout: FileOut, max_bytes: u64) -> (Eff, Result<u64, u32>);
+  EFFECTS: [ARENA, FILE_READ, FILE_WRITE];
+  CONTRACT {
+    COST: arena_bytes <= 65536;
+  }
+  BODY {
+    %902, %905 = FILE_READ(e0, fin, max_bytes);
+    %907 = GET_OK(%905);
+    %903, %906 = FILE_WRITE(%902, fout, %907);
+    RETURN(%903, %906);
+  }
+}
+
+NODE @benchmark_copy [intent: "Measure clock elapsed time during file copy", export] {
+  SIGNATURE: (e0: Eff, fin: FileIn, fout: FileOut, clk: Clock) -> (Eff, u64);
+  EFFECTS: [ARENA, CLOCK, FILE_READ, FILE_WRITE];
+  CONTRACT {
+    COST: arena_bytes <= 65536;
+  }
+  BODY {
+    %900 = ADD.wrap(1:u64, 2:u64);
+    %9 = IDENTITY(1024:u64);
+    %902, %909 = CALL_HASH(@get_clock_time, e0, clk);
+    %903, %911 = CALL_HASH(@transfer_stream, %902, fin, fout, %9);
+    %904, %910 = CALL_HASH(@get_clock_time, %903, clk);
+    %901 = SUB.wrap(%910, %909);
+    RETURN(%904, %901);
+  }
+}

@@ -1,0 +1,26 @@
+module a25_generate_array;
+
+NODE @gen_cell [intent: "Generate table element from index and base"] {
+  SIGNATURE: (idx: u64, base_val: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: idx >= 0 && idx < 10;
+  }
+  BODY {
+    %0 = CAST.u32(idx);
+    %1 = ADD.wrap(%0, base_val);
+    RETURN(%1);
+  }
+}
+
+NODE @make_array [intent: "Generate 4-element array via GENERATE"] {
+  SIGNATURE: (base: u32) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: base < 1000;
+  }
+  BODY {
+    %0 = GENERATE(@gen_cell, 4:u64, base);
+    RETURN(%0);
+  }
+}
