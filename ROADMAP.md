@@ -97,7 +97,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [x] P1.7 vg-store: object store under .vg/objects, SQLite index, vg.lock
 - [x] P1.8 Property tests: 50 or more alpha-equivalence families under random renaming and reordering
 - [ ] P1.9 Fuzz targets: parser, codec, canonicalizer
-- [ ] P1.10 `vg asm`, `vg disasm`, `vg hash` (with W5)
+- [x] P1.10 `vg asm`, `vg disasm`, `vg hash` (with W5)
 - [x] P1.11 Program generator behind vg-core's `gen` feature, for property and differential tests (docs/16)
 
 ### P2 · Types and interpreter — W2 — Nov 2 → Nov 13 — G2
