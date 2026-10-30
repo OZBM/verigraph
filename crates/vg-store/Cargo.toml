@@ -8,3 +8,5 @@ publish.workspace = true
 
 [dependencies]
 vg-core = { path = "../vg-core" }
+# SQLite, compiled in, so every host indexes with the same version.
+rusqlite = { version = "0.37", features = ["bundled"] }

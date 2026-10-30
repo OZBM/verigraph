@@ -94,7 +94,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [x] P1.4 Canonicalizer, steps 1–7 of docs/02-vg-ir-format.md
 - [ ] P1.5 Hashes: op, body, contract, node, SCC, with the derive-key contexts in docs/02
 - [x] P1.6 .vgir codec: 128-byte header, section directory, sections, golden files; ADR 0001 fixes the byte encodings
-- [ ] P1.7 vg-store: object store under .vg/objects, SQLite index, vg.lock
+- [x] P1.7 vg-store: object store under .vg/objects, SQLite index, vg.lock
 - [x] P1.8 Property tests: 50 or more alpha-equivalence families under random renaming and reordering
 - [ ] P1.9 Fuzz targets: parser, codec, canonicalizer
 - [ ] P1.10 `vg asm`, `vg disasm`, `vg hash` (with W5)
