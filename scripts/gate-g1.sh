@@ -89,11 +89,12 @@ run lark-parity "$venv/bin/python" tools/lark_parity.py --check || c3="not met"
 # Criterion 4: each fuzz target runs FUZZ_SECONDS without a crash, from seeds of every corpus file.
 c4=met
 fuzz_rows=""
-if ! run seeds ./scripts/fuzz-seeds.sh target/fuzz-seeds; then
+# The gate's own seed directories, so no other fuzzing session can write into them mid-run.
+if ! run seeds ./scripts/fuzz-seeds.sh "$work/seeds"; then
   c4="not met"
 fi
 for t in parse codec canon; do
-  (cd fuzz && cargo +nightly fuzz run "$t" "../target/fuzz-seeds/$t" -- -max_total_time="$FUZZ_SECONDS" -print_final_stats=1 \
+  (cd fuzz && cargo +nightly fuzz run "$t" "../$work/seeds/$t" -- -max_total_time="$FUZZ_SECONDS" -print_final_stats=1 \
     >"../$work/fuzz-$t.log" 2>&1; echo $? >"../$work/fuzz-$t.code") &
 done
 wait
