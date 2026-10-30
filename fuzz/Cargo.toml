@@ -1,0 +1,36 @@
+# Fuzz targets of docs/16 (P1.9), run with cargo-fuzz on nightly; kept out of the workspace.
+[package]
+name = "vg-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vg-core = { path = "../crates/vg-core", features = ["gen"] }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "codec"
+path = "fuzz_targets/codec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "canon"
+path = "fuzz_targets/canon.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

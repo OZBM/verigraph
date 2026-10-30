@@ -3,9 +3,9 @@
 export RUSTFLAGS := -D warnings
 export RUSTDOCFLAGS := -D warnings
 
-GATES_TODO := gate-g1 gate-g2 gate-g3 gate-g4 gate-g5 gate-g6 gate-g7 gate-g8
+GATES_TODO := gate-g2 gate-g3 gate-g4 gate-g5 gate-g6 gate-g7 gate-g8
 
-.PHONY: check toolchain gate-g0 $(GATES_TODO)
+.PHONY: check toolchain gate-g0 gate-g1 $(GATES_TODO)
 
 check:
 	cargo fmt --all --check
@@ -17,6 +17,9 @@ toolchain:
 
 gate-g0:
 	./scripts/gate-g0.sh
+
+gate-g1:
+	./scripts/gate-g1.sh
 
 $(GATES_TODO):
 	@echo "$@: NOT IMPLEMENTED. This gate's checks land with its phase (ROADMAP.md); it cannot pass yet." >&2
