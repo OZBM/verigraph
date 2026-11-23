@@ -1,0 +1,99 @@
+{
+  "node": "@cast_i16_i8",
+  "cases": [
+    {
+      "inputs": {
+        "x": -32768
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -32767
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -128
+      },
+      "outputs": [
+        -128
+      ]
+    },
+    {
+      "inputs": {
+        "x": -1
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "x": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "x": 1
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "x": 127
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "x": 256
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": 3641
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": 5540
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": 32766
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": 32767
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -129
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": 128
+      },
+      "trap": "CAST.in_range"
+    }
+  ]
+}

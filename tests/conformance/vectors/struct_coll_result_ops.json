@@ -1,0 +1,24 @@
+{
+  "node": "@result_ops",
+  "cases": [
+    {
+      "inputs": {
+        "make_ok": true,
+        "val": 123,
+        "err": 9
+      },
+      "outputs": [
+        true,
+        123
+      ]
+    },
+    {
+      "inputs": {
+        "make_ok": false,
+        "val": 123,
+        "err": 9
+      },
+      "trap": "GET_OK.is_ok"
+    }
+  ]
+}

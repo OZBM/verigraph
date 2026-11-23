@@ -1,0 +1,173 @@
+{
+  "node": "@neg_wrap_u8",
+  "cases": [
+    {
+      "inputs": {
+        "a": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1
+      },
+      "outputs": [
+        255
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254
+      },
+      "outputs": [
+        2
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16
+      },
+      "outputs": [
+        240
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203
+      },
+      "outputs": [
+        53
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106
+      },
+      "outputs": [
+        150
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144
+      },
+      "outputs": [
+        112
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114
+      },
+      "outputs": [
+        142
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75
+      },
+      "outputs": [
+        181
+      ]
+    },
+    {
+      "inputs": {
+        "a": 15
+      },
+      "outputs": [
+        241
+      ]
+    },
+    {
+      "inputs": {
+        "a": 21
+      },
+      "outputs": [
+        235
+      ]
+    },
+    {
+      "inputs": {
+        "a": 65
+      },
+      "outputs": [
+        191
+      ]
+    },
+    {
+      "inputs": {
+        "a": 241
+      },
+      "outputs": [
+        15
+      ]
+    },
+    {
+      "inputs": {
+        "a": 58
+      },
+      "outputs": [
+        198
+      ]
+    },
+    {
+      "inputs": {
+        "a": 5
+      },
+      "outputs": [
+        251
+      ]
+    },
+    {
+      "inputs": {
+        "a": 72
+      },
+      "outputs": [
+        184
+      ]
+    },
+    {
+      "inputs": {
+        "a": 142
+      },
+      "outputs": [
+        114
+      ]
+    },
+    {
+      "inputs": {
+        "a": 252
+      },
+      "outputs": [
+        4
+      ]
+    },
+    {
+      "inputs": {
+        "a": 175
+      },
+      "outputs": [
+        81
+      ]
+    },
+    {
+      "inputs": {
+        "a": 70
+      },
+      "outputs": [
+        186
+      ]
+    }
+  ]
+}

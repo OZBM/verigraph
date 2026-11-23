@@ -1,0 +1,22 @@
+{
+  "node": "@call_demo",
+  "cases": [
+    {
+      "inputs": {
+        "a": 19,
+        "b": -4
+      },
+      "outputs": [
+        -4,
+        3
+      ]
+    },
+    {
+      "inputs": {
+        "a": 19,
+        "b": 0
+      },
+      "trap": "CALL.pre"
+    }
+  ]
+}

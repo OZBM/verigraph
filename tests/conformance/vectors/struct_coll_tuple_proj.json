@@ -1,0 +1,17 @@
+{
+  "node": "@tuple_proj",
+  "cases": [
+    {
+      "inputs": {
+        "a": -42,
+        "b": true,
+        "c": "-0.0"
+      },
+      "outputs": [
+        -42,
+        true,
+        "-0.0"
+      ]
+    }
+  ]
+}

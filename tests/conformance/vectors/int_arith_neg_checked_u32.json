@@ -1,0 +1,133 @@
+{
+  "node": "@neg_checked_u32",
+  "cases": [
+    {
+      "inputs": {
+        "a": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 4294967295
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 4294967294
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 65536
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 2609539823
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 568951422
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 417606616
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 3495770174
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 2004441695
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 3607384124
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 517142092
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 846742695
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 183956038
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 2621324473
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 1170887291
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 3967545285
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 1829926724
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 1551830416
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 1598574558
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": 3336010986
+      },
+      "trap": "NEG.no_overflow"
+    }
+  ]
+}

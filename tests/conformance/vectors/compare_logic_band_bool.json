@@ -1,0 +1,41 @@
+{
+  "node": "@band_bool",
+  "cases": [
+    {
+      "inputs": {
+        "a": false,
+        "b": false
+      },
+      "outputs": [
+        false
+      ]
+    },
+    {
+      "inputs": {
+        "a": false,
+        "b": true
+      },
+      "outputs": [
+        false
+      ]
+    },
+    {
+      "inputs": {
+        "a": true,
+        "b": false
+      },
+      "outputs": [
+        false
+      ]
+    },
+    {
+      "inputs": {
+        "a": true,
+        "b": true
+      },
+      "outputs": [
+        true
+      ]
+    }
+  ]
+}

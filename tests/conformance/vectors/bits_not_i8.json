@@ -1,0 +1,197 @@
+{
+  "node": "@not_i8",
+  "cases": [
+    {
+      "inputs": {
+        "a": 0
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1
+      },
+      "outputs": [
+        -2
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127
+      },
+      "outputs": [
+        -128
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126
+      },
+      "outputs": [
+        -127
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16
+      },
+      "outputs": [
+        -17
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127
+      },
+      "outputs": [
+        126
+      ]
+    },
+    {
+      "inputs": {
+        "a": 83
+      },
+      "outputs": [
+        -84
+      ]
+    },
+    {
+      "inputs": {
+        "a": -88
+      },
+      "outputs": [
+        87
+      ]
+    },
+    {
+      "inputs": {
+        "a": -2
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 37
+      },
+      "outputs": [
+        -38
+      ]
+    },
+    {
+      "inputs": {
+        "a": 107
+      },
+      "outputs": [
+        -108
+      ]
+    },
+    {
+      "inputs": {
+        "a": -93
+      },
+      "outputs": [
+        92
+      ]
+    },
+    {
+      "inputs": {
+        "a": 38
+      },
+      "outputs": [
+        -39
+      ]
+    },
+    {
+      "inputs": {
+        "a": 98
+      },
+      "outputs": [
+        -99
+      ]
+    },
+    {
+      "inputs": {
+        "a": -48
+      },
+      "outputs": [
+        47
+      ]
+    },
+    {
+      "inputs": {
+        "a": 56
+      },
+      "outputs": [
+        -57
+      ]
+    },
+    {
+      "inputs": {
+        "a": 74
+      },
+      "outputs": [
+        -75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 31
+      },
+      "outputs": [
+        -32
+      ]
+    },
+    {
+      "inputs": {
+        "a": -5
+      },
+      "outputs": [
+        4
+      ]
+    },
+    {
+      "inputs": {
+        "a": 101
+      },
+      "outputs": [
+        -102
+      ]
+    },
+    {
+      "inputs": {
+        "a": -43
+      },
+      "outputs": [
+        42
+      ]
+    },
+    {
+      "inputs": {
+        "a": 45
+      },
+      "outputs": [
+        -46
+      ]
+    }
+  ]
+}

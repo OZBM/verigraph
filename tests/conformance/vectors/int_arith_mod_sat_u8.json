@@ -1,0 +1,1061 @@
+{
+  "node": "@mod_sat_u8",
+  "cases": [
+    {
+      "inputs": {
+        "a": 0,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 255
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 254
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 16
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 203
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 106
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 144
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 114
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 75
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 255
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 254
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 16
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 203
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 106
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 144
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 114
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 75
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 255
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 254
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 16
+      },
+      "outputs": [
+        15
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 203
+      },
+      "outputs": [
+        52
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 106
+      },
+      "outputs": [
+        43
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 144
+      },
+      "outputs": [
+        111
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 114
+      },
+      "outputs": [
+        27
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "b": 75
+      },
+      "outputs": [
+        30
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 255
+      },
+      "outputs": [
+        254
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 254
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 16
+      },
+      "outputs": [
+        14
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 203
+      },
+      "outputs": [
+        51
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 106
+      },
+      "outputs": [
+        42
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 144
+      },
+      "outputs": [
+        110
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 114
+      },
+      "outputs": [
+        26
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "b": 75
+      },
+      "outputs": [
+        29
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 255
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 254
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 16
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 203
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 106
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 144
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 114
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 75
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 255
+      },
+      "outputs": [
+        203
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 254
+      },
+      "outputs": [
+        203
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 16
+      },
+      "outputs": [
+        11
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 203
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 106
+      },
+      "outputs": [
+        97
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 144
+      },
+      "outputs": [
+        59
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 114
+      },
+      "outputs": [
+        89
+      ]
+    },
+    {
+      "inputs": {
+        "a": 203,
+        "b": 75
+      },
+      "outputs": [
+        53
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 255
+      },
+      "outputs": [
+        106
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 254
+      },
+      "outputs": [
+        106
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 16
+      },
+      "outputs": [
+        10
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 203
+      },
+      "outputs": [
+        106
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 106
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 144
+      },
+      "outputs": [
+        106
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 114
+      },
+      "outputs": [
+        106
+      ]
+    },
+    {
+      "inputs": {
+        "a": 106,
+        "b": 75
+      },
+      "outputs": [
+        31
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 255
+      },
+      "outputs": [
+        144
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 254
+      },
+      "outputs": [
+        144
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 16
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 203
+      },
+      "outputs": [
+        144
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 106
+      },
+      "outputs": [
+        38
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 144
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 114
+      },
+      "outputs": [
+        30
+      ]
+    },
+    {
+      "inputs": {
+        "a": 144,
+        "b": 75
+      },
+      "outputs": [
+        69
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 255
+      },
+      "outputs": [
+        114
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 254
+      },
+      "outputs": [
+        114
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 16
+      },
+      "outputs": [
+        2
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 203
+      },
+      "outputs": [
+        114
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 106
+      },
+      "outputs": [
+        8
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 144
+      },
+      "outputs": [
+        114
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 114
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 114,
+        "b": 75
+      },
+      "outputs": [
+        39
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 255
+      },
+      "outputs": [
+        75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 254
+      },
+      "outputs": [
+        75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 16
+      },
+      "outputs": [
+        11
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 203
+      },
+      "outputs": [
+        75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 106
+      },
+      "outputs": [
+        75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 144
+      },
+      "outputs": [
+        75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 114
+      },
+      "outputs": [
+        75
+      ]
+    },
+    {
+      "inputs": {
+        "a": 75,
+        "b": 75
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 15,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 15,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 21,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 21,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 65,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 65,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 241,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 241,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 58,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 58,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 5,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 5,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 72,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 72,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 142,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 142,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 252,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 252,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 175,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 175,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 70,
+        "b": 0
+      },
+      "trap": "MOD.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 70,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    }
+  ]
+}

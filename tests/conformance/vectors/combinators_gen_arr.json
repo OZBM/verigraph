@@ -1,0 +1,24 @@
+{
+  "node": "@gen_arr",
+  "cases": [
+    {
+      "inputs": {
+        "scale": "10"
+      },
+      "outputs": [
+        [
+          "0",
+          "10",
+          "20",
+          "30"
+        ]
+      ]
+    },
+    {
+      "inputs": {
+        "scale": "1001"
+      },
+      "trap": "GEN.pre"
+    }
+  ]
+}

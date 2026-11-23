@@ -1,0 +1,27 @@
+{
+  "node": "@gen_slice",
+  "cases": [
+    {
+      "inputs": {
+        "n": "0",
+        "scale": "5"
+      },
+      "outputs": [
+        []
+      ]
+    },
+    {
+      "inputs": {
+        "n": "3",
+        "scale": "7"
+      },
+      "outputs": [
+        [
+          "0",
+          "7",
+          "14"
+        ]
+      ]
+    }
+  ]
+}

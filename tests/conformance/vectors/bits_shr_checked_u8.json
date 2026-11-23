@@ -1,0 +1,389 @@
+{
+  "node": "@shr_checked_u8",
+  "cases": [
+    {
+      "inputs": {
+        "a": 0,
+        "s": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "s": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "s": 7
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "s": 0
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "s": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "s": 7
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "s": 0
+      },
+      "outputs": [
+        255
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "s": 1
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "s": 7
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 255,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "s": 0
+      },
+      "outputs": [
+        254
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "s": 1
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "s": 7
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 254,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "s": 0
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "s": 1
+      },
+      "outputs": [
+        8
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "s": 7
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 74,
+        "s": 0
+      },
+      "outputs": [
+        74
+      ]
+    },
+    {
+      "inputs": {
+        "a": 74,
+        "s": 1
+      },
+      "outputs": [
+        37
+      ]
+    },
+    {
+      "inputs": {
+        "a": 74,
+        "s": 7
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 74,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 74,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 74,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 216,
+        "s": 0
+      },
+      "outputs": [
+        216
+      ]
+    },
+    {
+      "inputs": {
+        "a": 216,
+        "s": 1
+      },
+      "outputs": [
+        108
+      ]
+    },
+    {
+      "inputs": {
+        "a": 216,
+        "s": 7
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 216,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 216,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 216,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 148,
+        "s": 0
+      },
+      "outputs": [
+        148
+      ]
+    },
+    {
+      "inputs": {
+        "a": 148,
+        "s": 1
+      },
+      "outputs": [
+        74
+      ]
+    },
+    {
+      "inputs": {
+        "a": 148,
+        "s": 7
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 148,
+        "s": 8
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 148,
+        "s": 9
+      },
+      "trap": "SHR.amount"
+    },
+    {
+      "inputs": {
+        "a": 148,
+        "s": 4294967295
+      },
+      "trap": "SHR.amount"
+    }
+  ]
+}

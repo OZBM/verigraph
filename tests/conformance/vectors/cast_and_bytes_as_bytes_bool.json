@@ -1,0 +1,25 @@
+{
+  "node": "@as_bytes_bool",
+  "cases": [
+    {
+      "inputs": {
+        "x": false
+      },
+      "outputs": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "inputs": {
+        "x": true
+      },
+      "outputs": [
+        [
+          1
+        ]
+      ]
+    }
+  ]
+}
