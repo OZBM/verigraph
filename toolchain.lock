@@ -5,7 +5,8 @@
 rustc     1.90.0
 # Only Apple clang 17.0.0 (clang-1700.3.19.1) is installed; AGENTS.md section 4 requires clang 19 or newer.
 clang     none
-z3        none
+# z3 installed with Homebrew on 2026-11-23 (/opt/homebrew/bin/z3) by W0, for vg-smt.
+z3        5.4.1
 cvc5      none
 bitwuzla  none
 wasi-sdk  none
