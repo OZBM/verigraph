@@ -20,7 +20,9 @@ jobs:
             z3: z3-5.4.1-x64-glibc-2.39.zip
             z3_sha256: b548bac48ef2452b4e09ea2945cf4b011d5f43fcf39e4799df268ee7e0769d85
           - name: macos-arm64
-            os: macos-15
+            # Apple clang 21 (Xcode 26.6) has the wasm32 target that vg-codegen's tests build for;
+            # Xcode 16.4's clang, the default on macos-15, does not.
+            os: macos-26
             z3: z3-5.4.1-arm64-osx-13.3.zip
             z3_sha256: a4a878121e81dfc297d027dd0b51dc4f08feb4296d6ecace42bfbc87a29d6d58
     name: ${{ matrix.name }}
@@ -39,6 +41,11 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
       - name: Confirm the host architecture
         run: rustc -vV | grep '^host:'
+      - name: Confirm that clang has the wasm32 target
+        if: runner.os == 'macOS'
+        run: |
+          clang --version | head -n 1
+          clang -print-targets | grep -q wasm32 || { echo "this clang has no wasm32 target"; exit 1; }
       - name: Test the Antigravity extension
         run: node --test editors/antigravity/extension/test/*.test.js
       - run: cargo fmt --all --check
