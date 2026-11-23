@@ -111,7 +111,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 ### P3 · Verification — W3 — Nov 4 → Nov 20 — G3
 - [ ] P3.1 SMT encoding of every MVP op (docs/14): bitvectors, floats, arrays, uninterpreted functions; formula integers at the widths of docs/05; `fold:` and `spec:` instances (ADR 0008)
 - [ ] P3.2 Obligations from the combinator proof rules (docs/05), including the fresh-element rule, the non-vacuity check and well-definedness (ADR 0010), named as in docs/15
-- [ ] P3.3 Solver drivers for z3, cvc5 and bitwuzla: one long-lived process each over pipes, reset between obligations, timeouts, push and pop, routing
+- [x] P3.3 Solver drivers for z3, cvc5 and bitwuzla: one long-lived process each over pipes, reset between obligations, timeouts, push and pop, routing
 - [ ] P3.4 Model decoding into VG values, small-model search, model-guided and concrete replay in vg-interp (ADR 0006); the concrete pre-screen of docs/05
 - [ ] P3.5 Query cache keyed by query hash; proof records
 - [ ] P3.6 Known-good and known-bad suites; mutation-testing harness

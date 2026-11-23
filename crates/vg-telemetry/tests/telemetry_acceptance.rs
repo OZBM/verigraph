@@ -48,6 +48,7 @@ fn soft_knee_draft_acceptance() {
         solver: "z3".to_string(),
         inputs: Some(vec![Value::Float(x_bits), Value::Float(knee_bits)]),
         message: "refuted".to_string(),
+        evidence: None,
     };
     let rep = report(&soft.node, &soft.label, &names, &outcome, &callee)
         .expect("FailureReport for POST.0");
@@ -114,6 +115,7 @@ fn soft_knee_draft_acceptance() {
         &Options {
             z3: find_z3(),
             timeout_ms: 5000,
+            ..Options::default()
         },
     );
     let post0 = outcomes
@@ -186,6 +188,7 @@ NODE @big_read {
             Value::Float(gain_bits),
         ]),
         message: "refuted".to_string(),
+        evidence: None,
     };
     let rep = report(&n.node, &n.label, &names, &outcome, &callee).expect("report");
     assert_eq!(rep.reproduced, Reproduced::Concrete);
@@ -328,6 +331,7 @@ fn corpus_bad_files_produce_valid_reports() {
     let opts = Options {
         z3: find_z3(),
         timeout_ms: 5000,
+        ..Options::default()
     };
 
     for path in entries {

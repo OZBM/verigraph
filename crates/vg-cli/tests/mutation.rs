@@ -190,8 +190,8 @@ fn no_contract_breaking_mutant_verifies() {
     files.retain(|p| p.extension().is_some_and(|x| x == "vgs"));
     files.sort();
     let opts = vg_smt::Options {
-        z3: vg_smt::find_z3(),
         timeout_ms: 5_000,
+        ..vg_smt::Options::default()
     };
     // Without a solver every mutant would count as killed and the test would pass vacuously.
     let z3_runs = std::process::Command::new(&opts.z3)

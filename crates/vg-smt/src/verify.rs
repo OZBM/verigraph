@@ -17,7 +17,7 @@ use crate::formula::{
     symval_to_fval, zext,
 };
 use crate::model::{DecodedModel, decode_inputs};
-use crate::solver::{CheckResult, Solver, Z3Session};
+use crate::solver::{CheckResult, Session, SmtQuery, Solver, SolverKind, has_fp};
 use crate::sort::{
     SymVal, bv_lit_i128, const_to_symval, declare_symval, scalar_const_smt, symval_atoms,
     symval_select,
@@ -33,6 +33,133 @@ struct Ob {
     /// The whole context, when `qb` holds only part of it: `qb` is solved first, and only an UNSAT
     /// answer is taken from it (dropping assumptions is sound); anything else is solved again here.
     full: Option<QueryBuilder>,
+}
+
+/// The solver sessions of one run, routed as docs/05 says: z3 by default, Bitwuzla for float
+/// queries whose formats it supports, and in release mode a second solver that must agree.
+struct Solvers<'a> {
+    opts: &'a Options,
+    live: BTreeMap<SolverKind, Session>,
+}
+
+/// One routed answer. On SAT the model is in session `kind`.
+struct Answer {
+    result: CheckResult,
+    kind: SolverKind,
+    /// `z3`, or `z3+cvc5` when a second solver agreed.
+    solver: String,
+    evidence: Option<&'static str>,
+    /// Two solvers gave contrary answers (VG-V0009).
+    disagree: bool,
+}
+
+impl<'a> Solvers<'a> {
+    fn new(opts: &'a Options) -> Self {
+        Self {
+            opts,
+            live: BTreeMap::new(),
+        }
+    }
+
+    fn path(&self, kind: SolverKind) -> Option<&std::path::Path> {
+        match kind {
+            SolverKind::Z3 => Some(&self.opts.z3),
+            SolverKind::Cvc5 => self.opts.cvc5.as_deref(),
+            SolverKind::Bitwuzla => self.opts.bitwuzla.as_deref(),
+        }
+    }
+
+    fn session(&mut self, kind: SolverKind) -> &mut Session {
+        let path = self
+            .path(kind)
+            .expect("routed to an installed solver")
+            .to_path_buf();
+        let timeout_ms = self.opts.timeout_ms;
+        self.live
+            .entry(kind)
+            .or_insert_with(|| Session::of(kind, &path, timeout_ms))
+    }
+
+    /// The installed solvers that take `text`, in routing order; z3 takes everything.
+    fn eligible(&self, text: &str) -> Vec<SolverKind> {
+        use SolverKind::{Bitwuzla, Cvc5, Z3};
+        let order = if has_fp(text) {
+            [Bitwuzla, Z3, Cvc5]
+        } else {
+            [Z3, Cvc5, Bitwuzla]
+        };
+        order
+            .into_iter()
+            .filter(|&k| self.path(k).is_some() && k.supports(text))
+            .collect()
+    }
+
+    /// `query` solved by its routed solver. In release mode the answer that would prove the
+    /// obligation, `proving`, stands only when a second solver gives it too; a contrary answer
+    /// stops the build, and anything else leaves the obligation unknown.
+    fn check(&mut self, query: &SmtQuery, proving: &CheckResult) -> Answer {
+        let eligible = self.eligible(&query.body());
+        let first = eligible[0];
+        let result = self.session(first).check_query(query);
+        let definite = matches!(result, CheckResult::Sat | CheckResult::Unsat);
+        let mut a = Answer {
+            result,
+            kind: first,
+            solver: first.name().into(),
+            evidence: definite.then_some("re-solved"),
+            disagree: false,
+        };
+        if !self.opts.release || a.result != *proving {
+            return a;
+        }
+        a.evidence = None;
+        let Some(&second) = eligible.get(1) else {
+            a.result = CheckResult::Unknown {
+                timeout: false,
+                reason: format!(
+                    "release mode needs two solvers, and only {} is installed and takes this \
+                     query's floating-point formats",
+                    first.name()
+                ),
+            };
+            return a;
+        };
+        let word = |r: &CheckResult| {
+            if *r == CheckResult::Sat {
+                "sat"
+            } else {
+                "unsat"
+            }
+        };
+        match self.session(second).check_query(query) {
+            r if r == *proving => {
+                a.solver = format!("{}+{}", first.name(), second.name());
+                a.evidence = Some("two-solvers");
+            }
+            r @ (CheckResult::Sat | CheckResult::Unsat) => {
+                a.result = CheckResult::Error(format!(
+                    "solvers disagree: {} answers {}, {} answers {}",
+                    first.name(),
+                    word(proving),
+                    second.name(),
+                    word(&r)
+                ));
+                a.disagree = true;
+            }
+            CheckResult::Unknown { timeout, reason } => {
+                a.result = CheckResult::Unknown {
+                    timeout,
+                    reason: format!(
+                        "{} did not confirm {}'s answer: {reason}",
+                        second.name(),
+                        first.name()
+                    ),
+                };
+            }
+            CheckResult::Error(m) => a.result = CheckResult::Error(m),
+        }
+        a
+    }
 }
 
 /// Where each op's facts sit in a QueryBuilder: (assertions, pending schemas, pending foralls).
@@ -796,11 +923,11 @@ pub fn verify(
         }
     }
 
-    let mut z3 = Z3Session::new(&opts.z3, opts.timeout_ms);
+    let mut solvers = Solvers::new(opts);
     let input_syms: Vec<SymVal> = inputs.iter().map(|(_, s)| s.clone()).collect();
     let mut out: Vec<Outcome> = obs
         .into_iter()
-        .map(|ob| solve(ob, node, callee, &input_syms, &mut z3))
+        .map(|ob| solve(ob, node, callee, &input_syms, &mut solvers))
         .collect();
     out.extend(cost_obligations(
         node,
@@ -927,6 +1054,7 @@ fn cost_obligations(
         solver: "none".into(),
         inputs: None,
         message,
+        evidence: None,
     };
     let summary = match vg_types::check_node(node, callee) {
         Ok(s) => s,
@@ -974,7 +1102,7 @@ fn cost_obligations(
         heap_bytes: int((bv_lit_i128(0, 2), 2)),
     };
     let input_syms: Vec<SymVal> = inputs.iter().map(|(_, s)| s.clone()).collect();
-    let mut z3 = Z3Session::new(&opts.z3, opts.timeout_ms);
+    let mut solvers = Solvers::new(opts);
     let mut out = Vec::new();
     for (j, t) in node.contract.cost.iter().enumerate() {
         let mut cq = q.clone();
@@ -993,7 +1121,7 @@ fn cost_obligations(
             node,
             callee,
             &input_syms,
-            &mut z3,
+            &mut solvers,
         );
         // The cost model is not run by vg-interp, so a model is checked against nothing more: it
         // refutes the bound when every cost term is exact, and proves nothing otherwise.
@@ -1023,15 +1151,16 @@ fn solve(
     node: &Node,
     callee: &dyn Fn(&Hash) -> Option<Node>,
     input_syms: &[SymVal],
-    z3: &mut Z3Session,
+    solvers: &mut Solvers,
 ) -> Outcome {
     let mut o = Outcome {
         id: ob.id,
         verdict: Verdict::Unknown,
         code: Some("VG-V0005"),
-        solver: z3.name().to_string(),
+        solver: "none".into(),
         inputs: None,
         message: String::new(),
+        evidence: None,
     };
     // First a smaller query: the obligation's own context restricted as `qb` is, with kernels
     // known by their POST alone. Only UNSAT is taken from it, since dropping assumptions is sound;
@@ -1042,12 +1171,11 @@ fn solve(
         small.post_only_kernels = true;
         if small.unresolved_error.is_none() {
             small.finalize_instantiations(callee);
-            if small.unresolved_error.is_none()
-                && z3.check_query(&small.into_pruned_query()) == CheckResult::Unsat
-            {
-                o.verdict = Verdict::Proven;
-                o.code = None;
-                return o;
+            if small.unresolved_error.is_none() {
+                let a = solvers.check(&small.into_pruned_query(), &CheckResult::Unsat);
+                if a.result == CheckResult::Unsat || a.disagree {
+                    return answered(o, a, &CheckResult::Unsat);
+                }
             }
         }
     }
@@ -1060,57 +1188,260 @@ fn solve(
         o.message = format!("not encoded: {e}");
         return o;
     }
-    match z3.check_query(&q.into_pruned_query()) {
+    let proving = if ob.nonvacuous {
+        CheckResult::Sat
+    } else {
+        CheckResult::Unsat
+    };
+    let a = solvers.check(&q.into_pruned_query(), &proving);
+    let kind = a.kind;
+    match a.result {
         CheckResult::Unsat if ob.nonvacuous => {
+            o = answered(o, a, &proving);
             o.verdict = Verdict::Vacuous;
             o.code = Some("VG-V0003");
             o.message = "no input satisfies PRE and the LEARNABLE box".into();
         }
-        CheckResult::Unsat => {
-            o.verdict = Verdict::Proven;
-            o.code = None;
-        }
         CheckResult::Sat if ob.nonvacuous => {
-            o.verdict = Verdict::Proven;
-            o.code = None;
+            o = answered(o, a, &proving);
             o.message = "satisfiable".into();
         }
-        CheckResult::Sat => match decode_inputs(z3, node, input_syms) {
-            DecodedModel::Values(v) => {
-                o.verdict = match classify_sat_model(node, &o.id, &v, callee) {
-                    ReplayVerdict::ConcreteCounterexample => Verdict::Counterexample,
-                    ReplayVerdict::ContractGap => Verdict::ContractGap,
-                    ReplayVerdict::PartialAssumptionViolation => Verdict::Unknown,
-                    ReplayVerdict::VerifierBug => Verdict::Error,
-                };
-                o.code = Some(match o.verdict {
-                    Verdict::Counterexample => "VG-V0001",
-                    Verdict::ContractGap => "VG-V0002",
-                    Verdict::Unknown => "VG-V0006",
-                    _ => "VG-V0008",
-                });
-                o.message = "refuted by the solver's model".into();
-                o.inputs = Some(v);
+        CheckResult::Sat => {
+            o = answered(o, a, &proving);
+            match decode_inputs(solvers.session(kind), node, input_syms) {
+                DecodedModel::Values(v) => {
+                    o.verdict = match classify_sat_model(node, &o.id, &v, callee) {
+                        ReplayVerdict::ConcreteCounterexample => Verdict::Counterexample,
+                        ReplayVerdict::ContractGap => Verdict::ContractGap,
+                        ReplayVerdict::PartialAssumptionViolation => Verdict::Unknown,
+                        ReplayVerdict::VerifierBug => Verdict::Error,
+                    };
+                    o.code = Some(match o.verdict {
+                        Verdict::Counterexample => "VG-V0001",
+                        Verdict::ContractGap => "VG-V0002",
+                        Verdict::Unknown => "VG-V0006",
+                        _ => "VG-V0008",
+                    });
+                    o.message = "refuted by the solver's model".into();
+                    o.inputs = Some(v);
+                }
+                DecodedModel::TooLarge(m) => {
+                    o.verdict = Verdict::Unknown;
+                    o.code = Some("VG-V0007");
+                    o.message = m;
+                    o.evidence = None;
+                }
+                DecodedModel::Error(m) => {
+                    o.verdict = Verdict::Error;
+                    o.code = Some("VG-V0008");
+                    o.message = m;
+                    o.evidence = None;
+                }
             }
-            DecodedModel::TooLarge(m) => {
-                o.code = Some("VG-V0007");
-                o.message = m;
-            }
-            DecodedModel::Error(m) => {
-                o.verdict = Verdict::Error;
-                o.code = Some("VG-V0008");
-                o.message = m;
-            }
-        },
+        }
+        _ => o = answered(o, a, &proving),
+    }
+    o
+}
+
+/// `o` with the record of answer `a` and its verdict: `proving` proves, the contrary answer is
+/// left for the caller to classify, a disagreement is VG-V0009.
+fn answered(mut o: Outcome, a: Answer, proving: &CheckResult) -> Outcome {
+    o.solver = a.solver;
+    o.evidence = a.evidence;
+    match a.result {
+        r if r == *proving => {
+            o.verdict = Verdict::Proven;
+            o.code = None;
+        }
+        CheckResult::Unsat | CheckResult::Sat => {}
         CheckResult::Unknown { timeout, reason } => {
+            o.verdict = Verdict::Unknown;
             o.code = Some(if timeout { "VG-V0004" } else { "VG-V0005" });
             o.message = reason;
         }
         CheckResult::Error(m) => {
             o.verdict = Verdict::Error;
-            o.code = Some("VG-V0008");
+            o.code = Some(if a.disagree { "VG-V0009" } else { "VG-V0008" });
             o.message = m;
         }
     }
     o
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::solver::tests::installed;
+
+    const U8_SRC: &str = "module t;
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 255;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u8);
+    RETURN(%0);
+  }
+}";
+
+    fn outcomes(src: &str, opts: &Options) -> Vec<Outcome> {
+        let asm = vg_core::asm_local(src).unwrap();
+        crate::verify(&asm[0].node, &asm[0].label, &|_: &Hash| None, opts)
+    }
+
+    /// A solver that gives `answer` to every query, standing in for a broken second solver.
+    #[cfg(unix)]
+    fn fake_solver(answer: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = std::env::temp_dir().join(format!("vg-fake-{answer}-{}", std::process::id()));
+        let script = format!(
+            "#!/bin/sh\nwhile IFS= read -r l; do case \"$l\" in\n\
+             *'(check-sat)'*) echo {answer};;\n\
+             *reason-unknown*) echo '(:reason-unknown incomplete)';;\n\
+             *'(exit)'*) exit;;\nesac; done\n"
+        );
+        std::fs::write(&path, script).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn release_with(cvc5: Option<PathBuf>) -> Options {
+        Options {
+            cvc5,
+            bitwuzla: None,
+            release: true,
+            ..Options::default()
+        }
+    }
+
+    #[test]
+    fn edit_mode_takes_one_solver() {
+        let opts = Options {
+            cvc5: None,
+            bitwuzla: None,
+            ..Options::default()
+        };
+        for o in outcomes(U8_SRC, &opts) {
+            assert_eq!(o.verdict, Verdict::Proven, "{o:?}");
+            assert_eq!((o.solver.as_str(), o.evidence), ("z3", Some("re-solved")));
+        }
+    }
+
+    #[test]
+    fn release_mode_without_a_second_solver_proves_nothing() {
+        for o in outcomes(U8_SRC, &release_with(None)) {
+            assert_eq!(o.verdict, Verdict::Unknown, "{o:?}");
+            assert_eq!(o.code, Some("VG-V0005"));
+            assert!(
+                o.message.contains("release mode needs two solvers"),
+                "{o:?}"
+            );
+            assert_eq!(o.evidence, None);
+        }
+    }
+
+    /// z3 proves every obligation; a second solver that contradicts it stops the build.
+    #[cfg(unix)]
+    #[test]
+    fn release_mode_reports_a_disagreement_as_v0009() {
+        let out = outcomes(U8_SRC, &release_with(Some(fake_solver("sat"))));
+        // The NONVACUOUS check wants SAT, so the fake agrees with z3 there; elsewhere it does not.
+        let mut disagreed = 0;
+        for o in &out {
+            if o.id.ends_with("NONVACUOUS") {
+                assert_eq!(o.verdict, Verdict::Proven, "{o:?}");
+                assert_eq!(o.evidence, Some("two-solvers"));
+                continue;
+            }
+            assert_eq!(
+                (o.verdict, o.code),
+                (Verdict::Error, Some("VG-V0009")),
+                "{o:?}"
+            );
+            assert!(
+                o.message.contains("z3 answers unsat, cvc5 answers sat"),
+                "{o:?}"
+            );
+            disagreed += 1;
+        }
+        assert!(disagreed >= 2, "{out:?}");
+        // And the other way round: a NONVACUOUS model that the second solver calls impossible.
+        let out = outcomes(U8_SRC, &release_with(Some(fake_solver("unsat"))));
+        let nv = out.iter().find(|o| o.id.ends_with("NONVACUOUS")).unwrap();
+        assert_eq!(
+            (nv.verdict, nv.code),
+            (Verdict::Error, Some("VG-V0009")),
+            "{nv:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn release_mode_leaves_an_unconfirmed_proof_unknown() {
+        for o in outcomes(U8_SRC, &release_with(Some(fake_solver("unknown")))) {
+            assert_eq!(
+                (o.verdict, o.code),
+                (Verdict::Unknown, Some("VG-V0005")),
+                "{o:?}"
+            );
+            assert!(
+                o.message.contains("cvc5 did not confirm z3's answer"),
+                "{o:?}"
+            );
+        }
+    }
+
+    /// With the pinned solvers installed, release mode proves with two of them: z3 and cvc5 for
+    /// bitvectors, Bitwuzla and z3 for f32, and nothing for BFloat16, which only z3 takes.
+    #[test]
+    fn release_mode_proves_with_two_pinned_solvers() {
+        let (Some(cvc5), Some(bitwuzla)) = (installed("cvc5"), installed("bitwuzla")) else {
+            return;
+        };
+        let opts = Options {
+            cvc5: Some(cvc5),
+            bitwuzla: Some(bitwuzla),
+            release: true,
+            ..Options::default()
+        };
+        let float = |ty: &str, one: &str| {
+            format!(
+                "module t;
+NODE @f {{
+  SIGNATURE: (x: {ty}) -> ({ty});
+  EFFECTS: [];
+  CONTRACT {{
+    PRE: x >= 0.0 && x <= 1.0;
+    POST: result >= 0.0;
+  }}
+  BODY {{
+    %0 = FADD(x, {one});
+    RETURN(%0);
+  }}
+}}"
+            )
+        };
+        for (src, solver) in [
+            (U8_SRC.to_string(), "z3+cvc5"),
+            (float("f32", "1.0:f32"), "bitwuzla+z3"),
+        ] {
+            for o in outcomes(&src, &opts) {
+                assert_eq!(o.verdict, Verdict::Proven, "{o:?}");
+                assert_eq!(
+                    (o.solver.as_str(), o.evidence),
+                    (solver, Some("two-solvers"))
+                );
+            }
+        }
+        for o in outcomes(&float("bf16", "1.0:bf16"), &opts) {
+            assert_eq!(o.verdict, Verdict::Unknown, "{o:?}");
+            assert!(o.message.contains("only z3"), "{o:?}");
+        }
+    }
 }

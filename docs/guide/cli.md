@@ -5,7 +5,7 @@ vg asm FILE.vgs [--root DIR] [--keep-debug]   assemble into DIR/.vg/objects and 
 vg disasm (HASH | FILE.vgir) [--root DIR]     print VG-Sym for a node and everything it calls
 vg hash FILE...                               print node, body and contract hashes (.vgs or .vgir)
 vg check FILE.vgs                             parse, canonicalize, type- and effect-check (JSON)
-vg verify FILE.vgs [--timeout MS]             prove every obligation with z3 (JSON)
+vg verify FILE.vgs [--mode M] [--timeout MS]  prove every obligation with the SMT solvers (JSON)
 vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
 vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
                                               verify, then compile (default target: aarch64-apple-darwin)
@@ -44,17 +44,20 @@ names its node instead.
 ## vg verify
 
 ```bash
-vg verify FILE.vgs [--timeout MS]
+vg verify FILE.vgs [--mode edit|ci|release] [--timeout MS]
 ```
 
-Proves every obligation of every node with z3; `--timeout` is per obligation, in milliseconds
-(default 10000). [Verification](verification.md) explains the obligations and verdicts.
+Proves every obligation of every node. z3 takes most queries and Bitwuzla, when installed, the
+queries with floats. `--mode` sets the time limit per query: `edit` 2000 ms, `ci` 60000 ms, and
+`release` 60000 ms with a second solver that must give the same answer, so each proof there has
+the evidence `two-solvers`. Without `--mode` the limit is 10000 ms; `--timeout` overrides it.
+[Verification](verification.md) explains the obligations and verdicts.
 
 | Field | Content |
 | --- | --- |
 | `ok` | `true` when every obligation of every node is proven |
 | `nodes` | `label`, `verified` |
-| `results` | one per obligation, sorted by ID: `id`, `verdict`, `code` (when not proven), `solver`, `message`, and `report` for a refutation |
+| `results` | one per obligation, sorted by ID: `id`, `verdict`, `code` (when not proven), `solver` (such as `z3`, or `z3+cvc5` when two agreed), `evidence` (`re-solved` or `two-solvers`, when a solver answered), `message`, and `report` for a refutation |
 | `report` | `node`, `obligation`, `inputs` (by parameter name), `reproduced` (`concrete` or `no`) |
 | `diagnostics` | present instead of `results` when the module does not load |
 

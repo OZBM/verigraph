@@ -262,6 +262,9 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail
             if let Some(code) = o.code {
                 r["code"] = json!(code);
             }
+            if let Some(e) = o.evidence {
+                r["evidence"] = json!(e);
+            }
             if verdict != "proven" {
                 failed.insert(o.id.clone(), (*a, d, o, reproduced));
             }
@@ -328,22 +331,39 @@ pub fn explain(src: &str, env: &Env, obligation: &str, timeout_ms: u64) -> J {
 }
 
 pub fn solver_options(timeout_ms: u64) -> vg_smt::Options {
-    let z3 = ["/opt/homebrew/bin/z3", "/usr/local/bin/z3", "/usr/bin/z3"]
-        .into_iter()
-        .map(std::path::PathBuf::from)
-        .find(|p| p.exists())
-        .unwrap_or_else(|| "z3".into());
-    vg_smt::Options { z3, timeout_ms }
+    vg_smt::Options {
+        timeout_ms,
+        ..vg_smt::Options::default()
+    }
+}
+
+/// The solver options of a docs/15 verify `mode`: docs/05 gives a query 2 s in the edit loop and
+/// 60 s in CI, and release mode needs two solvers to agree. No mode: 10 s. A timeout given wins.
+pub fn mode_options(
+    mode: Option<&str>,
+    timeout_ms: Option<u64>,
+) -> Result<vg_smt::Options, String> {
+    let (default_ms, release) = match mode {
+        None => (10_000, false),
+        Some("edit") => (2_000, false),
+        Some("ci") => (60_000, false),
+        Some("release") => (60_000, true),
+        Some(m) => return Err(format!("mode is edit, ci or release, not {m}")),
+    };
+    Ok(vg_smt::Options {
+        release,
+        ..solver_options(timeout_ms.unwrap_or(default_ms))
+    })
 }
 
 /// vg_verify: prove every obligation of every node in the module.
-pub fn verify(src: &str, env: &Env, timeout_ms: u64, detail: u8) -> J {
+pub fn verify(src: &str, env: &Env, opts: &vg_smt::Options, detail: u8) -> J {
     let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
     let all: Vec<&Assembled> = m.nodes.iter().collect();
-    verify_nodes(&m, &all, &solver_options(timeout_ms), detail).1
+    verify_nodes(&m, &all, opts, detail).1
 }
 
 /// vg_run: run a node in vg-interp. `inputs` maps parameter (and LEARNABLE) names to docs/15 values;

@@ -69,7 +69,8 @@ struct Opts {
     files: Vec<String>,
     root: PathBuf,
     keep_debug: bool,
-    timeout_ms: u64,
+    timeout_ms: Option<u64>,
+    mode: Option<String>,
     targets: Vec<String>,
     out: PathBuf,
     unverified: bool,
@@ -83,7 +84,8 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
         files: vec![],
         root: PathBuf::from("."),
         keep_debug: false,
-        timeout_ms: 10_000,
+        timeout_ms: None,
+        mode: None,
         targets: vec![],
         out: PathBuf::from("target/vg"),
         unverified: false,
@@ -107,10 +109,13 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
             }
             "--keep-debug" => o.keep_debug = true,
             "--timeout" => {
-                o.timeout_ms = value(&mut it, "--timeout")?
-                    .parse()
-                    .map_err(|_| Fail::Usage("--timeout takes milliseconds".into()))?
+                o.timeout_ms = Some(
+                    value(&mut it, "--timeout")?
+                        .parse()
+                        .map_err(|_| Fail::Usage("--timeout takes milliseconds".into()))?,
+                )
             }
+            "--mode" => o.mode = Some(value(&mut it, "--mode")?),
             "--target" => o.targets.push(value(&mut it, "--target")?),
             "-o" => o.out = value(&mut it, "-o")?.into(),
             "--unverified" => o.unverified = true,
@@ -304,8 +309,12 @@ fn run(args: &[String]) -> Result<(), Fail> {
             let rest: Vec<&str> = rest.iter().map(String::as_str).collect();
             let out = match (cmd.as_str(), rest.as_slice()) {
                 ("check", []) => tools::check(&src, &env),
-                ("verify", []) => tools::verify(&src, &env, o.timeout_ms, o.detail),
-                ("explain", [ob]) => tools::explain(&src, &env, ob, o.timeout_ms),
+                ("verify", []) => {
+                    let smt = tools::mode_options(o.mode.as_deref(), o.timeout_ms)
+                        .map_err(Fail::Usage)?;
+                    tools::verify(&src, &env, &smt, o.detail)
+                }
+                ("explain", [ob]) => tools::explain(&src, &env, ob, o.timeout_ms.unwrap_or(10_000)),
                 ("mesh publish", []) => mesh::publish(&src, &env, &o.root),
                 ("mesh resolve", []) => mesh::resolve(&src, &o.root),
                 ("run", [node, inputs]) => {

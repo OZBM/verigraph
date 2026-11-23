@@ -9,8 +9,12 @@ docs/05-contracts-verification.md and ADRs 0006 to 0010 are the normative rules.
 For each NODE (SPECs are references, not obligations), the verifier lists **obligations**: one goal
 per POST conjunct, per op that can fail, per call, per combinator, plus the non-vacuity of PRE. Each
 becomes an SMT query, with integers as bit-vectors, floats as IEEE floating point, and collections as
-arrays. z3 runs as a separate process and must answer `unsat` for the goal's negation; that answer,
-and only that one, is a proof. A timeout or an `unknown` is never a proof.
+arrays. A solver runs as a separate process and must answer `unsat` for the goal's negation; that
+answer, and only that one, is a proof. A timeout or an `unknown` is never a proof. z3 takes most
+queries and Bitwuzla the queries with floats; in release mode (`vg verify --mode release`) a second
+solver must answer `unsat` too, and if it answers `sat` instead the verdict is `error` (VG-V0009)
+and the build stops. cvc5 takes only 32- and 64-bit floats and Bitwuzla no `bf16`, so a release
+proof about `bf16`, which only z3 takes, stays `unknown`.
 
 Nodes are verified one at a time. A call is reasoned about through the callee's contract only, never
 its body, so a node's proof stays valid when a callee's body changes and its contract does not. Inside
@@ -46,6 +50,8 @@ you wrote (see [Troubleshooting](troubleshooting.md)).
 | `unknown` | VG-V0005 | The solver answered `unknown`. | As for a timeout. |
 | `unknown` | VG-V0006, VG-V0007 | The model could not be used: an assumption was only partly instantiated, or the model is too large to replay. | Simplify the contract. |
 | `error` | VG-V0008 | A verifier error. | Report it, with the module. |
+| `error` | VG-V0009 | Release mode: the second solver contradicts the first. | Report it, with the module. |
+| `unknown` | VG-V0005 | Release mode: the second solver did not confirm the proof, or no second solver takes the query. | Install cvc5 and Bitwuzla, raise `--timeout`, or avoid `bf16` in the goal. |
 
 A node is `verified` only when all its obligations are proven, and `"ok": true` only when every node
 is. Never weaken a POST to make it pass unless you agree that it was wrong.
@@ -177,6 +183,6 @@ NODE @add2 {
 ## Limits of version 0
 
 - COST obligations are reported as `unknown` (VG-V0005, "not encoded yet").
-- z3 is the only solver; cvc5 and Bitwuzla, the small-model search and the proof cache are not there
-  yet, so every run proves everything again.
+- The small-model search and the proof cache are not there yet, so every run proves everything
+  again.
 - Obligation IDs name ops by canonical index rather than by the port written in the source.

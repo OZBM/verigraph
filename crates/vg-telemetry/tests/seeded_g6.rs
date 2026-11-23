@@ -35,6 +35,7 @@ fn g6_seeded_slices() {
     let opts = Options {
         z3: find_z3(),
         timeout_ms: 5000,
+        ..Options::default()
     };
 
     let mut small_slices = 0usize;

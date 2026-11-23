@@ -162,6 +162,7 @@ pub fn guard_report(
         solver: "runtime".to_string(),
         inputs: Some(inputs.to_vec()),
         message: format!("runtime guard {guard_id} failed on {target}"),
+        evidence: None,
     };
 
     let mut rep = report(node, label, names, &synthetic_outcome, callee)

@@ -139,6 +139,7 @@ about each.
 | VG-V0006 | Unknown: the model violates an assumption that was only partly instantiated |
 | VG-V0007 | Unknown: the model is too large to replay |
 | VG-V0008 | Verifier error |
+| VG-V0009 | Verifier error: in release mode the two solvers disagree |
 
 ## Build (B) and warnings (W)
 

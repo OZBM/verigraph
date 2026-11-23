@@ -17,8 +17,8 @@ fn repo() -> PathBuf {
 
 fn opts() -> Options {
     Options {
-        z3: vg_smt::find_z3(),
         timeout_ms: 20_000,
+        ..Options::default()
     }
 }
 
@@ -117,4 +117,49 @@ fn the_soft_knee_story_holds() {
     let root = repo();
     assert_eq!(check(&root.join("examples/quickstart.vgs")), Ok(()));
     assert_eq!(check(&root.join("examples/soft_knee_draft.vgs")), Ok(()));
+}
+
+/// G3 (docs/16): in release mode every known-good file is proven, each obligation by two solvers
+/// (docs/05). It needs cvc5 and Bitwuzla; VG_REQUIRE_SOLVERS=1 makes their absence a failure.
+#[test]
+fn known_good_are_proven_by_two_solvers_in_release_mode() {
+    let release = Options {
+        release: true,
+        ..opts()
+    };
+    if release.cvc5.is_none() || release.bitwuzla.is_none() {
+        assert!(
+            std::env::var("VG_REQUIRE_SOLVERS").as_deref() != Ok("1"),
+            "cvc5 or bitwuzla is not installed and VG_REQUIRE_SOLVERS=1"
+        );
+        eprintln!("skipped: cvc5 or bitwuzla is not installed");
+        return;
+    }
+    let mut failures = vec![];
+    for f in files("tests/corpus/good") {
+        let src = fs::read_to_string(&f).unwrap();
+        let nodes = vg_core::asm_local(&src).unwrap();
+        let callee = |h: &Hash| {
+            nodes
+                .iter()
+                .find(|a| a.hashes.node == *h)
+                .map(|a| a.node.clone())
+        };
+        for a in &nodes {
+            for o in verify(&a.node, &a.label, &callee, &release) {
+                if o.verdict != Verdict::Proven || o.evidence != Some("two-solvers") {
+                    failures.push(format!(
+                        "{}: {} is {:?} by {} ({:?}): {}",
+                        f.display(),
+                        o.id,
+                        o.verdict,
+                        o.solver,
+                        o.evidence,
+                        o.message
+                    ));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

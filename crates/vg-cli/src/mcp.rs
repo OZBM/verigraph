@@ -44,7 +44,8 @@ fn tools_list() -> Vec<Tool> {
             "vg_verify",
             "Prove every obligation of every node with the SMT solver; counterexamples are replayed in vg-interp.",
             json!({
-                "timeout_ms": { "type": "integer", "description": "per obligation, default 10000" },
+                "mode": { "type": "string", "enum": ["edit", "ci", "release"], "description": "edit: 2 s per query; ci: 60 s; release: 60 s, and two solvers must agree. Default: 10 s" },
+                "timeout_ms": { "type": "integer", "description": "per query, overriding the mode's" },
                 "detail": { "type": "integer", "description": "0: no reports; 1 (default): reports for the first 3 failures; 2: all" },
             }),
             &[],
@@ -166,9 +167,13 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
     match name {
         "vg_check" => tools::check(&src, &env),
         "vg_verify" => {
-            let t = args.get("timeout_ms").and_then(J::as_u64).unwrap_or(10_000);
+            let mode = args.get("mode").and_then(J::as_str);
+            let t = args.get("timeout_ms").and_then(J::as_u64);
             let detail = args.get("detail").and_then(J::as_u64).unwrap_or(1).min(2) as u8;
-            tools::verify(&src, &env, t, detail)
+            match tools::mode_options(mode, t) {
+                Ok(smt) => tools::verify(&src, &env, &smt, detail),
+                Err(e) => json!({ "ok": false, "error": e }),
+            }
         }
         "vg_explain" => tools::explain(&src, &env, str_arg("obligation"), 10_000),
         "vg_mesh_publish" => crate::mesh::publish(&src, &env, std::path::Path::new(".")),

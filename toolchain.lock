@@ -13,6 +13,12 @@ z3        5.4.1
 cvc5      1.4.2
 # Homebrew, 2026-11-23.
 bitwuzla  0.11.0
+# How vg-smt runs them (P3.3, docs/05), one process each, `(reset)` before every query:
+#   z3 -in; options :produce-models true, :timeout MS, :smt.random_seed 1, :sat.random_seed 1;
+#     QF_AUFBV with (check-sat-using (then simplify propagate-values solve-eqs simplify smt)),
+#     or QF_AUFBVFP with (check-sat) when the query has floats.
+#   cvc5 --lang=smt2 --incremental --tlimit-per=MS; bitwuzla --lang smt2 -T MS; option
+#     :produce-models true, QF_AUFBV or QF_AUFBVFP, (check-sat); each keeps its default seed.
 # Homebrew wasi-libc and wasi-runtimes replace wasi-sdk: the same sysroot and builtins.
 wasi-libc 34
 wasi-runtimes 23.1.6
