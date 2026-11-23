@@ -1,5 +1,6 @@
 examples/audio_limiter.vgs	1	497	2c194e0e211a898c
 examples/quickstart.vgs	1	558	8c00a51991383405
+examples/sha256.vgs	1	5802	2499ee1fcebb94fc
 examples/soft_knee_draft.vgs	1	220	ea99fc298f90ea49
 tests/corpus/alpha/a01_add_sub_checked/01.vgs	1	121	245e72b0d26e1d0c
 tests/corpus/alpha/a01_add_sub_checked/02.vgs	1	128	191988fdc89d7f16
@@ -313,6 +314,8 @@ tests/corpus/good/g09_float_add_bounded.vgs	1	77	4f2ca4498296798a
 tests/corpus/good/g10_call_pre_met.vgs	1	115	2ae8b9434a57eeb0
 tests/corpus/good/g11_fold_bounded.vgs	1	163	c371c12ee99c5f63
 tests/corpus/good/g12_map_pre_met.vgs	1	156	6cd0ee2b672002d1
+tests/corpus/good/g13_generate_spec_equality.vgs	1	263	ca708bb2c595d938
+tests/corpus/good/g14_spec_two_cast_sources.vgs	1	186	ce573c6bfd035db7
 tests/golden/minimal.vgs	1	56	5d59a975804bf8db
 tests/golden/sections.vgs	1	517	721f62d226b72bed
 tests/golden/soft_knee_draft.vgs	1	220	ea99fc298f90ea49

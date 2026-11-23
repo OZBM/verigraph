@@ -12,15 +12,23 @@ use vg_core::{Assembled, MeshLookup, parser};
 
 use crate::json;
 
-/// A module assembled from VG-Sym, with its syntax tree for names.
-pub struct Loaded {
-    pub nodes: Vec<Assembled>,
-    defs: Vec<NodeDef>,
+/// What a module's labels and hashes resolve to beyond the module itself: vg.lock's @MESH_QUERY
+/// bindings, and the project's object store, which holds those bindings, their kernels and SPECs.
+pub struct Env<'a> {
+    pub mesh: MeshLookup<'a>,
+    pub fetch: &'a dyn Fn(&Hash) -> Option<Node>,
 }
 
-pub fn load(src: &str, mesh: MeshLookup) -> Result<Loaded, Diagnostic> {
+/// A module assembled from VG-Sym, with its syntax tree for names.
+pub struct Loaded<'a> {
+    pub nodes: Vec<Assembled>,
+    defs: Vec<NodeDef>,
+    fetch: &'a dyn Fn(&Hash) -> Option<Node>,
+}
+
+pub fn load<'a>(src: &str, env: &Env<'a>) -> Result<Loaded<'a>, Diagnostic> {
     let ast = parser::parse(src)?;
-    let nodes = vg_core::asm_module(&ast, src, mesh, false)?;
+    let nodes = vg_core::asm_module(&ast, src, env.mesh, false)?;
     let defs = ast
         .items
         .into_iter()
@@ -29,17 +37,22 @@ pub fn load(src: &str, mesh: MeshLookup) -> Result<Loaded, Diagnostic> {
             Item::Query(_) => None,
         })
         .collect();
-    Ok(Loaded { nodes, defs })
+    Ok(Loaded {
+        nodes,
+        defs,
+        fetch: env.fetch,
+    })
 }
 
-impl Loaded {
-    /// Resolves a CALLS hash among the module's own nodes.
+impl Loaded<'_> {
+    /// Resolves a CALLS hash among the module's own nodes, then in the object store.
     pub fn callee(&self) -> impl Fn(&Hash) -> Option<Node> + '_ {
         |h| {
             self.nodes
                 .iter()
                 .find(|a| a.hashes.node == *h)
                 .map(|a| a.node.clone())
+                .or_else(|| (self.fetch)(h))
         }
     }
 
@@ -89,8 +102,8 @@ fn failed(d: &Diagnostic) -> J {
 }
 
 /// vg_check: parse, validate, canonicalize, type- and effect-check every node.
-pub fn check(src: &str, mesh: MeshLookup) -> J {
-    let m = match load(src, mesh) {
+pub fn check(src: &str, env: &Env) -> J {
+    let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
@@ -223,8 +236,8 @@ pub fn solver_options(timeout_ms: u64) -> vg_smt::Options {
 }
 
 /// vg_verify: prove every obligation of every node in the module.
-pub fn verify(src: &str, mesh: MeshLookup, timeout_ms: u64) -> J {
-    let m = match load(src, mesh) {
+pub fn verify(src: &str, env: &Env, timeout_ms: u64) -> J {
+    let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
@@ -234,8 +247,8 @@ pub fn verify(src: &str, mesh: MeshLookup, timeout_ms: u64) -> J {
 
 /// vg_run: run a node in vg-interp. `inputs` maps parameter (and LEARNABLE) names to docs/15 values;
 /// Eff parameters are supplied by the tool.
-pub fn run(src: &str, mesh: MeshLookup, node: &str, inputs: &Map<String, J>) -> J {
-    let m = match load(src, mesh) {
+pub fn run(src: &str, env: &Env, node: &str, inputs: &Map<String, J>) -> J {
+    let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
@@ -299,13 +312,13 @@ fn target(name: &str) -> Option<vg_codegen::Target> {
 /// op (exit code 4 when one fails) and no proof facts.
 pub fn build(
     src: &str,
-    mesh: MeshLookup,
+    env: &Env,
     root: &str,
     targets: &[String],
     out_dir: &Path,
     unverified: bool,
 ) -> J {
-    let m = match load(src, mesh) {
+    let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };

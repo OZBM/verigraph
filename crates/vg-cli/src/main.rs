@@ -238,16 +238,27 @@ fn run(args: &[String]) -> Result<(), Fail> {
                     .filter(|e| e.source != "local")
                     .map(|e| (e.node, e.spec))
             };
+            // Only a project that has a store is read; vg check never creates one.
+            let store = if o.root.join(".vg").is_dir() {
+                Some(Store::open(&o.root).map_err(error)?)
+            } else {
+                None
+            };
+            let fetch = |h: &Hash| store.as_ref().and_then(|s| s.get(h).ok().flatten());
+            let env = tools::Env {
+                mesh: &mesh,
+                fetch: &fetch,
+            };
             let out = match (cmd.as_str(), rest) {
-                ("check", []) => tools::check(&src, &mesh),
-                ("verify", []) => tools::verify(&src, &mesh, o.timeout_ms),
+                ("check", []) => tools::check(&src, &env),
+                ("verify", []) => tools::verify(&src, &env, o.timeout_ms),
                 ("run", [node, inputs]) => {
                     let j: serde_json::Value = serde_json::from_str(inputs)
                         .map_err(|e| Fail::Usage(format!("inputs are not JSON: {e}")))?;
                     let map = j
                         .as_object()
                         .ok_or_else(|| Fail::Usage("inputs are a JSON object".into()))?;
-                    tools::run(&src, &mesh, node, map)
+                    tools::run(&src, &env, node, map)
                 }
                 ("build", [node]) => {
                     let targets = if o.targets.is_empty() {
@@ -255,7 +266,7 @@ fn run(args: &[String]) -> Result<(), Fail> {
                     } else {
                         o.targets.clone()
                     };
-                    tools::build(&src, &mesh, node, &targets, &o.out, o.unverified)
+                    tools::build(&src, &env, node, &targets, &o.out, o.unverified)
                 }
                 _ => return Err(Fail::Usage(format!("wrong arguments for {cmd}"))),
             };

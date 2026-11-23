@@ -1,0 +1,34 @@
+// expect: verify
+// One spec body narrows a u64 and a u32 to u8: the unspecified-value functions of the two CASTs have
+// different signatures and must have different names (was a z3 error, VG-V0008).
+module g14_spec_two_cast_sources;
+
+SPEC @low_bytes_def {
+  SIGNATURE: (a: u64, b: u32) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = AND(a, 255:u64);
+    %1 = CAST.u8(%0);
+    %2 = AND(b, 255:u32);
+    %3 = CAST.u8(%2);
+    %4 = XOR(%1, %3);
+    RETURN(%4);
+  }
+}
+
+NODE @low_bytes {
+  SIGNATURE: (a: u64, b: u32) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == spec:low_bytes_def(a, b);
+  }
+  BODY {
+    %0 = AND(a, 255:u64);
+    %1 = CAST.u8(%0);
+    %2 = AND(b, 255:u32);
+    %3 = CAST.u8(%2);
+    %4 = XOR(%1, %3);
+    RETURN(%4);
+  }
+}

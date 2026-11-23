@@ -42,9 +42,26 @@ impl SmtQuery {
         }
         out.push_str("(set-option :smt.random_seed 1)\n");
         out.push_str("(set-option :sat.random_seed 1)\n");
-        out.push_str("(set-logic QF_AUFBVFP)\n");
-        self.write_body(&mut out);
-        out.push_str("(check-sat)\n");
+        let mut body = String::new();
+        self.write_body(&mut body);
+        // Routing (docs/05, P3.3): a query without floating point gets the bitvector logic and a
+        // pipeline that substitutes defined constants first, so that equal sub-terms become one
+        // (a FOLD.step of SHA-256's round: 119 s with the default tactic, 3.5 s with this one).
+        // A tactic changes only speed: UNSAT means the same either way.
+        let fp = body.contains("FloatingPoint") || body.contains("(fp.") || body.contains("RNE");
+        if fp {
+            out.push_str("(set-logic QF_AUFBVFP)\n");
+        } else {
+            out.push_str("(set-logic QF_AUFBV)\n");
+        }
+        out.push_str(&body);
+        if fp {
+            out.push_str("(check-sat)\n");
+        } else {
+            out.push_str(
+                "(check-sat-using (then simplify propagate-values solve-eqs simplify smt))\n",
+            );
+        }
         out
     }
 }

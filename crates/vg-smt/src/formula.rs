@@ -9,10 +9,12 @@ use vg_core::opcode;
 use vg_core::types::Type;
 
 use crate::solver::SmtQuery;
+use crate::sort::UF_ELEMS_MAX;
 use crate::sort::{
     SymVal, bv_lit_i128, bv_lit_u128, canonical_nan_bv, const_to_symval, declare_symval,
     flatten_type, fp_bit_width, fp_format, scalar_same_smt, smt_fcopysign, smt_float_fits_int,
     smt_fmax, smt_fmin, symval_atoms, symval_from_atoms, symval_ite, symval_select, symval_store,
+    uf_arg,
 };
 
 /// Symbolic integer/arena/heap resource expressions used when encoding `COST` clauses.
@@ -2173,10 +2175,9 @@ fn eval_spec(
     let mut flat_arg_sorts = Vec::new();
     let mut flat_arg_atoms = Vec::new();
     for (t, sv) in &arg_vals {
-        for (_, s) in flatten_type(t) {
-            flat_arg_sorts.push(s.to_string());
-        }
-        flat_arg_atoms.extend(symval_atoms(sv));
+        let (sorts, atoms) = uf_arg_rec(t, sv, qb);
+        flat_arg_sorts.extend(sorts);
+        flat_arg_atoms.extend(atoms);
     }
     let hex12 = &vg_core::ir::hex(&spec_hash)[..12];
     let out_sorts = flatten_type(&res_ty);
@@ -2327,48 +2328,36 @@ fn eval_fold(
         _ => panic!("fold xs must be Array or Slice"),
     };
 
-    // Normalize `xs` into `(len_bv64, arr_0..)` so fold UF takes a canonical Slice signature.
-    let xs_slice_ty = Type::Slice(Box::new(elem_ty.clone()));
-    let xs_arrays = xs_sv.arrays().expect("xs arrays").to_vec();
-    let xs_as_slice = SymVal::Slice {
-        coll_id: xs_sv.coll_id().unwrap_or(0),
-        len: xs_len_bv64.clone(),
-        elem_ty: elem_ty.clone(),
-        arrays: xs_arrays,
-    };
-
+    let (xs_sorts, xs_atoms, xs_tag) = fold_xs_arg(&xs_sv, &elem_ty, &xs_len_bv64, qb);
     let mut flat_sorts = Vec::new();
-    let mut flat_args = Vec::new();
-    for (_, s) in flatten_type(&acc_ty) {
-        flat_sorts.push(s.to_string());
+    let mut fixed_before_k = Vec::new();
+    {
+        let (s0, a0) = uf_arg_rec(&acc_ty, &init_sv, qb);
+        flat_sorts.extend(s0);
+        fixed_before_k.extend(a0);
     }
-    flat_args.extend(symval_atoms(&init_sv));
-    for (_, s) in flatten_type(&xs_slice_ty) {
-        flat_sorts.push(s.to_string());
-    }
-    flat_args.extend(symval_atoms(&xs_as_slice));
+    flat_sorts.extend(xs_sorts);
+    fixed_before_k.extend(xs_atoms);
     flat_sorts.push("(_ BitVec 65)".to_string());
-    flat_args.push(k65.clone());
+    let mut fixed_after_k = Vec::new();
     for (bt, bv) in &b_vals {
-        for (_, s) in flatten_type(bt) {
-            flat_sorts.push(s.to_string());
-        }
-        flat_args.extend(symval_atoms(bv));
+        let (sb, ab) = uf_arg_rec(bt, bv, qb);
+        flat_sorts.extend(sb);
+        fixed_after_k.extend(ab);
     }
+    let mut flat_args = fixed_before_k.clone();
+    flat_args.push(k65.clone());
+    flat_args.extend(fixed_after_k.iter().cloned());
 
     let hex12 = &vg_core::ir::hex(&kernel_hash)[..12];
     let make_fold_app = |k_expr: &str, qb_inner: &mut QueryBuilder| -> SymVal {
         let out_sorts = flatten_type(&acc_ty);
         let mut atoms = Vec::with_capacity(out_sorts.len());
-        let mut args_with_k = Vec::new();
-        args_with_k.extend(symval_atoms(&init_sv));
-        args_with_k.extend(symval_atoms(&xs_as_slice));
+        let mut args_with_k = fixed_before_k.clone();
         args_with_k.push(k_expr.to_string());
-        for (_, bv) in &b_vals {
-            args_with_k.extend(symval_atoms(bv));
-        }
+        args_with_k.extend(fixed_after_k.iter().cloned());
         for (c, (_, s)) in out_sorts.into_iter().enumerate() {
-            let uf = format!("fold_{hex12}_{c}");
+            let uf = format!("fold_{hex12}{xs_tag}_{c}");
             qb_inner.declare_fun_once(&uf, flat_sorts.clone(), s.to_string());
             atoms.push(format!("({uf} {})", args_with_k.join(" ")));
         }
@@ -2379,7 +2368,7 @@ fn eval_fold(
 
     let res_sym = make_fold_app(&k65, qb);
     // ADR 0008: emit defining equations once per ground application without chaining further.
-    let key = format!("{hex12}:{}", flat_args.join(","));
+    let key = format!("{hex12}{xs_tag}:{}", flat_args.join(","));
     if qb.fold_apps.insert(key) {
         let zero65 = bv_lit_i128(0, 65);
         let one65 = bv_lit_i128(1, 65);
@@ -2607,10 +2596,13 @@ pub fn encode_val_eq_assume(
             format!("(and (= {oa} {ob}) (ite {oa} {ok_eq} {err_eq}))")
         }
         (Type::Array(elem_ty, len), _, _) => {
-            if *len <= 16 {
+            if u64::from(*len) <= UF_ELEMS_MAX {
                 let mut parts = Vec::with_capacity(*len as usize);
                 for idx in 0..*len {
                     let idx_lit = bv_lit_u128(u128::from(idx), 64);
+                    // Element facts (GENERATE, SIMD_MAP, foralls) instantiate at recorded indices.
+                    qb.record_index(a, vec![idx_lit.clone()], idx_lit.clone());
+                    qb.record_index(b, vec![idx_lit.clone()], idx_lit.clone());
                     let va = symval_select(a, &idx_lit, &mut qb.next_coll_id);
                     let vb = symval_select(b, &idx_lit, &mut qb.next_coll_id);
                     parts.push(encode_val_eq_assume(elem_ty, &va, &vb, is_same, env, qb));
@@ -2638,10 +2630,13 @@ pub fn encode_val_eq_assume(
             let total: u64 = dims
                 .iter()
                 .fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
-            if total <= 16 {
+            if total <= UF_ELEMS_MAX {
                 let mut parts = Vec::with_capacity(total as usize);
                 for idx in 0..total {
                     let idx_lit = bv_lit_u128(u128::from(idx), 64);
+                    // Element facts (GENERATE, SIMD_MAP, foralls) instantiate at recorded indices.
+                    qb.record_index(a, vec![idx_lit.clone()], idx_lit.clone());
+                    qb.record_index(b, vec![idx_lit.clone()], idx_lit.clone());
                     let va = symval_select(a, &idx_lit, &mut qb.next_coll_id);
                     let vb = symval_select(b, &idx_lit, &mut qb.next_coll_id);
                     parts.push(encode_val_eq_assume(elem_ty, &va, &vb, is_same, env, qb));
@@ -2739,10 +2734,13 @@ pub fn encode_val_eq_goal_neg(
             format!("(or (not (= {oa} {ob})) (ite {oa} {ok_neg} {err_neg}))")
         }
         (Type::Array(elem_ty, len), _, _) => {
-            if *len <= 16 {
+            if u64::from(*len) <= UF_ELEMS_MAX {
                 let mut parts = Vec::with_capacity(*len as usize);
                 for idx in 0..*len {
                     let idx_lit = bv_lit_u128(u128::from(idx), 64);
+                    // Element facts (GENERATE, SIMD_MAP, foralls) instantiate at recorded indices.
+                    qb.record_index(a, vec![idx_lit.clone()], idx_lit.clone());
+                    qb.record_index(b, vec![idx_lit.clone()], idx_lit.clone());
                     let va = symval_select(a, &idx_lit, &mut qb.next_coll_id);
                     let vb = symval_select(b, &idx_lit, &mut qb.next_coll_id);
                     parts.push(encode_val_eq_goal_neg(elem_ty, &va, &vb, is_same, env, qb));
@@ -2769,10 +2767,13 @@ pub fn encode_val_eq_goal_neg(
             let total: u64 = dims
                 .iter()
                 .fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
-            if total <= 16 {
+            if total <= UF_ELEMS_MAX {
                 let mut parts = Vec::with_capacity(total as usize);
                 for idx in 0..total {
                     let idx_lit = bv_lit_u128(u128::from(idx), 64);
+                    // Element facts (GENERATE, SIMD_MAP, foralls) instantiate at recorded indices.
+                    qb.record_index(a, vec![idx_lit.clone()], idx_lit.clone());
+                    qb.record_index(b, vec![idx_lit.clone()], idx_lit.clone());
                     let va = symval_select(a, &idx_lit, &mut qb.next_coll_id);
                     let vb = symval_select(b, &idx_lit, &mut qb.next_coll_id);
                     parts.push(encode_val_eq_goal_neg(elem_ty, &va, &vb, is_same, env, qb));
@@ -3711,8 +3712,13 @@ pub fn eval_op_core(
         }
         let mut op_sorts = Vec::new();
         let mut op_atoms = Vec::new();
+        // The operand types name the function too: one op kind and result type may come from
+        // several source types (CAST.u8 of a u32 and of a u64), each a different signature.
+        let mut sig = String::new();
         for (a_op, a_sv) in op.operands.iter().zip(args) {
             if let Some(a_ty) = node.operand_type(*a_op) {
+                sig.push_str(&ty_short_tag(a_ty));
+                sig.push('_');
                 for (_, s) in flatten_type(a_ty) {
                     op_sorts.push(s.to_string());
                 }
@@ -3722,7 +3728,7 @@ pub fn eval_op_core(
         let out_sorts = flatten_type(res_ty);
         let mut undef_atoms = Vec::with_capacity(out_sorts.len());
         for (k, (_, s)) in out_sorts.into_iter().enumerate() {
-            let uf = format!("undef_{tag}_{}_{k}", ty_short_tag(res_ty));
+            let uf = format!("undef_{tag}_{sig}{}_{k}", ty_short_tag(res_ty));
             qb_in.declare_fun_once(&uf, op_sorts.clone(), s.to_string());
             if op_atoms.is_empty() {
                 undef_atoms.push(uf);
@@ -4554,6 +4560,69 @@ pub fn coll_len_bv64(sv: &SymVal) -> String {
     }
 }
 
+/// `uf_arg`, plus each literal index it reads recorded, so element facts instantiate there.
+fn uf_arg_rec(ty: &Type, sv: &SymVal, qb: &mut QueryBuilder) -> (Vec<String>, Vec<String>) {
+    record_literal_indices(ty, sv, qb);
+    uf_arg(ty, sv)
+}
+
+fn record_literal_indices(ty: &Type, sv: &SymVal, qb: &mut QueryBuilder) {
+    let n = match ty {
+        Type::Array(_, n) => Some(u64::from(*n)),
+        Type::Tensor(_, dims) => Some(dims.iter().map(|&d| u64::from(d)).product::<u64>()),
+        _ => None,
+    };
+    match (ty, sv) {
+        (Type::Tuple(ts), SymVal::Tuple { elems }) => {
+            for (t, (_, v)) in ts.iter().zip(elems) {
+                record_literal_indices(t, v, qb);
+            }
+        }
+        (Type::Result(ok_t, err_t), SymVal::Result { ok, err, .. }) => {
+            record_literal_indices(ok_t, ok, qb);
+            record_literal_indices(err_t, err, qb);
+        }
+        _ => {
+            if let Some(n) = n.filter(|&n| n <= UF_ELEMS_MAX) {
+                for i in 0..n {
+                    let l = bv_lit_u128(u128::from(i), 64);
+                    qb.record_index(sv, vec![l.clone()], l);
+                }
+            }
+        }
+    }
+}
+
+/// The `xs` arguments of a `fold:` application: a fixed-size array element by element (see
+/// `uf_arg`), tagged so its uninterpreted function differs from the slice form, else the slice's
+/// length and arrays.
+fn fold_xs_arg(
+    xs_sv: &SymVal,
+    elem_ty: &Type,
+    len_bv64: &str,
+    qb: &mut QueryBuilder,
+) -> (Vec<String>, Vec<String>, String) {
+    if let SymVal::Array { len, .. } = xs_sv
+        && *len <= UF_ELEMS_MAX
+        && let Ok(n) = u32::try_from(*len)
+    {
+        let (sorts, atoms) = uf_arg_rec(&Type::Array(Box::new(elem_ty.clone()), n), xs_sv, qb);
+        return (sorts, atoms, format!("_a{len}"));
+    }
+    let slice_ty = Type::Slice(Box::new(elem_ty.clone()));
+    let as_slice = SymVal::Slice {
+        coll_id: xs_sv.coll_id().unwrap_or(0),
+        len: len_bv64.to_string(),
+        elem_ty: elem_ty.clone(),
+        arrays: xs_sv.arrays().expect("xs arrays").to_vec(),
+    };
+    let sorts = flatten_type(&slice_ty)
+        .into_iter()
+        .map(|(_, s)| s.to_string())
+        .collect();
+    (sorts, symval_atoms(&as_slice), String::new())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn apply_fold_values(
     kernel: &Node,
@@ -4570,43 +4639,37 @@ fn apply_fold_values(
     let acc_ty = kernel.params[0].clone();
     let elem_ty = kernel.params[1].clone();
     let xs_len_bv64 = coll_len_bv64(xs_sv);
-    let xs_slice_ty = Type::Slice(Box::new(elem_ty.clone()));
-    let xs_as_slice = SymVal::Slice {
-        coll_id: xs_sv.coll_id().unwrap_or(0),
-        len: xs_len_bv64.clone(),
-        elem_ty: elem_ty.clone(),
-        arrays: xs_sv.arrays().expect("xs arrays").to_vec(),
-    };
-    let mut flat_sorts = Vec::new();
-    let mut flat_args = Vec::new();
-    for (_, s) in flatten_type(&acc_ty) {
-        flat_sorts.push(s.to_string());
-    }
-    flat_args.extend(symval_atoms(init_sv));
-    for (_, s) in flatten_type(&xs_slice_ty) {
-        flat_sorts.push(s.to_string());
-    }
-    flat_args.extend(symval_atoms(&xs_as_slice));
+    let (xs_sorts, xs_atoms, xs_tag) = fold_xs_arg(xs_sv, &elem_ty, &xs_len_bv64, qb);
+    let (init_sorts, init_atoms) = uf_arg_rec(&acc_ty, init_sv, qb);
+    let mut flat_sorts = init_sorts;
+    flat_sorts.extend(xs_sorts);
     flat_sorts.push("(_ BitVec 65)".to_string());
-    flat_args.push(k65.to_string());
+    let mut b_atoms = Vec::new();
     for (bt, bv) in b_vals {
-        for (_, s) in flatten_type(bt) {
-            flat_sorts.push(s.to_string());
-        }
-        flat_args.extend(symval_atoms(bv));
+        let (sb, ab) = uf_arg_rec(bt, bv, qb);
+        flat_sorts.extend(sb);
+        b_atoms.extend(ab);
     }
+    let args_at = |k: &str| -> Vec<String> {
+        let mut a = init_atoms.clone();
+        a.extend(xs_atoms.iter().cloned());
+        a.push(k.to_string());
+        a.extend(b_atoms.iter().cloned());
+        a
+    };
+    let flat_args = args_at(k65);
     let hex12 = &vg_core::ir::hex(&kernel_hash)[..12];
     let out_sorts = flatten_type(&acc_ty);
     let mut atoms = Vec::with_capacity(out_sorts.len());
     for (c, (_, s)) in out_sorts.into_iter().enumerate() {
-        let uf = format!("fold_{hex12}_{c}");
+        let uf = format!("fold_{hex12}{xs_tag}_{c}");
         qb.declare_fun_once(&uf, flat_sorts.clone(), s.to_string());
         atoms.push(format!("({uf} {})", flat_args.join(" ")));
     }
     let res_sym = symval_from_atoms(&acc_ty, &atoms, &mut qb.next_coll_id);
     qb.register_coll_id(&res_sym);
 
-    let key = format!("{hex12}:{}", flat_args.join(","));
+    let key = format!("{hex12}{xs_tag}:{}", flat_args.join(","));
     if qb.fold_apps.insert(key) {
         let zero65 = bv_lit_i128(0, 65);
         let one65 = bv_lit_i128(1, 65);
@@ -4617,15 +4680,9 @@ fn apply_fold_values(
                 .push(format!("(=> (= {k65} {zero65}) {eq_base})"));
         }
         let k_minus_1 = format!("(bvsub {k65} {one65})");
-        let mut prev_args = Vec::new();
-        prev_args.extend(symval_atoms(init_sv));
-        prev_args.extend(symval_atoms(&xs_as_slice));
-        prev_args.push(k_minus_1.clone());
-        for (_, bv) in b_vals {
-            prev_args.extend(symval_atoms(bv));
-        }
+        let prev_args = args_at(&k_minus_1);
         let prev_atoms: Vec<String> = (0..flatten_type(&acc_ty).len())
-            .map(|c| format!("(fold_{hex12}_{c} {})", prev_args.join(" ")))
+            .map(|c| format!("(fold_{hex12}{xs_tag}_{c} {})", prev_args.join(" ")))
             .collect();
         let prev_acc = symval_from_atoms(&acc_ty, &prev_atoms, &mut qb.next_coll_id);
         let idx_bv64 = extract_lo(&k_minus_1, 65, 64);

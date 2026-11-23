@@ -1,0 +1,53 @@
+// expect: verify
+// A GENERATE result equals a spec: application element by element: the element facts must be
+// instantiated at the literal indices the equality reads (was a false contract_gap).
+module g13_generate_spec_equality;
+
+SPEC @k_def {
+  SIGNATURE: (j: u64, x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = AND(j, 3:u64);
+    %1 = CAST.u8(%0);
+    %2 = XOR(%1, x);
+    RETURN(%2);
+  }
+}
+
+NODE @k {
+  SIGNATURE: (j: u64, x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: j < 4;
+    POST: result == spec:k_def(j, x);
+  }
+  BODY {
+    %0 = AND(j, 3:u64);
+    %1 = CAST.u8(%0);
+    %2 = XOR(%1, x);
+    RETURN(%2);
+  }
+}
+
+SPEC @g_def {
+  SIGNATURE: (x: u8) -> (Array<u8, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = GENERATE(@k, 4:u64, x);
+    RETURN(%0);
+  }
+}
+
+NODE @g {
+  SIGNATURE: (x: u8) -> (Array<u8, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == spec:g_def(x);
+  }
+  BODY {
+    %0 = GENERATE(@k, 4:u64, x);
+    RETURN(%0);
+  }
+}

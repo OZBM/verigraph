@@ -438,6 +438,59 @@ fn push_atoms(v: &SymVal, out: &mut Vec<String>) {
     }
 }
 
+/// Largest fixed-size array or tensor that `uf_arg` passes element by element.
+pub const UF_ELEMS_MAX: u64 = 256;
+
+/// Sorts and atoms of one argument of a `spec:` or `fold:` uninterpreted function (ADR 0008).
+/// A fixed-size Array or Tensor of at most `UF_ELEMS_MAX` elements is passed element by element:
+/// VG equality of such values is element-wise, while two SMT arrays that agree on every index of
+/// the value may still differ outside it, so passing the array itself would keep equal
+/// applications from being known equal. Slices keep their length and arrays. Sound either way:
+/// both encodings are functions of the value; this one is complete for fixed sizes.
+pub fn uf_arg(ty: &Type, sv: &SymVal) -> (Vec<String>, Vec<String>) {
+    let mut sorts = Vec::new();
+    let mut atoms = Vec::new();
+    push_uf_arg(ty, sv, &mut sorts, &mut atoms);
+    (sorts, atoms)
+}
+
+fn push_uf_arg(ty: &Type, sv: &SymVal, sorts: &mut Vec<String>, atoms: &mut Vec<String>) {
+    let elems = match ty {
+        Type::Array(_, n) => Some(u64::from(*n)),
+        Type::Tensor(_, dims) => Some(dims.iter().map(|&d| u64::from(d)).product::<u64>()),
+        _ => None,
+    };
+    match (ty, sv, elems) {
+        (
+            Type::Array(elem, _) | Type::Tensor(elem, _),
+            SymVal::Array { arrays, .. } | SymVal::Tensor { arrays, .. },
+            Some(n),
+        ) if n <= UF_ELEMS_MAX => {
+            for (arr, (_, s)) in arrays.iter().zip(flatten_type(elem)) {
+                for i in 0..n {
+                    sorts.push(s.to_string());
+                    atoms.push(format!("(select {arr} {})", bv_lit_u128(u128::from(i), 64)));
+                }
+            }
+        }
+        (Type::Tuple(ts), SymVal::Tuple { elems }, _) => {
+            for (t, (_, v)) in ts.iter().zip(elems) {
+                push_uf_arg(t, v, sorts, atoms);
+            }
+        }
+        (Type::Result(ok_t, err_t), SymVal::Result { is_ok, ok, err, .. }, _) => {
+            sorts.push("Bool".to_string());
+            atoms.push(is_ok.clone());
+            push_uf_arg(ok_t, ok, sorts, atoms);
+            push_uf_arg(err_t, err, sorts, atoms);
+        }
+        _ => {
+            sorts.extend(flatten_type(ty).into_iter().map(|(_, s)| s.to_string()));
+            atoms.extend(symval_atoms(sv));
+        }
+    }
+}
+
 /// Constructs `(ite cond a b)` component-wise on two `SymVal`s of identical type `ty`.
 pub fn symval_ite(cond: &str, ty: &Type, a: &SymVal, b: &SymVal, next_coll_id: &mut u32) -> SymVal {
     let aa = symval_atoms(a);

@@ -470,11 +470,13 @@ pub fn verify(
                 );
                 let post = assume_conjuncts(&f.contract.post, &mut fe, &mut q);
                 q.assertions.push(post);
-                let k66 = format!("(bvadd {} (_ bv1 66))", zext(&k, 64, 66));
+                // k < len(xs) <= 2^64 - 1, so k + 1 fits the 65 bits of a step count; at 65 bits
+                // the fold: instance's (k + 1) - 1 rewrites to the same term as I(k, acc)'s k.
+                let k_next = format!("(bvadd {} (_ bv1 65))", zext(&k, 64, 65));
                 let neg = invariant(
                     node,
                     v,
-                    step_count(k66, 66),
+                    step_count(k_next, 65),
                     symval_to_fval(&r, &acc_ty),
                     &mut e,
                     &mut q,

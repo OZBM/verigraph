@@ -92,12 +92,22 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
             .filter(|e| e.source != "local")
             .map(|e| (e.node, e.spec))
     };
+    let store = if std::path::Path::new(".vg").is_dir() {
+        vg_store::Store::open(std::path::Path::new(".")).ok()
+    } else {
+        None
+    };
+    let fetch = |h: &vg_core::ir::Hash| store.as_ref().and_then(|s| s.get(h).ok().flatten());
+    let env = tools::Env {
+        mesh: &mesh,
+        fetch: &fetch,
+    };
     let str_arg = |k: &str| args.get(k).and_then(J::as_str).unwrap_or_default();
     match name {
-        "vg_check" => tools::check(&src, &mesh),
+        "vg_check" => tools::check(&src, &env),
         "vg_verify" => {
             let t = args.get("timeout_ms").and_then(J::as_u64).unwrap_or(10_000);
-            tools::verify(&src, &mesh, t)
+            tools::verify(&src, &env, t)
         }
         "vg_run" => {
             let inputs = args
@@ -105,7 +115,7 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
                 .and_then(J::as_object)
                 .cloned()
                 .unwrap_or_default();
-            tools::run(&src, &mesh, str_arg("node"), &inputs)
+            tools::run(&src, &env, str_arg("node"), &inputs)
         }
         "vg_build" => {
             let targets: Vec<String> = args
@@ -123,7 +133,7 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
             };
             tools::build(
                 &src,
-                &mesh,
+                &env,
                 str_arg("root"),
                 &targets,
                 std::path::Path::new(out),
