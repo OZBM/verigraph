@@ -50,26 +50,6 @@ impl Loaded {
         a.zip(d)
             .ok_or_else(|| format!("no node @{label} in this module"))
     }
-
-    /// The node and every node it calls, transitively, each once, in module order.
-    fn closure(&self, root: &Assembled) -> Vec<&Assembled> {
-        let mut want = vec![root.hashes.node];
-        let mut k = 0;
-        while k < want.len() {
-            if let Some(a) = self.nodes.iter().find(|a| a.hashes.node == want[k]) {
-                for c in &a.node.calls {
-                    if !want.contains(c) {
-                        want.push(*c);
-                    }
-                }
-            }
-            k += 1;
-        }
-        self.nodes
-            .iter()
-            .filter(|a| want.contains(&a.hashes.node))
-            .collect()
-    }
 }
 
 pub fn diag(d: &Diagnostic) -> J {
@@ -111,43 +91,6 @@ pub fn check(src: &str, mesh: MeshLookup) -> J {
     }
     let ok = !diags.iter().any(|d| d["severity"] == "error");
     json!({ "ok": ok, "nodes": nodes, "diagnostics": diags })
-}
-
-/// Concrete replay of a counterexample with the real callees (ADR 0006): Some(true) when the inputs
-/// satisfy PRE and the node traps or breaks its POST, Some(false) when it runs correctly (a contract
-/// gap), None when it cannot be replayed here (effects) or the inputs break PRE (a verifier bug).
-fn replay(a: &Assembled, inputs: &[Value], m: &Loaded) -> Option<bool> {
-    if !a.node.effects.is_pure() {
-        return None;
-    }
-    let callee = m.callee();
-    let pre = vg_interp::holds(&a.node, vg_interp::Clause::Pre, inputs, &[], &callee).ok()?;
-    if !pre {
-        return None;
-    }
-    let mut host = vg_interp::NoEffectsHost;
-    Some(match vg_interp::run(&a.node, inputs, &callee, &mut host) {
-        Err(_) => true,
-        Ok(results) => {
-            vg_interp::holds(&a.node, vg_interp::Clause::Post, inputs, &results, &callee)
-                != Ok(true)
-        }
-    })
-}
-
-fn named_inputs(a: &Assembled, d: &NodeDef, inputs: &[Value]) -> J {
-    let names = d
-        .params
-        .iter()
-        .map(|p| p.name.text.clone())
-        .chain(d.learnable.iter().flatten().map(|l| l.name.text.clone()));
-    let mut o = Map::new();
-    for ((name, v), i) in names.zip(inputs).zip(0u32..) {
-        if let Some(t) = a.node.input_type(i) {
-            o.insert(name, json::out(v, t));
-        }
-    }
-    J::Object(o)
 }
 
 // shortcut: vg-smt and vg-codegen are not merged yet; verify and build answer "not available" until
