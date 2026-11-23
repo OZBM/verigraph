@@ -1,0 +1,81 @@
+{
+  "node": "@cast_i32_u32",
+  "cases": [
+    {
+      "inputs": {
+        "x": -2147483648
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -2147483647
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -2069540147
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -1191594078
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": -1
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "x": 1
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "x": 65536
+      },
+      "outputs": [
+        65536
+      ]
+    },
+    {
+      "inputs": {
+        "x": 2147483646
+      },
+      "outputs": [
+        2147483646
+      ]
+    },
+    {
+      "inputs": {
+        "x": 2147483647
+      },
+      "outputs": [
+        2147483647
+      ]
+    },
+    {
+      "inputs": {
+        "x": -1
+      },
+      "trap": "CAST.in_range"
+    }
+  ]
+}

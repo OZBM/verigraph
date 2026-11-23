@@ -1,0 +1,21 @@
+{
+  "node": "@cast_bool_u8",
+  "cases": [
+    {
+      "inputs": {
+        "x": false
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "x": true
+      },
+      "outputs": [
+        1
+      ]
+    }
+  ]
+}

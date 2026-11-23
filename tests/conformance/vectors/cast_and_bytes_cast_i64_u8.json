@@ -1,0 +1,89 @@
+{
+  "node": "@cast_i64_u8",
+  "cases": [
+    {
+      "inputs": {
+        "x": "-9223372036854775808"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "-9223372036854775807"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "-3535148582160798002"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "-1"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "0"
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "x": "1"
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "x": "255"
+      },
+      "outputs": [
+        255
+      ]
+    },
+    {
+      "inputs": {
+        "x": "4294967296"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "5275093463785301873"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "9223372036854775806"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "9223372036854775807"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "-1"
+      },
+      "trap": "CAST.in_range"
+    },
+    {
+      "inputs": {
+        "x": "256"
+      },
+      "trap": "CAST.in_range"
+    }
+  ]
+}

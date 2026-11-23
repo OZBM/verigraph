@@ -1,0 +1,40 @@
+{
+  "node": "@fold_arr",
+  "cases": [
+    {
+      "inputs": {
+        "xs": [
+          3,
+          4,
+          5
+        ],
+        "mult": 2,
+        "init": 1
+      },
+      "outputs": [
+        -17
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [],
+        "mult": 2,
+        "init": 42
+      },
+      "outputs": [
+        42
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          3,
+          -1
+        ],
+        "mult": 2,
+        "init": 1
+      },
+      "trap": "FOLD.pre"
+    }
+  ]
+}

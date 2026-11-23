@@ -1,0 +1,177 @@
+{
+  "node": "@effects_pipeline",
+  "cases": [
+    {
+      "inputs": {
+        "clk": {
+          "handle": "Clock",
+          "id": 0
+        },
+        "fin": {
+          "handle": "FileIn",
+          "id": 1
+        },
+        "fout": {
+          "handle": "FileOut",
+          "id": 2
+        },
+        "max_bytes": "16"
+      },
+      "trace": [
+        {
+          "op": "CLOCK_READ",
+          "result": "1000"
+        },
+        {
+          "op": "FILE_READ",
+          "result": {
+            "ok": [
+              104,
+              105
+            ]
+          }
+        },
+        {
+          "op": "FILE_WRITE",
+          "result": {
+            "ok": "2"
+          }
+        },
+        {
+          "op": "CLOCK_READ",
+          "result": "1250"
+        }
+      ],
+      "outputs": [
+        "250",
+        {
+          "ok": [
+            104,
+            105
+          ]
+        },
+        {
+          "ok": "2"
+        }
+      ]
+    },
+    {
+      "inputs": {
+        "clk": {
+          "handle": "Clock",
+          "id": 0
+        },
+        "fin": {
+          "handle": "FileIn",
+          "id": 1
+        },
+        "fout": {
+          "handle": "FileOut",
+          "id": 2
+        },
+        "max_bytes": "1"
+      },
+      "trace": [
+        {
+          "op": "CLOCK_READ",
+          "result": "500"
+        },
+        {
+          "op": "FILE_READ",
+          "result": {
+            "err": 2
+          }
+        },
+        {
+          "op": "FILE_WRITE",
+          "result": {
+            "err": 1
+          }
+        },
+        {
+          "op": "CLOCK_READ",
+          "result": "500"
+        }
+      ],
+      "outputs": [
+        "0",
+        {
+          "err": 2
+        },
+        {
+          "err": 1
+        }
+      ]
+    },
+    {
+      "inputs": {
+        "clk": {
+          "handle": "Clock",
+          "id": 0
+        },
+        "fin": {
+          "handle": "FileIn",
+          "id": 1
+        },
+        "fout": {
+          "handle": "FileOut",
+          "id": 2
+        },
+        "max_bytes": "16"
+      },
+      "trace": [
+        {
+          "op": "CLOCK_READ",
+          "result": "500"
+        },
+        {
+          "op": "FILE_READ",
+          "result": {
+            "ok": [
+              1
+            ]
+          }
+        },
+        {
+          "op": "FILE_WRITE",
+          "result": {
+            "ok": "2"
+          }
+        },
+        {
+          "op": "CLOCK_READ",
+          "result": "499"
+        }
+      ],
+      "trap": "non-monotonic"
+    },
+    {
+      "inputs": {
+        "clk": {
+          "handle": "Clock",
+          "id": 0
+        },
+        "fin": {
+          "handle": "FileIn",
+          "id": 1
+        },
+        "fout": {
+          "handle": "FileOut",
+          "id": 2
+        },
+        "max_bytes": "16"
+      },
+      "trace": [
+        {
+          "op": "FILE_READ",
+          "result": {
+            "ok": [
+              1
+            ]
+          }
+        }
+      ],
+      "trap": "effect trace mismatch"
+    }
+  ]
+}

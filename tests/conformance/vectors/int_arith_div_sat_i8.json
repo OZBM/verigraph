@@ -1,0 +1,1185 @@
+{
+  "node": "@div_sat_i8",
+  "cases": [
+    {
+      "inputs": {
+        "a": 0,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 126
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 16
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": -1
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": 115
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 0,
+        "b": -54
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 1
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 126
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 16
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": -1
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": 115
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 1,
+        "b": -54
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": 1
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": 127
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": 126
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": 16
+      },
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": -1
+      },
+      "outputs": [
+        -127
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": -127
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": 115
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 127,
+        "b": -54
+      },
+      "outputs": [
+        -2
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": 1
+      },
+      "outputs": [
+        126
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": 126
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": 16
+      },
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": -1
+      },
+      "outputs": [
+        -126
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": 115
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 126,
+        "b": -54
+      },
+      "outputs": [
+        -2
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 1
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 126
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 16
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": -1
+      },
+      "outputs": [
+        -16
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": 115
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 16,
+        "b": -54
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": 1
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": 126
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": 16
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": -1
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": 115
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -1,
+        "b": -54
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": 1
+      },
+      "outputs": [
+        -128
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": 127
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": 126
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": 16
+      },
+      "outputs": [
+        -8
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": -1
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": -128
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": -127
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": 115
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -128,
+        "b": -54
+      },
+      "outputs": [
+        2
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": 1
+      },
+      "outputs": [
+        -127
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": 127
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": 126
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": 16
+      },
+      "outputs": [
+        -7
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": -1
+      },
+      "outputs": [
+        127
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": -127
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": 115
+      },
+      "outputs": [
+        -1
+      ]
+    },
+    {
+      "inputs": {
+        "a": -127,
+        "b": -54
+      },
+      "outputs": [
+        2
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": 1
+      },
+      "outputs": [
+        115
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": 126
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": 16
+      },
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": -1
+      },
+      "outputs": [
+        -115
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": 115
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 115,
+        "b": -54
+      },
+      "outputs": [
+        -2
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": 1
+      },
+      "outputs": [
+        -54
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": 127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": 126
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": 16
+      },
+      "outputs": [
+        -3
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": -1
+      },
+      "outputs": [
+        54
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": -128
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": -127
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": 115
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "a": -54,
+        "b": -54
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "a": 67,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 67,
+        "b": 1
+      },
+      "outputs": [
+        67
+      ]
+    },
+    {
+      "inputs": {
+        "a": 67,
+        "b": -1
+      },
+      "outputs": [
+        -67
+      ]
+    },
+    {
+      "inputs": {
+        "a": -106,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -106,
+        "b": 1
+      },
+      "outputs": [
+        -106
+      ]
+    },
+    {
+      "inputs": {
+        "a": -106,
+        "b": -1
+      },
+      "outputs": [
+        106
+      ]
+    },
+    {
+      "inputs": {
+        "a": -63,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -63,
+        "b": 1
+      },
+      "outputs": [
+        -63
+      ]
+    },
+    {
+      "inputs": {
+        "a": -63,
+        "b": -1
+      },
+      "outputs": [
+        63
+      ]
+    },
+    {
+      "inputs": {
+        "a": 90,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 90,
+        "b": 1
+      },
+      "outputs": [
+        90
+      ]
+    },
+    {
+      "inputs": {
+        "a": 90,
+        "b": -1
+      },
+      "outputs": [
+        -90
+      ]
+    },
+    {
+      "inputs": {
+        "a": 36,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 36,
+        "b": 1
+      },
+      "outputs": [
+        36
+      ]
+    },
+    {
+      "inputs": {
+        "a": 36,
+        "b": -1
+      },
+      "outputs": [
+        -36
+      ]
+    },
+    {
+      "inputs": {
+        "a": 121,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 121,
+        "b": 1
+      },
+      "outputs": [
+        121
+      ]
+    },
+    {
+      "inputs": {
+        "a": 121,
+        "b": -1
+      },
+      "outputs": [
+        -121
+      ]
+    },
+    {
+      "inputs": {
+        "a": -49,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -49,
+        "b": 1
+      },
+      "outputs": [
+        -49
+      ]
+    },
+    {
+      "inputs": {
+        "a": -49,
+        "b": -1
+      },
+      "outputs": [
+        49
+      ]
+    },
+    {
+      "inputs": {
+        "a": 76,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 76,
+        "b": 1
+      },
+      "outputs": [
+        76
+      ]
+    },
+    {
+      "inputs": {
+        "a": 76,
+        "b": -1
+      },
+      "outputs": [
+        -76
+      ]
+    },
+    {
+      "inputs": {
+        "a": 14,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 14,
+        "b": 1
+      },
+      "outputs": [
+        14
+      ]
+    },
+    {
+      "inputs": {
+        "a": 14,
+        "b": -1
+      },
+      "outputs": [
+        -14
+      ]
+    },
+    {
+      "inputs": {
+        "a": -27,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -27,
+        "b": 1
+      },
+      "outputs": [
+        -27
+      ]
+    },
+    {
+      "inputs": {
+        "a": -27,
+        "b": -1
+      },
+      "outputs": [
+        27
+      ]
+    },
+    {
+      "inputs": {
+        "a": 109,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": 109,
+        "b": 1
+      },
+      "outputs": [
+        109
+      ]
+    },
+    {
+      "inputs": {
+        "a": 109,
+        "b": -1
+      },
+      "outputs": [
+        -109
+      ]
+    },
+    {
+      "inputs": {
+        "a": -65,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    },
+    {
+      "inputs": {
+        "a": -65,
+        "b": 1
+      },
+      "outputs": [
+        -65
+      ]
+    },
+    {
+      "inputs": {
+        "a": -65,
+        "b": -1
+      },
+      "outputs": [
+        65
+      ]
+    }
+  ]
+}

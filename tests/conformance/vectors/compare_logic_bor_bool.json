@@ -1,0 +1,41 @@
+{
+  "node": "@bor_bool",
+  "cases": [
+    {
+      "inputs": {
+        "a": false,
+        "b": false
+      },
+      "outputs": [
+        false
+      ]
+    },
+    {
+      "inputs": {
+        "a": false,
+        "b": true
+      },
+      "outputs": [
+        true
+      ]
+    },
+    {
+      "inputs": {
+        "a": true,
+        "b": false
+      },
+      "outputs": [
+        true
+      ]
+    },
+    {
+      "inputs": {
+        "a": true,
+        "b": true
+      },
+      "outputs": [
+        true
+      ]
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "node": "@cast_u8_i16",
+  "cases": [
+    {
+      "inputs": {
+        "x": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "x": 1
+      },
+      "outputs": [
+        1
+      ]
+    },
+    {
+      "inputs": {
+        "x": 13
+      },
+      "outputs": [
+        13
+      ]
+    },
+    {
+      "inputs": {
+        "x": 16
+      },
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "inputs": {
+        "x": 34
+      },
+      "outputs": [
+        34
+      ]
+    },
+    {
+      "inputs": {
+        "x": 142
+      },
+      "outputs": [
+        142
+      ]
+    },
+    {
+      "inputs": {
+        "x": 149
+      },
+      "outputs": [
+        149
+      ]
+    },
+    {
+      "inputs": {
+        "x": 155
+      },
+      "outputs": [
+        155
+      ]
+    },
+    {
+      "inputs": {
+        "x": 254
+      },
+      "outputs": [
+        254
+      ]
+    },
+    {
+      "inputs": {
+        "x": 255
+      },
+      "outputs": [
+        255
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "node": "@bnot_bool",
+  "cases": [
+    {
+      "inputs": {
+        "a": false
+      },
+      "outputs": [
+        true
+      ]
+    },
+    {
+      "inputs": {
+        "a": true
+      },
+      "outputs": [
+        false
+      ]
+    }
+  ]
+}

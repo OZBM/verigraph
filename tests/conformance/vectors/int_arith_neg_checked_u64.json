@@ -1,0 +1,133 @@
+{
+  "node": "@neg_checked_u64",
+  "cases": [
+    {
+      "inputs": {
+        "a": "0"
+      },
+      "outputs": [
+        "0"
+      ]
+    },
+    {
+      "inputs": {
+        "a": "1"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "18446744073709551615"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "18446744073709551614"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "4294967296"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "3888258533452305773"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "3851167460642771104"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "6312945673055722497"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "8087720877533033916"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "4029623444740136317"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "9659943098240016639"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "7085463400447217585"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "3811156886316551141"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "9367102015113551520"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "3764851929923185211"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "17317254565284087526"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "5099150570487860795"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "12657066163097720336"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "12413546945987954243"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "13992494819597193548"
+      },
+      "trap": "NEG.no_overflow"
+    },
+    {
+      "inputs": {
+        "a": "14725290458877636215"
+      },
+      "trap": "NEG.no_overflow"
+    }
+  ]
+}

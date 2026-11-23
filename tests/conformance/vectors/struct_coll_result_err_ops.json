@@ -1,0 +1,23 @@
+{
+  "node": "@result_err_ops",
+  "cases": [
+    {
+      "inputs": {
+        "make_ok": false,
+        "val": 123,
+        "err": 9
+      },
+      "outputs": [
+        9
+      ]
+    },
+    {
+      "inputs": {
+        "make_ok": true,
+        "val": 123,
+        "err": 9
+      },
+      "trap": "GET_ERR.is_err"
+    }
+  ]
+}

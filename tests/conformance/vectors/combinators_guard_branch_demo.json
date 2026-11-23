@@ -1,0 +1,25 @@
+{
+  "node": "@guard_branch_demo",
+  "cases": [
+    {
+      "inputs": {
+        "a": -17,
+        "b": 5
+      },
+      "outputs": [
+        -3,
+        -2
+      ]
+    },
+    {
+      "inputs": {
+        "a": -17,
+        "b": 0
+      },
+      "outputs": [
+        0,
+        -17
+      ]
+    }
+  ]
+}

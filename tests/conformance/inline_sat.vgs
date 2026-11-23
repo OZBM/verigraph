@@ -1,0 +1,13 @@
+// run: @add_inline {"a": 120, "b": 10} => [127]
+// run: @add_inline {"a": -100, "b": -50} => [-128]
+module conf_inline;
+
+NODE @add_inline {
+  SIGNATURE: (a: i8, b: i8) -> (i8);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY {
+    %0 = ADD.sat(a, b);
+    RETURN(%0);
+  }
+}

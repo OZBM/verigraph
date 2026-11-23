@@ -1,0 +1,33 @@
+{
+  "node": "@select_strict",
+  "cases": [
+    {
+      "inputs": {
+        "c": true,
+        "a": 7,
+        "b": 4
+      },
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "inputs": {
+        "c": false,
+        "a": 7,
+        "b": 4
+      },
+      "outputs": [
+        25
+      ]
+    },
+    {
+      "inputs": {
+        "c": true,
+        "a": 7,
+        "b": 0
+      },
+      "trap": "DIV.nonzero"
+    }
+  ]
+}
