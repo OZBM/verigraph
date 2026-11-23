@@ -7,6 +7,7 @@ use vg_core::value::{Value, int_fits};
 
 use crate::bytes::{decode_const, validate_and_canonicalize, value_to_bytes};
 use crate::float_ops;
+use crate::formula::{Clause, holds_with_depth};
 use crate::host::{Host, NoEffectsHost, Trap};
 
 /// Evaluates `node` concretely on `inputs` (node parameters followed by learnable θ in declaration
@@ -18,16 +19,20 @@ pub fn run(
     host: &mut dyn Host,
 ) -> Result<Vec<Value>, Trap> {
     let mut last_clock = None;
-    run_inner(node, inputs, callee, host, &mut last_clock)
+    run_inner_with_depth(node, inputs, callee, host, &mut last_clock, 0)
 }
 
-pub(crate) fn run_inner(
+pub(crate) fn run_inner_with_depth(
     node: &Node,
     inputs: &[Value],
     callee: &dyn Fn(&Hash) -> Option<Node>,
     host: &mut dyn Host,
     last_clock: &mut Option<u64>,
+    depth: usize,
 ) -> Result<Vec<Value>, Trap> {
+    if depth > 256 {
+        return Err(Trap::entry("maximum call depth exceeded"));
+    }
     if inputs.len() != node.input_count() {
         return Err(Trap::entry(format!(
             "expected {} inputs (params + learnable theta), got {}",
@@ -69,6 +74,7 @@ pub(crate) fn run_inner(
             callee,
             host,
             last_clock,
+            depth,
         )?;
         if res.len() != op.results.len() {
             return Err(Trap::op(
@@ -144,6 +150,7 @@ fn eval_op(
     callee: &dyn Fn(&Hash) -> Option<Node>,
     host: &mut dyn Host,
     last_clock: &mut Option<u64>,
+    depth: usize,
 ) -> Result<Vec<Value>, Trap> {
     let name = opcode_name(op.opcode);
     let trap = |msg: String| Trap::op(op_idx, name, msg);
@@ -801,11 +808,17 @@ fn eval_op(
                     name,
                     "MAP.pre",
                     Some(elem_idx),
+                    depth,
                 )?;
-                let res =
-                    run_inner(&kernel, &args, callee, &mut pure_host, &mut None).map_err(|e| {
-                        trap(format!("SIMD_MAP kernel failed at element {elem_idx}: {e}"))
-                    })?;
+                let res = run_inner_with_depth(
+                    &kernel,
+                    &args,
+                    callee,
+                    &mut pure_host,
+                    &mut None,
+                    depth + 1,
+                )
+                .map_err(|e| trap(format!("SIMD_MAP kernel failed at element {elem_idx}: {e}")))?;
                 if res.len() != 1 {
                     return Err(trap(format!(
                         "SIMD_MAP: kernel returned {} results, expected 1",
@@ -845,9 +858,25 @@ fn eval_op(
                 args.push(acc);
                 args.push(elem);
                 args.extend(bcasts.iter().cloned());
-                check_callee_pre(&kernel, &args, callee, op_idx, name, "FOLD.pre", Some(step))?;
-                let res = run_inner(&kernel, &args, callee, &mut pure_host, &mut None)
-                    .map_err(|e| trap(format!("FOLD_BOUNDED kernel failed at step {step}: {e}")))?;
+                check_callee_pre(
+                    &kernel,
+                    &args,
+                    callee,
+                    op_idx,
+                    name,
+                    "FOLD.pre",
+                    Some(step),
+                    depth,
+                )?;
+                let res = run_inner_with_depth(
+                    &kernel,
+                    &args,
+                    callee,
+                    &mut pure_host,
+                    &mut None,
+                    depth + 1,
+                )
+                .map_err(|e| trap(format!("FOLD_BOUNDED kernel failed at step {step}: {e}")))?;
                 if res.len() != 1 {
                     return Err(trap(format!(
                         "FOLD_BOUNDED: kernel returned {} results, expected 1",
@@ -887,8 +916,9 @@ fn eval_op(
                 args.push(val(i)?);
             }
             append_callee_theta(&h, &branch, &mut args, host, op_idx, name)?;
-            check_callee_pre(&branch, &args, callee, op_idx, name, pre_kind, None)?;
-            run_inner(&branch, &args, callee, host, last_clock).map_err(|e| e.with_op(op_idx, name))
+            check_callee_pre(&branch, &args, callee, op_idx, name, pre_kind, None, depth)?;
+            run_inner_with_depth(&branch, &args, callee, host, last_clock, depth + 1)
+                .map_err(|e| e.with_op(op_idx, name))
         }
 
         // 0x0107 GENERATE(@f, n, b...)
@@ -911,9 +941,25 @@ fn eval_op(
                 let mut args = Vec::with_capacity(1 + bcasts.len());
                 args.push(Value::Int(i as i128));
                 args.extend(bcasts.iter().cloned());
-                check_callee_pre(&kernel, &args, callee, op_idx, name, "GEN.pre", Some(i))?;
-                let res = run_inner(&kernel, &args, callee, &mut pure_host, &mut None)
-                    .map_err(|e| trap(format!("GENERATE kernel failed at index {i}: {e}")))?;
+                check_callee_pre(
+                    &kernel,
+                    &args,
+                    callee,
+                    op_idx,
+                    name,
+                    "GEN.pre",
+                    Some(i),
+                    depth,
+                )?;
+                let res = run_inner_with_depth(
+                    &kernel,
+                    &args,
+                    callee,
+                    &mut pure_host,
+                    &mut None,
+                    depth + 1,
+                )
+                .map_err(|e| trap(format!("GENERATE kernel failed at index {i}: {e}")))?;
                 if res.len() != 1 {
                     return Err(trap(format!(
                         "GENERATE: kernel returned {} results, expected 1",
@@ -945,8 +991,11 @@ fn eval_op(
                 args.push(val(i)?);
             }
             append_callee_theta(&h, &target, &mut args, host, op_idx, name)?;
-            check_callee_pre(&target, &args, callee, op_idx, name, "CALL.pre", None)?;
-            run_inner(&target, &args, callee, host, last_clock).map_err(|e| e.with_op(op_idx, name))
+            check_callee_pre(
+                &target, &args, callee, op_idx, name, "CALL.pre", None, depth,
+            )?;
+            run_inner_with_depth(&target, &args, callee, host, last_clock, depth + 1)
+                .map_err(|e| e.with_op(op_idx, name))
         }
 
         // 0x0400..0x0402 Effects
@@ -1151,21 +1200,28 @@ fn append_callee_theta(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_callee_pre(
     callee_node: &Node,
-    _args: &[Value],
-    _callee: &dyn Fn(&Hash) -> Option<Node>,
+    args: &[Value],
+    callee: &dyn Fn(&Hash) -> Option<Node>,
     op_idx: u32,
     op_name: &'static str,
     obl_kind: &'static str,
     step: Option<usize>,
+    depth: usize,
 ) -> Result<(), Trap> {
-    if !callee_node.contract.pre.is_empty() {
+    if callee_node.contract.pre.is_empty() {
+        return Ok(());
+    }
+    let ok = holds_with_depth(callee_node, Clause::Pre, args, &[], callee, depth + 1)
+        .map_err(|e| e.with_op(op_idx, op_name))?;
+    if !ok {
         let suffix = step.map_or_else(String::new, |s| format!(" at step/elem {s}"));
         return Err(Trap::op(
             op_idx,
             op_name,
-            format!("{obl_kind}{suffix}: PRE evaluation requires formula evaluator"),
+            format!("{obl_kind}{suffix}: callee PRE failed for args {args:?}"),
         ));
     }
     Ok(())
