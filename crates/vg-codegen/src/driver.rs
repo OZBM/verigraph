@@ -154,7 +154,12 @@ fn linker(target: Target, host_clang: &Path) -> Option<Linker> {
                     pre: vec![],
                 },
                 target_args: clang_args(),
-                libs: vec!["-lm".into()],
+                // Fixed-size arrays live on the stack: wasm-ld's default 64 KiB stack overflowed on a
+                // 196 KiB image that runs natively. 8 MiB matches the main-thread stack of macOS and
+                // Linux, so a program that runs on one target runs on all three.
+                // shortcut: values over 8 MiB still overflow every target; move them to the arena
+                // when a program needs that.
+                libs: vec!["-lm".into(), "-Wl,-z,stack-size=8388608".into()],
             })
         }
         Target::X86_64Linux => {
