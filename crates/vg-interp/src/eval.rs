@@ -931,6 +931,13 @@ fn eval_op(
             let n_i128 = as_int(&val(1)?, "count")?;
             let n = usize::try_from(n_i128)
                 .map_err(|_| trap(format!("GENERATE: invalid count {n_i128}")))?;
+            // shortcut: the interpreter allocates at most 2^24 generated elements and traps above,
+            // as native code does when the arena is too small; raise it when a test needs more.
+            if n > 1 << 24 {
+                return Err(trap(format!(
+                    "GENERATE: count {n} exceeds the interpreter's limit of 2^24 elements"
+                )));
+            }
             let mut bcasts = Vec::with_capacity(op.operands.len().saturating_sub(2));
             for i in 2..op.operands.len() {
                 bcasts.push(val(i)?);

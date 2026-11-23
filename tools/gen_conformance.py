@@ -196,7 +196,7 @@ def fraction_to_float(fmt: str, neg: bool, exact_abs: Fraction) -> int:
         if (num << (-k)) < den:
             k -= 1
     if k > emax:
-        return sign_mask | (exp_mask << m)
+        return (sign_mask if neg else 0) | (exp_mask << m)
     q = max(k, emin) - m
     if q >= 0:
         s_num, s_den = num, den << q
@@ -215,7 +215,7 @@ def fraction_to_float(fmt: str, neg: bool, exact_abs: Fraction) -> int:
         return (sign_mask if neg else 0) | quot
     exp_field = q + m + bias
     if exp_field >= exp_mask:
-        return sign_mask | (exp_mask << m)
+        return (sign_mask if neg else 0) | (exp_mask << m)
     return (sign_mask if neg else 0) | (exp_field << m) | (quot - (1 << m))
 
 

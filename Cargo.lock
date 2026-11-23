@@ -861,6 +861,7 @@ dependencies = [
 name = "vg-interp"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "vg-core",
  "vg-types",
 ]

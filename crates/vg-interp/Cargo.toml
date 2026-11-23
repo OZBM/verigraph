@@ -9,3 +9,7 @@ publish.workspace = true
 [dependencies]
 vg-core = { path = "../vg-core" }
 vg-types = { path = "../vg-types" }
+
+[dev-dependencies]
+# Reads the docs/16 vector files of the conformance test.
+serde_json = "1"
