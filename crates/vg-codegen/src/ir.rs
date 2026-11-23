@@ -646,7 +646,7 @@ pub fn emit_const_val(
             let _ = f;
             format!("{}", v & mask)
         }
-        Type::SInt(w) => {
+        Type::SInt(_) => {
             let fill = if bytes.last().is_some_and(|b| b & 0x80 != 0) {
                 0xFF
             } else {
@@ -752,21 +752,6 @@ pub fn emit_branch_trap_if_false(
     f.start_bb(&fail_bb);
     emit_trap(f, m, ctx_ptr, guard_id, obligation, node_prefix);
     f.start_bb(&ok_bb);
-}
-
-pub fn int_bounds_i128(ty: &Type) -> Option<(i128, i128, bool)> {
-    match ty {
-        Type::UInt(w) => {
-            let max = if *w == 128 { i128::MAX } else { (1i128 << w) - 1 };
-            Some((0, max, false))
-        }
-        Type::SInt(w) => {
-            let min = -(1i128 << (w - 1));
-            let max = (1i128 << (w - 1)) - 1;
-            Some((min, max, true))
-        }
-        _ => None,
-    }
 }
 
 pub fn align_up_dyn(f: &mut FnBuilder, val_i64: &str) -> String {

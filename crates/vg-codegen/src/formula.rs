@@ -1178,9 +1178,15 @@ fn eval_builtin(
             Ok(FVal::Bool(res))
         }
         Builtin::IsOk | Builtin::Ok | Builtin::Err => {
-            let FVal::Agg(ty @ Type::Result(ref ok_t, ref err_t), ptr) =
-                eval_term(f, m, cx, &args[0])?
-            else {
+            let arg0 = eval_term(f, m, cx, &args[0])?;
+            let FVal::Agg(ty, ptr) = &arg0 else {
+                return Err(Diagnostic::error(
+                    "VG-C0101",
+                    Span::default(),
+                    "expected Result",
+                ));
+            };
+            let Type::Result(ok_t, err_t) = ty else {
                 return Err(Diagnostic::error(
                     "VG-C0101",
                     Span::default(),

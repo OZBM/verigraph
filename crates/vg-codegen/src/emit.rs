@@ -1,26 +1,26 @@
 //! Textual LLVM IR emission for all MVP opcodes, checked entries, and the stdin/stdout runner.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use vg_core::diag::{Diagnostic, Span};
-use vg_core::ir::{Bin, Builtin, Hash, Node, Op, Operand, Term};
+use vg_core::ir::{Builtin, Hash, Node, Op, Operand, Term};
 use vg_core::types::{Handle, Type};
 
 use crate::Options;
 use crate::analysis::{
-    NodeAnalysis, OP_ASSERT_GUARD, OP_CALL_HASH, OP_CONCAT, OP_FOLD_BOUNDED, OP_GENERATE,
-    OP_SIMD_MAP, OP_UPDATE, analyze_graph, is_const_bool,
+    NodeAnalysis, OP_ASSERT_GUARD, OP_CALL_HASH, OP_FOLD_BOUNDED, OP_GENERATE, OP_SIMD_MAP,
+    analyze_graph, is_const_bool,
 };
 use crate::formula::{FormulaCx, emit_arena_bytes_fn, eval_bool_term};
 use crate::ir::{
-    FnBuilder, IrVal, ModBuilder, align_up_dyn, emit_branch_trap_if_false, emit_canon_float,
-    emit_const_val, emit_gep_bytes, emit_load_scalar, emit_memcpy, emit_memcpy_dyn,
-    emit_slice_parts, emit_store_scalar_canon, emit_store_slice, emit_store_value_canon, emit_trap,
-    f32_const_expr, f64_const_expr, int_bounds_i128, needs_input_validation,
+    FnBuilder, IrVal, ModBuilder, emit_branch_trap_if_false, emit_canon_float, emit_const_val,
+    emit_gep_bytes, emit_load_scalar, emit_memcpy, emit_memcpy_dyn, emit_slice_parts,
+    emit_store_scalar_canon, emit_store_slice, emit_store_value_canon, f32_const_expr,
+    f64_const_expr, needs_input_validation,
 };
 use crate::layout::{
-    CallGraph, align_of, assign_prefixes, collect_graph, docs13_fixed_byte_size, is_erased,
-    is_scalar_abi, llvm_type, size_of, tensor_elem_count,
+    CallGraph, align_of, collect_graph, docs13_fixed_byte_size, is_erased, is_scalar_abi,
+    llvm_type, size_of, tensor_elem_count,
 };
 
 pub struct EmittedModule {
@@ -1354,6 +1354,7 @@ fn emit_float_op(
             ));
         }
     };
+    let sfx = if *ty == Type::Float(32) { "f32" } else { "f64" };
     let ob = |k: &str| format!("@{prefix}/%op{op_idx}/{k}");
     let a = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
     match op.opcode {
@@ -1374,7 +1375,7 @@ fn emit_float_op(
             // FMA (never fmuladd!)
             let b = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
             let c = operand_val(f, m, node, op.operands[2], inputs, op_vals)?;
-            let intr = format!("@llvm.fma.{lty}");
+            let intr = format!("@llvm.fma.{sfx}");
             m.require_decl(&format!("declare {lty} {intr}({lty}, {lty}, {lty})"));
             let r = f.reg();
             f.emit(format!(
@@ -1389,7 +1390,7 @@ fn emit_float_op(
             Ok(r)
         }
         0x0046 => {
-            let intr = format!("@llvm.fabs.{lty}");
+            let intr = format!("@llvm.fabs.{sfx}");
             m.require_decl(&format!("declare {lty} {intr}({lty})"));
             let r = f.reg();
             f.emit(format!("{r} = call {lty} {intr}({lty} {})", a.ssa));
@@ -1398,7 +1399,7 @@ fn emit_float_op(
         0x0047 | 0x0048 => {
             let b = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
             let name = if op.opcode == 0x0047 { "minimum" } else { "maximum" };
-            let intr = format!("@llvm.{name}.{lty}");
+            let intr = format!("@llvm.{name}.{sfx}");
             m.require_decl(&format!("declare {lty} {intr}({lty}, {lty})"));
             let r = f.reg();
             f.emit(format!(
@@ -1416,8 +1417,8 @@ fn emit_float_op(
                 f.emit(format!("{ok} = fcmp ole {lty} {}, {}", lo.ssa, hi.ssa));
                 emit_branch_trap_if_false(f, m, &ok, ctx_ptr, "rt", &ob("FCLAMP.bounds"), prefix);
             }
-            let max_intr = format!("@llvm.maximum.{lty}");
-            let min_intr = format!("@llvm.minimum.{lty}");
+            let max_intr = format!("@llvm.maximum.{sfx}");
+            let min_intr = format!("@llvm.minimum.{sfx}");
             m.require_decl(&format!("declare {lty} {max_intr}({lty}, {lty})"));
             m.require_decl(&format!("declare {lty} {min_intr}({lty}, {lty})"));
             let m1 = f.reg();
@@ -1440,7 +1441,7 @@ fn emit_float_op(
                 f.emit(format!("{ok} = fcmp ord {lty} {}, {}", y.ssa, y.ssa));
                 emit_branch_trap_if_false(f, m, &ok, ctx_ptr, "rt", &ob("FCOPYSIGN.sign"), prefix);
             }
-            let intr = format!("@llvm.copysign.{lty}");
+            let intr = format!("@llvm.copysign.{sfx}");
             m.require_decl(&format!("declare {lty} {intr}({lty}, {lty})"));
             let r = f.reg();
             f.emit(format!(
@@ -1450,7 +1451,7 @@ fn emit_float_op(
             Ok(r)
         }
         0x004B => {
-            let intr = format!("@llvm.sqrt.{lty}");
+            let intr = format!("@llvm.sqrt.{sfx}");
             m.require_decl(&format!("declare {lty} {intr}({lty})"));
             let r = f.reg();
             f.emit(format!("{r} = call {lty} {intr}({lty} {})", a.ssa));
@@ -2965,8 +2966,3 @@ fn emit_write_stdout_value(
     }
 }
 
-// Keep unused-import-free references clean
-#[allow(dead_code)]
-fn _unused_helpers() {
-    let _ = (assign_prefixes, int_bounds_i128, BTreeSet::<String>::new());
-}
