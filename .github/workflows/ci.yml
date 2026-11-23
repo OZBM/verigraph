@@ -17,14 +17,26 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-24.04
+            z3: z3-5.4.1-x64-glibc-2.39.zip
+            z3_sha256: b548bac48ef2452b4e09ea2945cf4b011d5f43fcf39e4799df268ee7e0769d85
           - name: macos-arm64
             os: macos-15
+            z3: z3-5.4.1-arm64-osx-13.3.zip
+            z3_sha256: a4a878121e81dfc297d027dd0b51dc4f08feb4296d6ecace42bfbc87a29d6d58
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Install the pinned toolchain
         run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component rustfmt,clippy
+      - name: Install z3 5.4.1, the version in toolchain.lock
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/z3.zip" "https://github.com/Z3Prover/z3/releases/download/z3-5.4.1/${{ matrix.z3 }}"
+          echo "${{ matrix.z3_sha256 }}  $RUNNER_TEMP/z3.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/z3.zip" -d "$RUNNER_TEMP/z3"
+          bin="$(dirname "$(find "$RUNNER_TEMP/z3" -type f -name z3 | head -n 1)")"
+          "$bin/z3" --version
+          echo "$bin" >> "$GITHUB_PATH"
       - name: Confirm the host architecture
         run: rustc -vV | grep '^host:'
       - run: cargo fmt --all --check

@@ -2,6 +2,9 @@
 //! generated programs. VG_DIFF_PROGRAMS sets the number of programs (default 40; the G4 gate runs
 //! 1,000) and VG_DIFF_INPUTS the inputs per program (default 20; the gate runs 100).
 
+// The native builds are aarch64-apple-darwin executables: only an Apple Silicon host runs them.
+#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
+
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};

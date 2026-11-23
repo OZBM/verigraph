@@ -2,6 +2,9 @@
 //! stdin/stdout protocol and compare with values derived independently in Rust (docs/13 semantics:
 //! exact integer arithmetic in i128, IEEE operations of the host).
 
+// Those executables run only on an Apple Silicon host; CI runs this file on macos-arm64.
+#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
+
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};

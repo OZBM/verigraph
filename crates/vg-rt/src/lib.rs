@@ -12,6 +12,10 @@ mod tests {
     use std::process::Command;
 
     #[test]
+    #[cfg_attr(
+        not(all(target_os = "macos", target_arch = "aarch64")),
+        ignore = "compiles for aarch64-apple-darwin, which needs the macOS SDK"
+    )]
     fn packaged_c_sources_compile_cleanly_for_all_targets() {
         assert!(VG_RT_H.contains("vg_ctx"));
         assert!(VG_RT_C.contains("vg_rt_init"));

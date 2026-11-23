@@ -190,9 +190,15 @@ fn no_contract_breaking_mutant_verifies() {
     files.retain(|p| p.extension().is_some_and(|x| x == "vgs"));
     files.sort();
     let opts = vg_smt::Options {
-        z3: "/opt/homebrew/bin/z3".into(),
+        z3: vg_smt::find_z3(),
         timeout_ms: 5_000,
     };
+    // Without a solver every mutant would count as killed and the test would pass vacuously.
+    let z3_runs = std::process::Command::new(&opts.z3)
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    assert!(z3_runs, "z3 does not run: {}", opts.z3.display());
     let mut rng = Rng(SEED);
     let (mut killed, mut survived, mut total) = (0, 0, 0);
     let mut unsound = Vec::new();
