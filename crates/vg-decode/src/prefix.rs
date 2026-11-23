@@ -1959,9 +1959,15 @@ impl Prefix {
                     ))
                 }
             }
-            Some(j) => match results.get(j) {
-                Some(t) => fty_of(t).map_err(|c| (c, format!("{t} in formula"))),
-                None => Err(("VG-C0104", format!("result.{j} out of range"))),
+            // docs/13: `result.j` is the j-th result only when there are several; the one result
+            // of a node that has one is `result`, and `.j` projects a member of its tuple.
+            Some(j) => match (results.as_slice(), results.get(j)) {
+                ([Type::Tuple(ms)], _) => match ms.get(j) {
+                    Some(t) => fty_of(t).map_err(|c| (c, format!("{t} in formula"))),
+                    None => Err(("VG-C0104", format!("result.{j} out of range"))),
+                },
+                ([_], _) | (_, None) => Err(("VG-C0104", format!("result.{j} out of range"))),
+                (_, Some(t)) => fty_of(t).map_err(|c| (c, format!("{t} in formula"))),
             },
         }
     }

@@ -3,4 +3,4 @@
 /fuzz/artifacts
 /fuzz/corpus
 /fuzz/coverage
-/.vg
+.vg/
