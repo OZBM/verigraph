@@ -1,0 +1,14 @@
+module mesh_spec_add1;
+
+SPEC @spec_add1 {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 1000;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    RETURN(%0);
+  }
+}
