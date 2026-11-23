@@ -5,9 +5,9 @@ A gate passes only when this script exits 0 and the owner approves this report.
 
 | # | Criterion (ROADMAP.md) | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | The workspace builds on macOS ARM64 and Linux x86_64 | local: met; CI: met | This host is `aarch64-apple-darwin`: 12 crates, fmt, clippy and tests below. Both targets are built only in CI (row 2). |
-| 2 | CI is green | met | workflow `ci` concluded `success` for commit 29d25eafd778ece30bc300bca02f0669939b8579 (jobs linux-x86_64 and macos-arm64). |
-| 3 | The spec docs are in the repo | met | docs 00-12, errata, source spec, research protocol and 14 research tracks. |
+| 1 | The workspace builds on macOS ARM64 and Linux x86_64 | local: met; CI: met | This host is `aarch64-apple-darwin`: the working tree is HEAD, with the 12 crates of docs/01-architecture.md; fmt, clippy and tests below. Both targets are built only in CI (row 2). |
+| 2 | CI is green | met | every run of workflow `ci` for commit d8e870e15a288825c043b81893a1397434a3b6b2 must succeed, with jobs linux-x86_64 and macos-arm64: run 40880749323 (push) success, jobs ok (linux-x86_64 success, macos-arm64 success). |
+| 3 | The spec docs are in the repo | met | 33 docs checked in commit d8e870e15a288825c043b81893a1397434a3b6b2 by their first line: AGENTS.md, ROADMAP.md, PROGRESS.md, docs 00-12, the source spec, the research protocol and README, and research tracks R-01 to R-14. |
 
 ## Commands run on this host
 
