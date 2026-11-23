@@ -110,6 +110,17 @@ struct Linker {
     libs: Vec<String>,
 }
 
+/// Homebrew's LLVM clang, which builds wasm32-wasip1 (toolchain.lock); Apple clang before
+/// Xcode 27 has no wasm32 target (CI run 45258918686: none of Xcode 26.0 to 26.6 has it).
+fn llvm_clang() -> Option<&'static str> {
+    [
+        "/opt/homebrew/opt/llvm/bin/clang",
+        "/usr/local/opt/llvm/bin/clang",
+    ]
+    .into_iter()
+    .find(|c| runs(c, "--version"))
+}
+
 /// The linker of a target, when its toolchain is installed.
 fn linker(target: Target, host_clang: &Path) -> Option<Linker> {
     let clang_args = || {
@@ -127,12 +138,7 @@ fn linker(target: Target, host_clang: &Path) -> Option<Linker> {
             libs: vec![],
         }),
         Target::Wasm32Wasi => {
-            let clang = [
-                "/opt/homebrew/opt/llvm/bin/clang",
-                "/usr/local/opt/llvm/bin/clang",
-            ]
-            .into_iter()
-            .find(|c| runs(c, "--version"))?;
+            let clang = llvm_clang()?;
             // The wasi-libc and wasi-runtimes formulas install this sysroot and the clang config
             // that points wasm32-wasip1 at it and at its compiler-rt builtins.
             let sysroot = Path::new(clang)
@@ -222,7 +228,11 @@ pub fn build_artifact(
             "-o".to_string(),
             out.display().to_string(),
         ]);
-        run_clang(&clang, &obj_args)?;
+        let obj_clang = match opts.target {
+            Target::Wasm32Wasi => llvm_clang().map_or(clang, PathBuf::from),
+            _ => clang,
+        };
+        run_clang(&obj_clang, &obj_args)?;
         return Ok(BuildReport {
             artifact: out.to_path_buf(),
             linked: false,

@@ -8,7 +8,7 @@
 | z3 | 5.4.1, pinned in `toolchain.lock` | `vg verify`, `vg build` | macOS: `brew install z3`. Linux: the release archive from the Z3 GitHub releases, as CI does (`.github/workflows/ci.yml`) |
 | Bitwuzla | 0.11.0, pinned in `toolchain.lock` | float queries; `vg verify --mode release` | macOS: `brew install bitwuzla`. Optional: without it z3 takes the float queries |
 | cvc5 | 1.4.2, pinned in `toolchain.lock` | `vg verify --mode release` | The release binary from the cvc5 GitHub releases. Optional: release mode needs two of the three solvers |
-| clang | Apple clang 21 on macOS | `vg build` | An Xcode whose `clang --version` says 21, then `xcode-select --install`. Older clangs, such as Xcode 16's, have no wasm32 target: `--target wasm32-wasip1` then fails with VG-B0002 |
+| clang | Apple clang 21 on macOS; Homebrew LLVM 23.1.6 for wasm32 | `vg build` | Xcode, then `xcode-select --install`, for aarch64-apple-darwin. `brew install llvm` for `--target wasm32-wasip1`, which `vg` builds with Homebrew's clang when it is installed: Apple clang before Xcode 27 has no wasm32 target, so without Homebrew LLVM that target fails with VG-B0002 there |
 
 Version 0 is built for macOS on Apple Silicon. On Linux x86_64, `vg check`, `vg verify`, `vg run` and
 `vg mcp` work, and `vg build` can only produce object files (see [Troubleshooting](troubleshooting.md)).

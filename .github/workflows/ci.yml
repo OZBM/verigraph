@@ -21,8 +21,6 @@ jobs:
             z3: z3-5.4.1-x64-glibc-2.39.zip
             z3_sha256: b548bac48ef2452b4e09ea2945cf4b011d5f43fcf39e4799df268ee7e0769d85
           - name: macos-arm64
-            # Apple clang 21 (Xcode 26.6) has the wasm32 target that vg-codegen's tests build for;
-            # Xcode 16.4's clang, the default on macos-15, does not.
             os: macos-26
             triple: aarch64-apple-darwin
             z3: z3-5.4.1-arm64-osx-13.3.zip
@@ -44,22 +42,18 @@ jobs:
       - name: Confirm the host architecture
         run: |
           rustc -vV | grep -Fx "host: ${{ matrix.triple }}"
-      # The image's default Xcode can lack the wasm32 target (run 45246814395: clang-2100.1.1.101),
-      # so pick an installed Xcode whose clang has it; /usr/bin/clang follows DEVELOPER_DIR.
-      - name: Select an Xcode whose clang has the wasm32 target
+      # Apple clang before Xcode 27 has no wasm32 target (run 45258918686 found none in Xcode 26.0
+      # to 26.6), so vg-codegen builds wasm32 with Homebrew's LLVM clang, as toolchain.lock says.
+      - name: Install Homebrew LLVM, whose clang has the wasm32 target
         if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
-          for x in /Applications/Xcode*.app; do
-            dev="$x/Contents/Developer"
-            if DEVELOPER_DIR="$dev" xcrun clang -print-targets 2>/dev/null | grep -q wasm32; then
-              echo "DEVELOPER_DIR=$dev" >> "$GITHUB_ENV"
-              DEVELOPER_DIR="$dev" xcrun clang --version | head -n 1
-              exit 0
-            fi
-          done
-          echo "no installed Xcode has a clang with the wasm32 target:"
-          ls -d /Applications/Xcode*.app
-          exit 1
+          brew install llvm
+          clang="$(brew --prefix llvm)/bin/clang"
+          "$clang" --version | head -n 1
+          "$clang" -print-targets | grep -q wasm32 || { echo "Homebrew clang has no wasm32 target"; exit 1; }
       - name: Test the Antigravity extension
         run: node --test editors/antigravity/extension/test/*.test.js
       - run: cargo fmt --all --check
