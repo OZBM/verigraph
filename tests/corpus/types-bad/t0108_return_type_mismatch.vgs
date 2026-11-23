@@ -1,0 +1,11 @@
+// expect: VG-T0108
+module t0108_return_type_mismatch;
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(x);
+  }
+}

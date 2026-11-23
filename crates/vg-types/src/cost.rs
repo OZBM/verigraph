@@ -231,10 +231,9 @@ pub fn abi_size_align(ty: &Type) -> Option<(u64, u64)> {
             let (es, ea) = abi_size_align(e)?;
             Some((es.checked_mul(u64::from(*n))?, ea))
         }
-        Type::Tensor(e, dims) => {
+        Type::Tensor(e, _) => {
             let (es, ea) = abi_size_align(e)?;
             let count = static_element_count(ty)?;
-            let _ = dims;
             Some((es.checked_mul(count)?, ea))
         }
         Type::Tuple(ms) => {

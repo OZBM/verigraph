@@ -1,0 +1,30 @@
+// expect: VG-T0110
+module t0110_guard_branch_results;
+
+NODE @b1 {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(x);
+  }
+}
+
+NODE @b2 {
+  SIGNATURE: (x: u32) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(0:u64);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (c: Bool, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ASSERT_GUARD(c, @b1, x, else=@b2);
+    RETURN(%0);
+  }
+}

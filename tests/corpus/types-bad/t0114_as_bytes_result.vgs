@@ -1,0 +1,12 @@
+// expect: VG-T0114
+module t0114_as_bytes_result;
+
+NODE @bad {
+  SIGNATURE: (r: Result<u32, u8>) -> (Slice<u8>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = AS_BYTES(r);
+    RETURN(%0);
+  }
+}

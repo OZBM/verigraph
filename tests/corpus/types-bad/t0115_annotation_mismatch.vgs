@@ -1,0 +1,12 @@
+// expect: VG-T0115
+module t0115_annotation_mismatch;
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0: u64 = ADD.wrap(x, 1:u32);
+    RETURN(%0);
+  }
+}

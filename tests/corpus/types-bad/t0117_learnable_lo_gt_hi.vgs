@@ -1,0 +1,15 @@
+// expect: VG-T0117
+module t0117_learnable_lo_gt_hi;
+
+NODE @bad {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  LEARNABLE {
+    gain: f32 in [2.0, 0.5];
+  }
+  BODY {
+    %0 = FMUL(x, gain);
+    RETURN(%0);
+  }
+}

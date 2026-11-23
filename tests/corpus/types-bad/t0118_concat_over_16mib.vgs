@@ -1,0 +1,12 @@
+// expect: VG-T0118
+module t0118_concat_over_16mib;
+
+NODE @bad {
+  SIGNATURE: (a: Array<u32, 3000000>, b: Array<u32, 3000000>) -> (Array<u32, 6000000>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CONCAT(a, b);
+    RETURN(%0);
+  }
+}

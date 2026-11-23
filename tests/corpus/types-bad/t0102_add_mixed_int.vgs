@@ -1,0 +1,12 @@
+// expect: VG-T0102
+module t0102_add_mixed_int;
+
+NODE @bad {
+  SIGNATURE: (a: u32, b: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(a, b);
+    RETURN(%0);
+  }
+}

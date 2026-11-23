@@ -1,0 +1,22 @@
+// expect: VG-T0106
+module t0106_simd_map_broadcast_mismatch;
+
+NODE @k {
+  SIGNATURE: (x: f32, g: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FMUL(x, g);
+    RETURN(%0);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (xs: Array<f32, 4>, g: f64) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SIMD_MAP(@k, xs, g);
+    RETURN(%0);
+  }
+}

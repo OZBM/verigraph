@@ -1,0 +1,12 @@
+// expect: VG-T0102
+module t0102_select_mixed_arms;
+
+NODE @bad {
+  SIGNATURE: (c: Bool, a: u32, b: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SELECT(c, a, b);
+    RETURN(%0);
+  }
+}

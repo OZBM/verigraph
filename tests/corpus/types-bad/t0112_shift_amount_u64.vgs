@@ -1,0 +1,12 @@
+// expect: VG-T0112
+module t0112_shift_amount_u64;
+
+NODE @bad {
+  SIGNATURE: (x: u32, s: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SHL.wrap(x, s);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,12 @@
+// expect: VG-T0102
+module t0102_fadd_mixed_float;
+
+NODE @bad {
+  SIGNATURE: (a: f32, b: f64) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FADD(a, b);
+    RETURN(%0);
+  }
+}

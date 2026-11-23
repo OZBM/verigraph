@@ -1,0 +1,12 @@
+// expect: VG-T0113
+module t0113_cast_bool_to_f32;
+
+NODE @bad {
+  SIGNATURE: (x: Bool) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CAST.f32(x);
+    RETURN(%0);
+  }
+}

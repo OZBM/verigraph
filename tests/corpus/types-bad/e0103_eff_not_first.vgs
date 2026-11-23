@@ -1,0 +1,11 @@
+// expect: VG-E0103
+module e0103_eff_not_first;
+
+NODE @bad {
+  SIGNATURE: (x: u32, e: Eff) -> (u32, Eff);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    RETURN(x, e);
+  }
+}

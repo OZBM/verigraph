@@ -88,6 +88,10 @@ fn type_contains_slice(ty: &Type) -> bool {
     }
 }
 
+fn is_frame_value(ty: &Type) -> bool {
+    !matches!(ty, Type::Slice(_) | Type::Eff | Type::Handle(_))
+}
+
 fn is_valid_scalar(ty: &Type) -> bool {
     matches!(
         ty,
@@ -423,14 +427,6 @@ fn check_node_cached(
     diags: &mut Vec<Diagnostic>,
 ) -> CalleeInfo {
     let n_params = node.params.len();
-    let empty_info = || CalleeInfo {
-        node: node.clone(),
-        ops_expr: CostExpr::zero(),
-        arena_bytes: CostExpr::zero(),
-        used_effects: EffectMask(0),
-        result_views_param: vec![vec![false; n_params]; node.results.len()],
-        result_handle_valid: vec![None; node.results.len()],
-    };
 
     // 1. Resolve and validate all callees transitively.
     resolve_callees(node, callee, cache, visiting, diags);
@@ -921,7 +917,6 @@ fn check_node_cached(
     // 9. Check contract formulas (VG-C0101..C0108).
     formula::check_contract(node, cache, diags);
 
-    let _ = empty_info;
     CalleeInfo {
         node: node.clone(),
         ops_expr: total_ops,
@@ -937,7 +932,7 @@ fn fallback_op_metas(op: &Op, n_params: usize) -> Vec<ValMeta> {
         .iter()
         .map(|ty| ValMeta {
             ty: ty.clone(),
-            origin_local_frame: is_fixed_size(ty),
+            origin_local_frame: is_frame_value(ty),
             has_local_slice: false,
             owns_fresh_arena_slice: false,
             from_params: vec![false; n_params],
@@ -1018,7 +1013,7 @@ fn check_single_op(
         bad
     };
     let make_local_meta = |ty: Type, has_local_slice: bool, from_params: Vec<bool>| ValMeta {
-        origin_local_frame: is_fixed_size(&ty),
+        origin_local_frame: is_frame_value(&ty),
         len_expr: static_element_count(&ty).map(CostExpr::Const),
         ty,
         has_local_slice,
@@ -1104,7 +1099,7 @@ fn check_single_op(
             *total_ops = CostExpr::add(total_ops.clone(), CostExpr::Const(1));
             Some(vec![ValMeta {
                 ty: res_ty.clone(),
-                origin_local_frame: m0.origin_local_frame && is_fixed_size(&res_ty),
+                origin_local_frame: m0.origin_local_frame && is_frame_value(&res_ty),
                 has_local_slice: m0.has_local_slice && type_contains_slice(&res_ty),
                 owns_fresh_arena_slice: false,
                 from_params: if type_contains_slice(&res_ty) {
@@ -1202,7 +1197,7 @@ fn check_single_op(
             let has_local = if matches!(m0.ty, Type::Slice(_)) {
                 m0.has_local_slice
             } else {
-                m0.origin_local_frame
+                m0.origin_local_frame || m0.has_local_slice
             };
             let len_expr = match &m0.ty {
                 Type::Slice(e) => {
@@ -1296,7 +1291,7 @@ fn check_single_op(
                 };
                 Some(vec![ValMeta {
                     ty: res_ty.clone(),
-                    origin_local_frame: m0.origin_local_frame && is_fixed_size(&res_ty),
+                    origin_local_frame: m0.origin_local_frame && is_frame_value(&res_ty),
                     has_local_slice: m0.has_local_slice && type_contains_slice(&res_ty),
                     owns_fresh_arena_slice: false,
                     from_params: if type_contains_slice(&res_ty) {
@@ -1629,7 +1624,7 @@ fn check_single_op(
             *total_ops = CostExpr::add(total_ops.clone(), CostExpr::Const(1));
             Some(vec![ValMeta {
                 ty: elem.clone(),
-                origin_local_frame: m0.origin_local_frame && is_fixed_size(&elem),
+                origin_local_frame: m0.origin_local_frame && is_frame_value(&elem),
                 has_local_slice: m0.has_local_slice && type_contains_slice(&elem),
                 owns_fresh_arena_slice: false,
                 from_params: if type_contains_slice(&elem) {
@@ -1708,18 +1703,20 @@ fn check_single_op(
                         ));
                         *total_arena = CostExpr::add(total_arena.clone(), bytes);
                     }
-                    let mut from_params = if in_place {
+                    let elem_has_slice = type_contains_slice(&elem);
+                    let mut from_params = if in_place || elem_has_slice {
                         m0.from_params
                     } else {
                         vec![false; n_params]
                     };
-                    if type_contains_slice(&elem) {
+                    if elem_has_slice {
                         or_into(&mut from_params, &m2.from_params);
                     }
                     Some(vec![ValMeta {
                         ty: m0.ty.clone(),
                         origin_local_frame: false,
-                        has_local_slice: (in_place && m0.has_local_slice) || m2.has_local_slice,
+                        has_local_slice: ((in_place || elem_has_slice) && m0.has_local_slice)
+                            || m2.has_local_slice,
                         owns_fresh_arena_slice: true,
                         from_params,
                         valid_handle: None,
@@ -1774,7 +1771,7 @@ fn check_single_op(
             let has_local = if matches!(m0.ty, Type::Slice(_)) {
                 m0.has_local_slice
             } else {
-                m0.origin_local_frame
+                m0.origin_local_frame || m0.has_local_slice
             };
             *total_ops = CostExpr::add(total_ops.clone(), CostExpr::Const(1));
             Some(vec![ValMeta {
@@ -2551,15 +2548,16 @@ fn build_call_result_metas(
     for (slot, res_ty) in results.iter().enumerate() {
         let mut has_local = false;
         let mut from_params = vec![false; n_params];
-        let mut valid_handle = None;
+        let valid_handle = if let Type::Handle(hk) = res_ty {
+            let all_valid = callees
+                .iter()
+                .all(|c| c.result_handle_valid.get(slot).copied().flatten() == Some(*hk));
+            (all_valid && arg_metas.iter().any(|am| am.valid_handle == Some(*hk))).then_some(*hk)
+        } else {
+            None
+        };
 
         for c in callees {
-            if let Some(hk) = c.result_handle_valid.get(slot).copied().flatten() {
-                // Only valid if caller passed a valid matching handle in args.
-                if arg_metas.iter().any(|am| am.valid_handle == Some(hk)) {
-                    valid_handle = Some(hk);
-                }
-            }
             if type_contains_slice(res_ty) {
                 for (p, am) in arg_metas.iter().enumerate() {
                     let views_p = c
@@ -2579,7 +2577,7 @@ fn build_call_result_metas(
         }
         out.push(ValMeta {
             ty: res_ty.clone(),
-            origin_local_frame: is_fixed_size(res_ty),
+            origin_local_frame: is_frame_value(res_ty),
             has_local_slice: has_local,
             owns_fresh_arena_slice: false,
             from_params,

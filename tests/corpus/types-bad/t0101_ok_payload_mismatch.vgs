@@ -1,0 +1,12 @@
+// expect: VG-T0101
+module t0101_ok_payload_mismatch;
+
+NODE @bad {
+  SIGNATURE: (x: u16) -> (Result<u32, u8>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0: Result<u32, u8> = OK(x);
+    RETURN(%0);
+  }
+}

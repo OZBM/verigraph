@@ -1,0 +1,12 @@
+// expect: VG-T0113
+module t0113_cast_array_to_u32;
+
+NODE @bad {
+  SIGNATURE: (xs: Array<u8, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CAST.u32(xs);
+    RETURN(%0);
+  }
+}

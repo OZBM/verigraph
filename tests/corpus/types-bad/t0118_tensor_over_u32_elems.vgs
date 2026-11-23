@@ -1,0 +1,11 @@
+// expect: VG-T0118
+module t0118_tensor_over_u32_elems;
+
+NODE @bad {
+  SIGNATURE: (t: Tensor<u8, [65536, 65536]>) -> (Tensor<u8, [65536, 65536]>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(t);
+  }
+}

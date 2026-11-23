@@ -1,0 +1,12 @@
+// expect: VG-T0105
+module t0105_fadd_f16;
+
+NODE @bad {
+  SIGNATURE: (a: f16, b: f16) -> (f16);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FADD(a, b);
+    RETURN(%0);
+  }
+}

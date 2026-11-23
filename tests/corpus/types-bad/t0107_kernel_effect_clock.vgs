@@ -1,0 +1,21 @@
+// expect: VG-T0107
+module t0107_kernel_effect_clock;
+
+NODE @k {
+  SIGNATURE: (e: Eff, x: u32) -> (Eff, u32);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    RETURN(e, x);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (xs: Array<u32, 4>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SIMD_MAP(@k, xs);
+    RETURN(%0);
+  }
+}

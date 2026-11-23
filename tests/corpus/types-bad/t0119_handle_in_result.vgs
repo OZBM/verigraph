@@ -1,0 +1,12 @@
+// expect: VG-T0119
+module t0119_handle_in_result;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, Result<Clock, u32>);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0: Result<Clock, u32> = OK(c);
+    RETURN(e, %0);
+  }
+}

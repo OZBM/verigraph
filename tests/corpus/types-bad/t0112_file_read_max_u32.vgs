@@ -1,0 +1,12 @@
+// expect: VG-T0112
+module t0112_file_read_max_u32;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, fin: FileIn) -> (Eff, Result<Slice<u8>, u32>);
+  EFFECTS: [ARENA, FILE_READ];
+  CONTRACT { }
+  BODY {
+    %0, %1 = FILE_READ(e, fin, 16:u32);
+    RETURN(%0, %1);
+  }
+}

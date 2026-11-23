@@ -1,0 +1,11 @@
+// expect: VG-E0104
+module e0104_file_out_without_bit;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, fout: FileOut) -> (Eff, u32);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    RETURN(e, 0:u32);
+  }
+}

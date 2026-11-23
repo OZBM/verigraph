@@ -1,0 +1,12 @@
+// expect: VG-T0118
+module t0118_array_over_16mib;
+
+NODE @bad {
+  SIGNATURE: (xs: Array<u8, 16777217>) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = INDEX(xs, 0:u64);
+    RETURN(%0);
+  }
+}

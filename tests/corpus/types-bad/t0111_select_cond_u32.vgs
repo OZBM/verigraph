@@ -1,0 +1,12 @@
+// expect: VG-T0111
+module t0111_select_cond_u32;
+
+NODE @bad {
+  SIGNATURE: (c: u32, a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SELECT(c, a, b);
+    RETURN(%0);
+  }
+}

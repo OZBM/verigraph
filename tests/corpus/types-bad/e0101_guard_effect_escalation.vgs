@@ -1,0 +1,31 @@
+// expect: VG-E0101
+module e0101_guard_effect_escalation;
+
+NODE @noop {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT { }
+  BODY {
+    RETURN(e, 0:u64);
+  }
+}
+
+NODE @tick {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0, %1 = CLOCK_READ(e, c);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (cond: Bool, e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT { }
+  BODY {
+    %0, %1 = ASSERT_GUARD.branch(cond, @noop, e, c, else=@tick);
+    RETURN(%0, %1);
+  }
+}

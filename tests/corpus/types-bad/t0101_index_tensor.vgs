@@ -1,0 +1,12 @@
+// expect: VG-T0101
+module t0101_index_tensor;
+
+NODE @bad {
+  SIGNATURE: (t: Tensor<f32, [2, 2]>) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = INDEX(t, 0:u64);
+    RETURN(%0);
+  }
+}

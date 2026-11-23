@@ -1,0 +1,13 @@
+// expect: VG-E0102
+module e0102_eff_used_twice;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0, %1 = CLOCK_READ(e, c);
+    %2, %3 = CLOCK_READ(e, c);
+    RETURN(%2, %3);
+  }
+}

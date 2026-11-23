@@ -1,0 +1,11 @@
+// expect: VG-E0103
+module e0103_missing_eff_param;
+
+NODE @bad {
+  SIGNATURE: (x: u64) -> (u64);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    RETURN(x);
+  }
+}

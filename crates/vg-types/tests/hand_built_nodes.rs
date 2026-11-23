@@ -829,3 +829,53 @@ fn generate_static_count_limit_and_invariant_cycle() {
         "VG-S0007",
     );
 }
+
+#[test]
+fn nested_slice_escape_on_local_array_and_copying_update() {
+    // (a) CONCAT of two Array<Slice<u8>, 1> produces a local Array<Slice<u8>, 2> on the frame;
+    // returning a SLICE of that local array must be rejected with VG-T0120.
+    let src_a = r#"
+module local_array_of_slices;
+
+NODE @bad {
+  SIGNATURE: (a: Array<Slice<u8>, 1>, b: Array<Slice<u8>, 1>) -> (Slice<Slice<u8>>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CONCAT(a, b);
+    %1 = SLICE(%0, 0:u64, 2:u64);
+    RETURN(%1);
+  }
+}
+"#;
+    let diags_a = check_source(src_a).expect_err("SLICE of local Array<Slice<u8>, 2> must fail");
+    assert!(
+        diags_a.iter().any(|d| d.code == "VG-T0120"),
+        "expected VG-T0120, got {diags_a:#?}"
+    );
+
+    // (b) Copying UPDATE of Slice<Slice<u8>> preserves inner local slices from the source slice.
+    let src_b = r#"
+module copying_update_nested_slice;
+
+NODE @bad {
+  SIGNATURE: (xs: Slice<Slice<u8>>, ok: Slice<u8>, x: u32) -> (Slice<Slice<u8>>, u64);
+  EFFECTS: [ARENA];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    %1 = AS_BYTES(%0);
+    %2 = UPDATE(xs, 0:u64, %1);
+    %3 = UPDATE(%2, 0:u64, ok);
+    %4 = LEN(%2);
+    RETURN(%3, %4);
+  }
+}
+"#;
+    let diags_b = check_source(src_b)
+        .expect_err("copying UPDATE of Slice<Slice<u8>> holding a local slice must fail");
+    assert!(
+        diags_b.iter().any(|d| d.code == "VG-T0120"),
+        "expected VG-T0120, got {diags_b:#?}"
+    );
+}
