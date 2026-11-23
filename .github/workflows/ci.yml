@@ -39,6 +39,8 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
       - name: Confirm the host architecture
         run: rustc -vV | grep '^host:'
+      - name: Test the Antigravity extension
+        run: node --test editors/antigravity/extension/test/*.test.js
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked

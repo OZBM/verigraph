@@ -1,0 +1,91 @@
+{
+  "name": "VG-Sym",
+  "scopeName": "source.vgsym",
+  "fileTypes": ["vgs"],
+  "comment": "Follows tools/vgsym.lark, the executable grammar of docs/03-vg-sym.md.",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#literal" },
+    { "include": "#keyword" },
+    { "include": "#type" },
+    { "include": "#effect" },
+    { "include": "#label" },
+    { "include": "#port" },
+    { "include": "#op" },
+    { "include": "#number" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.vgsym",
+      "match": "//.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.vgsym",
+      "match": "\"(?:[^\"\\\\]|\\\\.)*\""
+    },
+    "literal": {
+      "comment": "A typed literal such as 1.0:f32 or -3:i8.",
+      "match": "(-?\\b[0-9]+(?:\\.[0-9]+(?:[eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)?)(:)(u8|u16|u32|u64|i8|i16|i32|i64|f16|bf16|f32|f64)\\b",
+      "captures": {
+        "1": { "name": "constant.numeric.vgsym" },
+        "2": { "name": "punctuation.separator.vgsym" },
+        "3": { "name": "storage.type.vgsym" }
+      }
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.vgsym",
+          "match": "\\b(module|NODE|SPEC|SIGNATURE|EFFECTS|CONTRACT|LEARNABLE|BODY|RETURN)\\b|@MESH_QUERY\\b"
+        },
+        {
+          "name": "keyword.other.contract.vgsym",
+          "match": "\\b(PRE|POST|INVARIANT|DECREASES|COST|BUDGET)\\b"
+        },
+        {
+          "name": "keyword.other.vgsym",
+          "match": "\\b(signature|effects|pre|post|intent|export|inline|in|loss|forall|result)\\b|\\b(spec|fold)(?=:)"
+        },
+        {
+          "name": "constant.language.vgsym",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "type": {
+      "name": "storage.type.vgsym",
+      "match": "\\b(u8|u16|u32|u64|i8|i16|i32|i64|f16|bf16|f32|f64|Bool|Eff|Array|Tensor|Slice|Tuple|Result|Arena|FileIn|FileOut|Socket|Clock|GpuQueue)\\b"
+    },
+    "effect": {
+      "name": "constant.other.effect.vgsym",
+      "match": "\\b(ARENA|CLOCK|FILE_READ|FILE_WRITE|NET_READ|NET_WRITE|GPU|NONDET|PARAM_UPDATE|TELEMETRY|HOST_CALL|SPAWN)\\b"
+    },
+    "label": {
+      "name": "entity.name.function.vgsym",
+      "match": "@[a-z_][A-Za-z0-9_]*"
+    },
+    "port": {
+      "name": "variable.other.port.vgsym",
+      "match": "%[0-9]+"
+    },
+    "op": {
+      "comment": "An opcode with its optional mode, such as ADD.checked or CAST.f32.",
+      "match": "\\b([A-Z][A-Z0-9_]*)(?:(\\.)([A-Za-z0-9_]+))?\\b",
+      "captures": {
+        "1": { "name": "support.function.op.vgsym" },
+        "2": { "name": "punctuation.accessor.vgsym" },
+        "3": { "name": "support.constant.mode.vgsym" }
+      }
+    },
+    "number": {
+      "name": "constant.numeric.vgsym",
+      "match": "\\b[0-9]+(?:\\.[0-9]+(?:[eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)?\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.vgsym",
+      "match": "==>|\\|\\||&&|==|!=|<=|>=|->|\\.\\.|[<>+\\-*/%!=|]"
+    }
+  }
+}

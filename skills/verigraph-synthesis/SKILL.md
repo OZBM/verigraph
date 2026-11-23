@@ -193,3 +193,10 @@ NODE @parse_percent [intent: "Accept a percentage from 0 to 100, or error code 1
 ## Tools
 
 `vg_check`, `vg_verify`, `vg_build`, `vg_run`, `vg_mesh_query`, `vg_mesh_publish`, `vg_lift`, `vg_explain`; inputs and outputs are in docs/07-generation-loop.md.
+
+What the v0 server (`vg mcp`) provides today; docs/guide/mcp.md has the exact inputs and results:
+
+- `vg_check`, `vg_verify`, `vg_run` and `vg_build`, each taking the module text as `source`.
+- `vg_check` renders no `contract_text` yet: show the user the CONTRACT block itself and get their confirmation of it. Its diagnostics carry `code`, `severity`, `node`, `op`, `line`, `col` and `message`, with no `fix`.
+- `vg_verify` reports COST obligations as `unknown` (not encoded yet), so a node with a COST clause never verifies fully.
+- `vg_mesh_query`, `vg_mesh_publish`, `vg_lift` and `vg_explain` arrive with phases P6 to P8. Until then, write every node yourself; a `@MESH_QUERY` resolves only through a pin in vg.lock.

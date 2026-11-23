@@ -1,0 +1,136 @@
+{
+  "name": "verigraph",
+  "displayName": "VeriGraph",
+  "description": "VG-Sym support for Antigravity IDE: highlighting, vg check diagnostics, and verify, run and build commands.",
+  "version": "0.1.0",
+  "publisher": "verigraph",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:vgsym"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "vgsym",
+        "aliases": [
+          "VG-Sym",
+          "VeriGraph"
+        ],
+        "extensions": [
+          ".vgs"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "vgsym",
+        "scopeName": "source.vgsym",
+        "path": "./syntaxes/vgsym.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "verigraph.check",
+        "title": "Check File",
+        "category": "VeriGraph",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "verigraph.verify",
+        "title": "Verify File",
+        "category": "VeriGraph",
+        "icon": "$(verified)"
+      },
+      {
+        "command": "verigraph.run",
+        "title": "Run Node…",
+        "category": "VeriGraph",
+        "icon": "$(play)"
+      },
+      {
+        "command": "verigraph.build",
+        "title": "Build Node…",
+        "category": "VeriGraph",
+        "icon": "$(package)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "verigraph.verify",
+          "when": "editorLangId == vgsym",
+          "group": "navigation@1"
+        },
+        {
+          "command": "verigraph.run",
+          "when": "editorLangId == vgsym",
+          "group": "navigation@2"
+        },
+        {
+          "command": "verigraph.build",
+          "when": "editorLangId == vgsym",
+          "group": "navigation@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "verigraph.check",
+          "when": "editorLangId == vgsym"
+        },
+        {
+          "command": "verigraph.verify",
+          "when": "editorLangId == vgsym"
+        },
+        {
+          "command": "verigraph.run",
+          "when": "editorLangId == vgsym"
+        },
+        {
+          "command": "verigraph.build",
+          "when": "editorLangId == vgsym"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "VeriGraph",
+      "properties": {
+        "verigraph.vgPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the vg executable. When empty: ~/.cargo/bin/vg if it exists, else vg on PATH."
+        },
+        "verigraph.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run vg check when a .vgs file is saved (files are also checked when opened)."
+        },
+        "verigraph.verifyOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run vg verify, which calls z3, instead of vg check when a .vgs file is saved."
+        },
+        "verigraph.verifyTimeoutMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1,
+          "description": "Solver timeout per obligation, in milliseconds (vg verify --timeout)."
+        },
+        "verigraph.buildOutputDir": {
+          "type": "string",
+          "default": "target/vg",
+          "description": "Where Build Node writes binaries, relative to the workspace folder."
+        }
+      }
+    }
+  }
+}

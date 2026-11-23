@@ -37,7 +37,8 @@ crates/   vg-core vg-store vg-types vg-interp vg-smt vg-codegen vg-rt
           vg-decode vg-telemetry vg-mesh vg-omnilift vg-cli
 runtime/  C sources of vg-rt
 tests/corpus/{good,bad,alpha}/   benchmarks/{kernels,synthesis}/   examples/
-skills/verigraph-synthesis/   docs/   docs/adr/   research/r-xx/   reports/
+skills/verigraph-synthesis/   docs/   docs/guide/   docs/adr/   research/r-xx/   reports/
+editors/antigravity/ (the Antigravity IDE extension, agent plugin and installer)
 Shared data types live only in vg-core.
 
 ## 4. Technology choices
@@ -72,7 +73,7 @@ W0 Integration lead: workspace, CI, vg-core interfaces, ROADMAP and PROGRESS upk
    gate reports, merges.
 W1 Core: vg-core, vg-store.        W2 Semantics: vg-types, vg-interp, vg-telemetry.
 W3 Verification: vg-smt.           W4 Backend: vg-codegen, vg-rt.
-W5 Agent loop: vg-cli (with vg mcp), vg-decode tiers 1-2, skills/verigraph-synthesis.
+W5 Agent loop: vg-cli (with vg mcp), vg-decode tiers 1-2, skills/verigraph-synthesis, editors/.
 W6 Ecosystem: vg-mesh.             W7 Lifting: vg-omnilift.
 W8 Research: one agent per active research track.
 Edit only the crates your workstream owns. To change another crate's interface, write a

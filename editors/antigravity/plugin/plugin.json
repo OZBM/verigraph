@@ -1,0 +1,22 @@
+{
+  "name": "verigraph",
+  "displayName": "VeriGraph",
+  "version": "0.1.0",
+  "description": "Write VeriGraph programs that the vg toolchain proves correct: check, verify, run and build VG-Sym nodes from the agent.",
+  "suggestedPrompts": [
+    "Write a VeriGraph node that adds two u32 with saturation, and prove it",
+    "Verify examples/soft_knee_draft.vgs and explain each counterexample",
+    "Repair the soft-knee limiter in examples/soft_knee_draft.vgs until vg_verify proves it",
+    "Build @soft_knee from examples/quickstart.vgs for aarch64-apple-darwin"
+  ],
+  "author": {
+    "name": "VeriGraph"
+  },
+  "keywords": [
+    "verigraph",
+    "vg-sym",
+    "formal verification",
+    "smt",
+    "compiler"
+  ]
+}
