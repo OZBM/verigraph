@@ -1,0 +1,41 @@
+module adler32_spec;
+
+NODE @adler32_step {
+  SIGNATURE: (acc: Tuple<u64, u64>, byte: u8) -> (Tuple<u64, u64>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: true;
+  }
+  BODY {
+    %0 = PROJ(acc, 0:u32);
+    %1 = PROJ(acc, 1:u32);
+    %2 = CAST.u64(byte);
+    %3 = ADD.wrap(%0, %2);
+    %4 = MOD.wrap(%3, 65521:u64);
+    %5 = ADD.wrap(%1, %4);
+    %6 = MOD.wrap(%5, 65521:u64);
+    %7 = TUPLE(%4, %6);
+    RETURN(%7);
+  }
+}
+
+SPEC @adler32 {
+  SIGNATURE: (adler: u64, buf: Slice<u8>) -> (u64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: (adler % 65536) < 65521 && ((adler / 65536) % 65536) < 65521;
+    INVARIANT @adler_inv(k, acc): true;
+  }
+  BODY {
+    %0 = AND(adler, 65535:u64);
+    %1 = SHR.wrap(adler, 16:u32);
+    %2 = AND(%1, 65535:u64);
+    %3 = TUPLE(%0, %2);
+    %4 = FOLD_BOUNDED(@adler32_step, buf, init=%3, invariant=@adler_inv);
+    %5 = PROJ(%4, 0:u32);
+    %6 = PROJ(%4, 1:u32);
+    %7 = SHL.wrap(%6, 16:u32);
+    %8 = OR(%7, %5);
+    RETURN(%8);
+  }
+}

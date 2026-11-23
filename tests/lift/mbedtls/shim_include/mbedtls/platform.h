@@ -1,0 +1,3 @@
+#ifndef VG_SHIM_MBEDTLS_PLATFORM_H
+#define VG_SHIM_MBEDTLS_PLATFORM_H
+#endif
