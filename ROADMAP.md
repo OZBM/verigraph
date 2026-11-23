@@ -154,13 +154,13 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P7.6 Benchmark on 100,000 synthetic nodes; tamper tests
 
 ### P8 · OmniLift lite — W7 — Nov 20 → Dec 4 — G8
-- [ ] P8.1 Ingest with fixed flags: clang and rustc to LLVM IR at -O1, unrolling and vectorization off
-- [ ] P8.2 Parser for the LLVM IR subset these functions need
-- [ ] P8.3 Mechanical lift: counted loops to FOLD_BOUNDED over the whole state; constant tables to array constants
-- [ ] P8.4 UB curing: strengthened PRE or ASSERT_GUARD returning Result::Err
-- [ ] P8.5 Round-trip check of the cured lift with Alive2 (bounded), through the PRE and Result adapter of docs/08, plus differential fuzzing
-- [ ] P8.6 zlib crc32 and adler32, one C SHA-256, the portable backend of Rust's sha2; one SHA-256 spec class
-- [ ] P8.7 `vg lift`
+- [x] P8.1 Ingest with fixed flags: clang and rustc to LLVM IR at -O1, unrolling and vectorization off
+- [x] P8.2 Parser for the LLVM IR subset these functions need
+- [x] P8.3 Mechanical lift: counted loops to FOLD_BOUNDED over the whole state; constant tables to array constants
+- [x] P8.4 UB curing: strengthened PRE or ASSERT_GUARD returning Result::Err
+- [x] P8.5 Round-trip check of the cured lift with Alive2 (bounded), through the PRE and Result adapter of docs/08, plus differential fuzzing
+- [x] P8.6 zlib crc32 and adler32, one C SHA-256, the portable backend of Rust's sha2; one SHA-256 spec class
+- [x] P8.7 `vg lift`
 
 ### M1 · MVP — all — Dec 4
 - [ ] M1.1 Run the hosted loop on examples/audio_limiter.prompt.md; keep the transcript
