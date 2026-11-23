@@ -116,7 +116,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [x] P3.5 Query cache keyed by query hash; proof records
 - [x] P3.6 Known-good and known-bad suites; mutation-testing harness
 - [x] P3.7 `vg verify`
-- [ ] P3.8 The soft-knee story: examples/soft_knee_draft.vgs is rejected with a reproducing counterexample; examples/audio_limiter.vgs verifies
+- [x] P3.8 The soft-knee story: examples/soft_knee_draft.vgs is rejected with a reproducing counterexample; examples/audio_limiter.vgs verifies
 
 ### P4 · Codegen and runtime — W4 — Nov 9 → Nov 27 — G4
 - [ ] P4.1 Proof erasure, residual guard count, guard map, checked entry points (ADR 0009), `--no-proof-facts` builds
