@@ -6,7 +6,6 @@ use vg_core::diag::{Diagnostic, Span};
 use vg_core::ir::{Builtin, Hash, Node, Op, Operand, Term};
 use vg_core::types::{Handle, Type};
 
-use crate::Options;
 use crate::analysis::{
     NodeAnalysis, OP_ASSERT_GUARD, OP_CALL_HASH, OP_FOLD_BOUNDED, OP_GENERATE, OP_SIMD_MAP,
     analyze_graph, is_const_bool,
@@ -22,6 +21,7 @@ use crate::layout::{
     CallGraph, align_of, collect_graph, docs13_fixed_byte_size, is_erased, is_scalar_abi,
     llvm_type, size_of, tensor_elem_count,
 };
+use crate::{Options, Target};
 
 pub struct EmittedModule {
     pub ir: String,
@@ -2844,8 +2844,14 @@ fn emit_main_runner(m: &mut ModBuilder, graph: &CallGraph) -> Result<(), Diagnos
     f.emit(format!("call void @vg_rt_destroy(ptr {ctx_ptr})"));
     f.ret(&format!("i32 {rc}"));
 
+    // WASI's start code calls a main that takes arguments under this name, as clang names it.
+    let name = if m.target == Target::Wasm32Wasi {
+        "__main_argc_argv"
+    } else {
+        "main"
+    };
     m.fns
-        .push(f.finish("define i32 @main(i32 %argc, ptr %argv)"));
+        .push(f.finish(&format!("define i32 @{name}(i32 %argc, ptr %argv)")));
     Ok(())
 }
 

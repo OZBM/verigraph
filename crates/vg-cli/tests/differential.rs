@@ -1,6 +1,10 @@
-//! P4.7 (docs/16, "Differential testing"): native builds agree with vg-interp, byte for byte, on
-//! generated programs. VG_DIFF_PROGRAMS sets the number of programs (default 40; the G4 gate runs
-//! 1,000) and VG_DIFF_INPUTS the inputs per program (default 20; the gate runs 100).
+//! P4.7 (docs/16, "Differential testing"): builds agree with vg-interp, byte for byte, on generated
+//! programs: aarch64-apple-darwin natively and wasm32-wasip1 under wasmtime (when its toolchain and
+//! wasmtime are installed), each with runtime checks and, for programs vg-smt proves, again with
+//! proof facts and no checks, where a disagreement means a wrong fact reached LLVM. The
+//! x86_64-unknown-linux-gnu build links here but runs only on a Linux host. VG_DIFF_PROGRAMS sets
+//! the number of programs (default 40; the G4 gate runs 1,000) and VG_DIFF_INPUTS the inputs per
+//! program (default 20; the gate runs 100).
 
 // The native builds are aarch64-apple-darwin executables: only an Apple Silicon host runs them.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -133,14 +137,27 @@ fn inputs(node: &Node, k: usize, rng: &mut Rng) -> Vec<Value> {
         .collect()
 }
 
-/// Runs a built binary with the sprint's stdin/stdout protocol: Ok(results) on exit 0, else the
-/// exit code.
-fn native(bin: &Path, node: &Node, args: &[Value]) -> Result<Vec<Value>, i32> {
+/// Runs a built binary, directly or under `runner` (wasmtime), with the stdin/stdout protocol:
+/// Ok(results) on exit 0, else the exit code.
+fn native(
+    runner: Option<&str>,
+    bin: &Path,
+    node: &Node,
+    args: &[Value],
+) -> Result<Vec<Value>, i32> {
     let mut stdin = Vec::new();
     for (v, t) in args.iter().zip(&node.params) {
         v.to_bytes(t, &mut stdin).expect("fixed-size input");
     }
-    let mut child = Command::new(bin)
+    let mut cmd = match runner {
+        Some(r) => {
+            let mut c = Command::new(r);
+            c.arg(bin);
+            c
+        }
+        None => Command::new(bin),
+    };
+    let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -164,14 +181,32 @@ fn native(bin: &Path, node: &Node, args: &[Value]) -> Result<Vec<Value>, i32> {
     }
 }
 
+fn has_wasmtime() -> bool {
+    Command::new("wasmtime")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// One build of a program: its target's name, artifact, runner, and whether it has runtime checks.
+struct Build {
+    name: String,
+    path: std::path::PathBuf,
+    runner: Option<&'static str>,
+    checks: bool,
+}
+
 #[test]
 fn native_builds_agree_with_vg_interp() {
     let programs = env_count("VG_DIFF_PROGRAMS", 40);
     let per = env_count("VG_DIFF_INPUTS", 20);
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("differential");
     std::fs::create_dir_all(&dir).unwrap();
+    let wasm = has_wasmtime();
+    let smt = vg_smt::Options::default();
     let mut rng = Rng(SEED);
-    let (mut runs, mut traps) = (0, 0);
+    let (mut runs, mut traps, mut proven) = (0, 0, 0);
+    let mut per_build: std::collections::BTreeMap<String, usize> = Default::default();
     for s in 0..programs as u64 {
         let class = if s % 2 == 0 { Class::A } else { Class::B };
         let src = program(SEED ^ s, class, 5 + (s as usize % 56));
@@ -187,14 +222,50 @@ fn native_builds_agree_with_vg_interp() {
             .find(|a| a.label == "root")
             .expect("@root")
             .node;
-        let opts = vg_codegen::Options {
-            target: vg_codegen::Target::Aarch64Darwin,
-            proof_facts: false,
-            runtime_checks: true,
+        let verified = nodes.iter().filter(|a| !a.node.spec).all(|a| {
+            vg_smt::verify(&a.node, &a.label, &callee, &smt)
+                .iter()
+                .all(|o| o.verdict == vg_smt::Verdict::Proven)
+        });
+        proven += usize::from(verified);
+        let mut builds = Vec::new();
+        let targets: &[(vg_codegen::Target, Option<&'static str>)] = if wasm {
+            &[
+                (vg_codegen::Target::Aarch64Darwin, None),
+                (vg_codegen::Target::Wasm32Wasi, Some("wasmtime")),
+            ]
+        } else {
+            &[(vg_codegen::Target::Aarch64Darwin, None)]
         };
-        let out = dir.join(format!("p{s}"));
-        let built = vg_codegen::build(root, &callee, &opts, &out)
-            .unwrap_or_else(|e| panic!("seed {s}: build failed: {e}\n{src}"));
+        for &(target, runner) in targets {
+            for facts in [false, true] {
+                if facts && !verified {
+                    continue;
+                }
+                let opts = vg_codegen::Options {
+                    target,
+                    proof_facts: facts,
+                    runtime_checks: !facts,
+                };
+                let name = format!(
+                    "{}{}",
+                    target.clang_target(),
+                    if facts { "+facts" } else { "" }
+                );
+                let out = dir.join(format!("p{s}-{name}"));
+                let built = vg_codegen::build(root, &callee, &opts, &out)
+                    .unwrap_or_else(|e| panic!("seed {s}: {name} build failed: {e}\n{src}"));
+                if !built.linked {
+                    continue;
+                }
+                builds.push(Build {
+                    name,
+                    path: built.artifact,
+                    runner,
+                    checks: !facts,
+                });
+            }
+        }
         let mut k = 0;
         let mut tried = 0;
         while k < per && tried < 20 * per {
@@ -207,16 +278,25 @@ fn native_builds_agree_with_vg_interp() {
             k += 1;
             let mut host = vg_interp::NoEffectsHost;
             let want = vg_interp::run(root, &args, &callee, &mut host);
-            let got = native(&built.artifact, root, &args);
-            match (&want, &got) {
-                (Ok(w), Ok(g)) => assert_eq!(w, g, "seed {s}, inputs {args:?}\n{src}"),
-                (Err(_), Err(4)) => traps += 1,
-                _ => panic!("seed {s}, inputs {args:?}: interp {want:?}, native {got:?}\n{src}"),
+            for b in &builds {
+                let got = native(b.runner, &b.path, root, &args);
+                match (&want, &got) {
+                    (Ok(w), Ok(g)) => {
+                        assert_eq!(w, g, "seed {s}, {}, inputs {args:?}\n{src}", b.name)
+                    }
+                    (Err(_), Err(4)) if b.checks => traps += 1,
+                    _ => panic!(
+                        "seed {s}, {}, inputs {args:?}: interp {want:?}, build {got:?}\n{src}",
+                        b.name
+                    ),
+                }
+                *per_build.entry(b.name.clone()).or_default() += 1;
+                runs += 1;
             }
-            runs += 1;
         }
     }
     eprintln!(
-        "{programs} programs, {runs} runs agree with vg-interp ({traps} traps on both sides)"
+        "{programs} programs ({proven} proven), {runs} runs agree with vg-interp ({traps} traps on both sides); runs per build: {per_build:?}"
     );
+    assert!(!per_build.is_empty(), "no build ran");
 }

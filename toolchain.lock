@@ -1,12 +1,21 @@
 # Tool versions for VeriGraph builds, checked by scripts/check-toolchain.sh.
 # Format: <tool> <version>. "none" means no acceptable version was installed on the
 # owner's machine when this file was written; pin it here once one is installed.
-# Recorded 2026-10-24 on macOS (Darwin 27.2.0, arm64) by W0.
+# Recorded 2026-10-24 on macOS (Darwin 27.2.0, arm64) by W0; updated 2026-11-23.
 rustc     1.90.0
-# Only Apple clang 17.0.0 (clang-1700.3.19.1) is installed; AGENTS.md section 4 requires clang 19 or newer.
-clang     none
+# Homebrew llvm, installed 2026-11-23: builds and links wasm32-wasip1 (AGENTS.md: clang 19 or newer).
+clang     23.1.6
+# Apple clang builds aarch64-apple-darwin and the x86_64-unknown-linux-gnu module objects.
+host-clang apple-21.0.0
 # z3 installed with Homebrew on 2026-11-23 (/opt/homebrew/bin/z3) by W0, for vg-smt.
 z3        5.4.1
+# cvc5 has no Homebrew formula; its release binary is not installed.
 cvc5      none
-bitwuzla  none
-wasi-sdk  none
+# Homebrew, 2026-11-23.
+bitwuzla  0.11.0
+# Homebrew wasi-libc and wasi-runtimes replace wasi-sdk: the same sysroot and builtins.
+wasi-libc 34
+wasi-runtimes 23.1.6
+# Homebrew, 2026-11-23: zig cc links x86_64-unknown-linux-gnu; wasmtime runs wasm32-wasip1 builds.
+zig       0.17.1
+wasmtime  51.0.0

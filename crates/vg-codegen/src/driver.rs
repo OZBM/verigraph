@@ -1,4 +1,7 @@
-//! Invokes Apple clang 21 to compile textual LLVM IR and link vg-rt where supported.
+//! Compiles textual LLVM IR with clang and links it with vg-rt: aarch64-apple-darwin with the host
+//! clang, wasm32-wasip1 with Homebrew LLVM's clang and the WASI sysroot of the wasi-libc and
+//! wasi-runtimes formulas, x86_64-unknown-linux-gnu with `zig cc`, which carries glibc. A target
+//! whose toolchain is missing gets an object file, reported as not linked.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -52,23 +55,121 @@ fn find_clang() -> Result<PathBuf, Diagnostic> {
     ))
 }
 
+/// A compiler driver: a program and the arguments that come before the rest (`zig cc`).
+#[derive(Clone, Debug)]
+struct Cc {
+    prog: PathBuf,
+    pre: Vec<String>,
+}
+
 fn run_clang(clang: &Path, args: &[String]) -> Result<(), Diagnostic> {
-    let out = Command::new(clang).args(args).output().map_err(|e| {
-        Diagnostic::error(
-            "VG-B0002",
-            Span::default(),
-            format!("failed to invoke clang: {e}"),
-        )
-    })?;
+    run_cc(
+        &Cc {
+            prog: clang.to_path_buf(),
+            pre: vec![],
+        },
+        args,
+    )
+}
+
+fn run_cc(cc: &Cc, args: &[String]) -> Result<(), Diagnostic> {
+    let out = Command::new(&cc.prog)
+        .args(&cc.pre)
+        .args(args)
+        .output()
+        .map_err(|e| {
+            Diagnostic::error(
+                "VG-B0002",
+                Span::default(),
+                format!("failed to invoke {}: {e}", cc.prog.display()),
+            )
+        })?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         return Err(Diagnostic::error(
             "VG-B0002",
             Span::default(),
-            format!("clang failed: {}", stderr.trim()),
+            format!("{} failed: {}", cc.prog.display(), stderr.trim()),
         ));
     }
     Ok(())
+}
+
+fn runs(prog: &str, arg: &str) -> bool {
+    Command::new(prog)
+        .arg(arg)
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// How one target is linked: the C compiler for vg-rt and the linker driver, each with its target
+/// arguments, and the libraries to link.
+struct Linker {
+    cc: Cc,
+    target_args: Vec<String>,
+    libs: Vec<String>,
+}
+
+/// The linker of a target, when its toolchain is installed.
+fn linker(target: Target, host_clang: &Path) -> Option<Linker> {
+    let clang_args = || {
+        let mut a = vec![format!("--target={}", target.clang_target())];
+        a.extend(target.clang_cpu_flags().iter().map(|f| f.to_string()));
+        a
+    };
+    match target {
+        Target::Aarch64Darwin => Some(Linker {
+            cc: Cc {
+                prog: host_clang.to_path_buf(),
+                pre: vec![],
+            },
+            target_args: clang_args(),
+            libs: vec![],
+        }),
+        Target::Wasm32Wasi => {
+            let clang = [
+                "/opt/homebrew/opt/llvm/bin/clang",
+                "/usr/local/opt/llvm/bin/clang",
+            ]
+            .into_iter()
+            .find(|c| runs(c, "--version"))?;
+            // The wasi-libc and wasi-runtimes formulas install this sysroot and the clang config
+            // that points wasm32-wasip1 at it and at its compiler-rt builtins.
+            let sysroot = Path::new(clang)
+                .ancestors()
+                .nth(4)?
+                .join("share/wasi-sysroot");
+            if !sysroot.join("lib/wasm32-wasip1/libc.a").is_file() {
+                return None;
+            }
+            Some(Linker {
+                cc: Cc {
+                    prog: PathBuf::from(clang),
+                    pre: vec![],
+                },
+                target_args: clang_args(),
+                libs: vec!["-lm".into()],
+            })
+        }
+        Target::X86_64Linux => {
+            let zig = ["/opt/homebrew/bin/zig", "/usr/local/bin/zig", "zig"]
+                .into_iter()
+                .find(|z| runs(z, "version"))?;
+            Some(Linker {
+                cc: Cc {
+                    prog: PathBuf::from(zig),
+                    pre: vec!["cc".into()],
+                },
+                // zig names the x86-64-v3 baseline (docs/06) its own way.
+                target_args: vec![
+                    "-target".into(),
+                    "x86_64-linux-gnu".into(),
+                    "-mcpu=x86_64_v3".into(),
+                ],
+                libs: vec!["-lm".into()],
+            })
+        }
+    }
 }
 
 pub fn build_artifact(
@@ -112,89 +213,84 @@ pub fn build_artifact(
         base_flags.push((*f).to_string());
     }
 
-    match opts.target {
-        Target::Aarch64Darwin => {
-            let mod_obj = tmp.0.join("module.o");
-            let mut mod_args = base_flags.clone();
-            mod_args.extend([
-                "-c".to_string(),
-                ll_path.display().to_string(),
-                "-o".to_string(),
-                mod_obj.display().to_string(),
-            ]);
-            run_clang(&clang, &mod_args)?;
+    let Some(linker) = linker(opts.target, &clang) else {
+        // No toolchain to link this target on this host: the object file alone.
+        let mut obj_args = base_flags;
+        obj_args.extend([
+            "-c".to_string(),
+            ll_path.display().to_string(),
+            "-o".to_string(),
+            out.display().to_string(),
+        ]);
+        run_clang(&clang, &obj_args)?;
+        return Ok(BuildReport {
+            artifact: out.to_path_buf(),
+            linked: false,
+            residual_guards: emitted.residual_guards,
+        });
+    };
 
-            let rt_h = tmp.0.join("vg_rt.h");
-            let rt_c = tmp.0.join("vg_rt.c");
-            let rt_obj = tmp.0.join("vg_rt.o");
-            std::fs::write(&rt_h, vg_rt::VG_RT_H).map_err(|e| {
-                Diagnostic::error(
-                    "VG-B0002",
-                    Span::default(),
-                    format!("failed to write vg_rt.h: {e}"),
-                )
-            })?;
-            std::fs::write(&rt_c, vg_rt::VG_RT_C).map_err(|e| {
-                Diagnostic::error(
-                    "VG-B0002",
-                    Span::default(),
-                    format!("failed to write vg_rt.c: {e}"),
-                )
-            })?;
-
-            let mut rt_args = vec![
-                "-O2".to_string(),
-                "-ffp-contract=off".to_string(),
-                "-std=c11".to_string(),
-                "-Wall".to_string(),
-                "-Wextra".to_string(),
-                format!("--target={}", opts.target.clang_target()),
-            ];
-            for f in opts.target.clang_cpu_flags() {
-                rt_args.push((*f).to_string());
-            }
-            rt_args.extend([
-                "-c".to_string(),
-                rt_c.display().to_string(),
-                "-o".to_string(),
-                rt_obj.display().to_string(),
-            ]);
-            run_clang(&clang, &rt_args)?;
-
-            let mut link_args = vec![format!("--target={}", opts.target.clang_target())];
-            for f in opts.target.clang_cpu_flags() {
-                link_args.push((*f).to_string());
-            }
-            link_args.extend([
-                mod_obj.display().to_string(),
-                rt_obj.display().to_string(),
-                "-o".to_string(),
-                out.display().to_string(),
-            ]);
-            run_clang(&clang, &link_args)?;
-
-            Ok(BuildReport {
-                artifact: out.to_path_buf(),
-                linked: true,
-                residual_guards: emitted.residual_guards,
-            })
+    let mod_obj = tmp.0.join("module.o");
+    let mut mod_args = base_flags;
+    mod_args.extend([
+        "-c".to_string(),
+        ll_path.display().to_string(),
+        "-o".to_string(),
+        mod_obj.display().to_string(),
+    ]);
+    let ir_cc = if opts.target == Target::Wasm32Wasi {
+        linker.cc.clone()
+    } else {
+        Cc {
+            prog: clang.clone(),
+            pre: vec![],
         }
-        Target::X86_64Linux | Target::Wasm32Wasi => {
-            // No Linux sysroot or wasi-sdk/wasm-ld installed on host: emit object file (`-c`).
-            let mut obj_args = base_flags;
-            obj_args.extend([
-                "-c".to_string(),
-                ll_path.display().to_string(),
-                "-o".to_string(),
-                out.display().to_string(),
-            ]);
-            run_clang(&clang, &obj_args)?;
+    };
+    run_cc(&ir_cc, &mod_args)?;
 
-            Ok(BuildReport {
-                artifact: out.to_path_buf(),
-                linked: false,
-                residual_guards: emitted.residual_guards,
-            })
-        }
+    let rt_c = tmp.0.join("vg_rt.c");
+    let rt_obj = tmp.0.join("vg_rt.o");
+    for (path, text) in [
+        (tmp.0.join("vg_rt.h"), vg_rt::VG_RT_H),
+        (rt_c.clone(), vg_rt::VG_RT_C),
+    ] {
+        std::fs::write(&path, text).map_err(|e| {
+            Diagnostic::error(
+                "VG-B0002",
+                Span::default(),
+                format!("failed to write {}: {e}", path.display()),
+            )
+        })?;
     }
+    let mut rt_args = vec![
+        "-O2".to_string(),
+        "-ffp-contract=off".to_string(),
+        "-std=c11".to_string(),
+        "-Wall".to_string(),
+        "-Wextra".to_string(),
+    ];
+    rt_args.extend(linker.target_args.iter().cloned());
+    rt_args.extend([
+        "-c".to_string(),
+        rt_c.display().to_string(),
+        "-o".to_string(),
+        rt_obj.display().to_string(),
+    ]);
+    run_cc(&linker.cc, &rt_args)?;
+
+    let mut link_args = linker.target_args.clone();
+    link_args.extend([
+        mod_obj.display().to_string(),
+        rt_obj.display().to_string(),
+        "-o".to_string(),
+        out.display().to_string(),
+    ]);
+    link_args.extend(linker.libs.iter().cloned());
+    run_cc(&linker.cc, &link_args)?;
+
+    Ok(BuildReport {
+        artifact: out.to_path_buf(),
+        linked: true,
+        residual_guards: emitted.residual_guards,
+    })
 }

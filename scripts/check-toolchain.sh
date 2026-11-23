@@ -7,8 +7,12 @@ cd "$(dirname "$0")/.."
 found() {
   case "$1" in
     rustc)    rustc --version 2>/dev/null | awk '{print $2}' ;;
-    # Apple clang reports its own version line; keep the full line so it is never mistaken for LLVM clang.
-    clang)    v=$(clang --version 2>/dev/null | head -n 1)
+    # The LLVM clang (19 or newer) that builds wasm32-wasip1; Homebrew's llvm formula by default.
+    clang)    v=$("${LLVM_CLANG:-/opt/homebrew/opt/llvm/bin/clang}" --version 2>/dev/null | head -n 1)
+              echo "$v" | sed -n 's/.*clang version \([0-9][0-9.]*\).*/\1/p' ;;
+    # The host clang that builds aarch64-apple-darwin and the x86_64 module objects. Apple clang
+    # reports its own version line; keep it apart from LLVM's.
+    host-clang) v=$(clang --version 2>/dev/null | head -n 1)
               case "$v" in
                 "Apple clang"*) echo "apple-$(echo "$v" | awk '{print $4}')" ;;
                 *clang\ version*) echo "$v" | sed -n 's/.*clang version \([0-9][0-9.]*\).*/\1/p' ;;
@@ -16,7 +20,11 @@ found() {
     z3)       z3 --version 2>/dev/null | awk '{print $3}' ;;
     cvc5)     cvc5 --version 2>/dev/null | head -n 1 | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p' ;;
     bitwuzla) bitwuzla --version 2>/dev/null | head -n 1 ;;
-    wasi-sdk) cat "${WASI_SDK_PATH:-/opt/wasi-sdk}/VERSION" 2>/dev/null | head -n 1 ;;
+    # The WASI sysroot and compiler-rt builtins (Homebrew's wasi-libc and wasi-runtimes).
+    wasi-libc|wasi-runtimes) d=$(readlink "/opt/homebrew/opt/$1" 2>/dev/null) && basename "$d" ;;
+    # zig cc links x86_64-unknown-linux-gnu against the glibc it carries.
+    zig)      zig version 2>/dev/null ;;
+    wasmtime) wasmtime --version 2>/dev/null | awk '{print $2}' ;;
   esac
 }
 

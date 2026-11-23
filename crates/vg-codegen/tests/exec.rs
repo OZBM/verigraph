@@ -1243,7 +1243,7 @@ fn quickstart_nodes_match_independent_oracles() {
 // ---------------------------------------------------------------------------------------------
 
 #[test]
-fn x86_64_and_wasm32_produce_object_files_reported_as_not_linked() {
+fn x86_64_and_wasm32_builds_have_their_format() {
     let q = Module::new(&corpus("examples/quickstart.vgs"));
     for (target, magic) in [
         (Target::X86_64Linux, &[0x7f, b'E', b'L', b'F'][..]),
@@ -1263,14 +1263,15 @@ fn x86_64_and_wasm32_produce_object_files_reported_as_not_linked() {
                     &out,
                 )
                 .unwrap_or_else(|d| panic!("{target:?} {label}: {d:?}"));
-            assert!(
-                !rep.linked,
-                "{target:?} has no sysroot, so it is not linked"
-            );
             assert_eq!(rep.artifact, out);
             let bytes = std::fs::read(&out).unwrap();
             assert!(bytes.starts_with(magic), "{target:?} {label}: bad magic");
             assert!(bytes.len() > 100);
+            if target == Target::X86_64Linux {
+                // e_type: 1 is a relocatable object, 2 or 3 an executable.
+                let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
+                assert_eq!(e_type == 1, !rep.linked, "{label}: e_type {e_type}");
+            }
             let _ = std::fs::remove_dir_all(&dir);
         }
     }
@@ -1416,7 +1417,7 @@ fn sweep(shard: usize, shards: usize) {
                 continue;
             }
             built += 1;
-            // Objects for the two targets without a sysroot must build too.
+            // The two other targets must build too: linked where their toolchain is installed.
             for target in [Target::X86_64Linux, Target::Wasm32Wasi] {
                 let rep = build(
                     n,
@@ -1429,7 +1430,7 @@ fn sweep(shard: usize, shards: usize) {
                     &dir.join("obj"),
                 )
                 .unwrap_or_else(|d| panic!("{name} {target:?}: {d:?}"));
-                assert!(!rep.linked);
+                assert!(rep.artifact.is_file(), "{name} {target:?}: no artifact");
             }
             let holder: Vec<Exe> = exes
                 .iter()
