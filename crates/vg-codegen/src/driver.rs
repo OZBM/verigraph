@@ -214,10 +214,14 @@ pub fn build_artifact(
         )
     })?;
 
+    // The build directory's name changes on every build; zig cc records it in debug info, so map
+    // it to "." or two builds of one node differ (docs/02: same input, same bytes).
+    let prefix_map = format!("-ffile-prefix-map={}=.", tmp.0.display());
     let mut base_flags = vec![
         "-O2".to_string(),
         "-ffp-contract=off".to_string(),
         "-Wno-override-module".to_string(),
+        prefix_map.clone(),
         format!("--target={}", opts.target.clang_target()),
     ];
     for f in opts.target.clang_cpu_flags() {
@@ -283,6 +287,7 @@ pub fn build_artifact(
         "-std=c11".to_string(),
         "-Wall".to_string(),
         "-Wextra".to_string(),
+        prefix_map,
     ];
     rt_args.extend(linker.target_args.iter().cloned());
     rt_args.extend([

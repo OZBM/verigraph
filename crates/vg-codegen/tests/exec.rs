@@ -1277,6 +1277,34 @@ fn x86_64_and_wasm32_builds_have_their_format() {
     }
 }
 
+/// Two builds of one node give the same bytes on every target (AGENTS.md: determinism); zig once
+/// recorded each build's temporary directory in the x86_64 executable.
+#[test]
+fn builds_are_byte_for_byte_reproducible() {
+    let q = Module::new(&corpus("examples/quickstart.vgs"));
+    let mut targets = vec![Target::X86_64Linux, Target::Wasm32Wasi];
+    if cfg!(target_os = "macos") {
+        targets.push(Target::Aarch64Darwin);
+    }
+    for target in targets {
+        let opts = Options {
+            target,
+            proof_facts: true,
+            runtime_checks: false,
+        };
+        let build = || {
+            let dir = scratch_dir();
+            let out = dir.join("prog");
+            q.build_to("soft_knee", &opts, &out)
+                .unwrap_or_else(|d| panic!("{target:?}: {d:?}"));
+            let bytes = std::fs::read(&out).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            bytes
+        };
+        assert!(build() == build(), "{target:?}: two builds differ");
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Corpus sweep: every effect-free node of tests/corpus/alpha
 // ---------------------------------------------------------------------------------------------
