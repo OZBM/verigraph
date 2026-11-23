@@ -26,3 +26,7 @@ serde_json = "1"
 rmcp = { version = "3.11", default-features = false, features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["rt"] }
 blake3 = "1"
+
+[dev-dependencies]
+# The differential tests draw programs from the generator (docs/16).
+vg-core = { path = "../vg-core", features = ["gen"] }
