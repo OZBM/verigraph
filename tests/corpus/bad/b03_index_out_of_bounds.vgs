@@ -1,0 +1,14 @@
+// expect: reject @f/%0/INDEX.in_bounds
+module b03_index_out_of_bounds;
+
+NODE @f {
+  SIGNATURE: (xs: Array<u32, 4>, i: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i <= 4;
+  }
+  BODY {
+    %0 = INDEX(xs, i);
+    RETURN(%0);
+  }
+}

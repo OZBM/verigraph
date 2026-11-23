@@ -1,0 +1,15 @@
+// expect: reject @f/POST.0
+module b09_float_post_nan;
+
+NODE @f {
+  SIGNATURE: (x: f32, y: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && is_finite(y);
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FDIV(x, y);
+    RETURN(%0);
+  }
+}

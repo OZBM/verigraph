@@ -1,0 +1,15 @@
+// expect: verify
+module g01_add_bounded;
+
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 255;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u8);
+    RETURN(%0);
+  }
+}

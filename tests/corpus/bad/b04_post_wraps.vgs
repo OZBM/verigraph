@@ -1,0 +1,14 @@
+// expect: reject @f/POST.0
+module b04_post_wraps;
+
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result > x;
+  }
+  BODY {
+    %0 = ADD.wrap(x, 1:u8);
+    RETURN(%0);
+  }
+}

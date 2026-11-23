@@ -1,0 +1,13 @@
+// expect: reject @f/%0/DIV.nonzero
+module b02_div_by_zero;
+
+NODE @f {
+  SIGNATURE: (x: u32, d: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = DIV.checked(x, d);
+    RETURN(%0);
+  }
+}

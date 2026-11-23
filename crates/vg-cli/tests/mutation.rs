@@ -7,7 +7,7 @@ use std::path::Path;
 
 use vg_core::canon::canonicalize;
 use vg_core::generate::Rng;
-use vg_core::ir::{Const, Hash, Node, Operand};
+use vg_core::ir::{Const, Hash, Node};
 use vg_core::types::Type;
 use vg_core::value::Value;
 use vg_core::{asm_local, opcode};

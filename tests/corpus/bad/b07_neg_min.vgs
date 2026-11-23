@@ -1,0 +1,13 @@
+// expect: reject @f/%0/NEG.no_overflow
+module b07_neg_min;
+
+NODE @f {
+  SIGNATURE: (x: i8) -> (i8);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = NEG.checked(x);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,26 @@
+// expect: reject @f/%0/MAP.pre.0
+module b12_map_pre;
+
+NODE @inc {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 100;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @f {
+  SIGNATURE: (xs: Array<u32, 3>) -> (Array<u32, 3>);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = SIMD_MAP(@inc, xs);
+    RETURN(%0);
+  }
+}

@@ -5,6 +5,7 @@ pub mod model;
 pub mod sexpr;
 pub mod solver;
 pub mod sort;
+mod verify;
 
 use std::path::PathBuf;
 
@@ -75,11 +76,12 @@ pub fn find_z3() -> PathBuf {
     PathBuf::from("z3")
 }
 
+/// Every obligation of `node` (docs/05, docs/14), each with its verdict; see verify.rs.
 pub fn verify(
-    _node: &Node,
-    _label: &str,
-    _callee: &dyn Fn(&Hash) -> Option<Node>,
-    _opts: &Options,
+    node: &Node,
+    label: &str,
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+    opts: &Options,
 ) -> Vec<Outcome> {
-    Vec::new()
+    verify::verify(node, label, callee, opts)
 }

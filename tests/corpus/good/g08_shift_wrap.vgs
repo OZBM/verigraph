@@ -1,0 +1,13 @@
+// expect: verify
+module g08_shift_wrap;
+
+NODE @f {
+  SIGNATURE: (x: u32, s: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = SHL.wrap(x, s);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,15 @@
+// expect: verify
+module g02_div_nonzero;
+
+NODE @f {
+  SIGNATURE: (x: u32, d: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d != 0;
+    POST: result <= x;
+  }
+  BODY {
+    %0 = DIV.checked(x, d);
+    RETURN(%0);
+  }
+}

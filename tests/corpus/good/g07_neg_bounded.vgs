@@ -1,0 +1,15 @@
+// expect: verify
+module g07_neg_bounded;
+
+NODE @f {
+  SIGNATURE: (x: i8) -> (i8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x > -128;
+    POST: result == -x;
+  }
+  BODY {
+    %0 = NEG.checked(x);
+    RETURN(%0);
+  }
+}

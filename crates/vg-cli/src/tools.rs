@@ -50,6 +50,26 @@ impl Loaded {
         a.zip(d)
             .ok_or_else(|| format!("no node @{label} in this module"))
     }
+
+    /// The node and every node it calls, transitively, each once, in module order.
+    fn closure(&self, root: &Assembled) -> Vec<&Assembled> {
+        let mut want = vec![root.hashes.node];
+        let mut k = 0;
+        while k < want.len() {
+            if let Some(a) = self.nodes.iter().find(|a| a.hashes.node == want[k]) {
+                for c in &a.node.calls {
+                    if !want.contains(c) {
+                        want.push(*c);
+                    }
+                }
+            }
+            k += 1;
+        }
+        self.nodes
+            .iter()
+            .filter(|a| want.contains(&a.hashes.node))
+            .collect()
+    }
 }
 
 pub fn diag(d: &Diagnostic) -> J {
@@ -93,13 +113,123 @@ pub fn check(src: &str, mesh: MeshLookup) -> J {
     json!({ "ok": ok, "nodes": nodes, "diagnostics": diags })
 }
 
-// shortcut: vg-smt and vg-codegen are not merged yet; verify and build answer "not available" until
-// they land (the full versions are on branch w5-cli).
-const PENDING: &str = "not available yet: vg-smt is not merged";
+fn verdict_name(v: &vg_smt::Verdict) -> &'static str {
+    match v {
+        vg_smt::Verdict::Proven => "proven",
+        vg_smt::Verdict::Counterexample => "counterexample",
+        vg_smt::Verdict::ContractGap => "contract_gap",
+        vg_smt::Verdict::Vacuous => "vacuous",
+        vg_smt::Verdict::Unknown => "unknown",
+        vg_smt::Verdict::Error => "error",
+    }
+}
+
+/// Concrete replay of a counterexample with the real callees (ADR 0006): Some(true) when the inputs
+/// satisfy PRE and the node traps or breaks its POST, Some(false) when it runs correctly (a contract
+/// gap), None when it cannot be replayed here (effects) or the inputs break PRE (a verifier bug).
+fn replay(a: &Assembled, inputs: &[Value], m: &Loaded) -> Option<bool> {
+    if !a.node.effects.is_pure() {
+        return None;
+    }
+    let callee = m.callee();
+    let pre = vg_interp::holds(&a.node, vg_interp::Clause::Pre, inputs, &[], &callee).ok()?;
+    if !pre {
+        return None;
+    }
+    let mut host = vg_interp::NoEffectsHost;
+    Some(match vg_interp::run(&a.node, inputs, &callee, &mut host) {
+        Err(_) => true,
+        Ok(results) => {
+            vg_interp::holds(&a.node, vg_interp::Clause::Post, inputs, &results, &callee)
+                != Ok(true)
+        }
+    })
+}
+
+fn named_inputs(a: &Assembled, d: &NodeDef, inputs: &[Value]) -> J {
+    let names = d
+        .params
+        .iter()
+        .map(|p| p.name.text.clone())
+        .chain(d.learnable.iter().flatten().map(|l| l.name.text.clone()));
+    let mut o = Map::new();
+    for ((name, v), i) in names.zip(inputs).zip(0u32..) {
+        if let Some(t) = a.node.input_type(i) {
+            o.insert(name, json::out(v, t));
+        }
+    }
+    J::Object(o)
+}
+
+/// Verifies the nodes `which` selects; returns (all proven, docs/15 VerifyOut).
+fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options) -> (bool, J) {
+    let callee = m.callee();
+    let (mut nodes, mut results, mut all) = (vec![], vec![], true);
+    for a in which {
+        if a.node.spec {
+            continue;
+        }
+        let Ok((_, d)) = m.find(&a.label) else {
+            continue;
+        };
+        let mut verified = true;
+        for o in vg_smt::verify(&a.node, &a.label, &callee, opts) {
+            let mut verdict = verdict_name(&o.verdict);
+            let mut r =
+                json!({ "id": o.id, "verdict": verdict, "solver": o.solver, "message": o.message });
+            if let Some(code) = o.code {
+                r["code"] = json!(code);
+            }
+            if let Some(inputs) = &o.inputs {
+                let reproduced = match replay(a, inputs, m) {
+                    Some(true) => "concrete",
+                    Some(false) => {
+                        if verdict == "counterexample" {
+                            verdict = "contract_gap";
+                            r["verdict"] = json!(verdict);
+                            r["code"] = json!("VG-V0002");
+                        }
+                        "no"
+                    }
+                    None => "no",
+                };
+                r["report"] = json!({
+                    "node": format!("@{}", a.label),
+                    "obligation": o.id,
+                    "inputs": named_inputs(a, d, inputs),
+                    "reproduced": reproduced,
+                });
+            }
+            verified &= verdict == "proven";
+            results.push(r);
+        }
+        all &= verified;
+        nodes.push(json!({ "label": format!("@{}", a.label), "verified": verified }));
+    }
+    results.sort_by(|x, y| x["id"].as_str().cmp(&y["id"].as_str()));
+    (
+        all,
+        json!({ "ok": all, "nodes": nodes, "results": results }),
+    )
+}
+
+pub fn solver_options(timeout_ms: u64) -> vg_smt::Options {
+    let z3 = ["/opt/homebrew/bin/z3", "/usr/local/bin/z3", "/usr/bin/z3"]
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .find(|p| p.exists())
+        .unwrap_or_else(|| "z3".into());
+    vg_smt::Options { z3, timeout_ms }
+}
 
 /// vg_verify: prove every obligation of every node in the module.
-pub fn verify(_src: &str, _mesh: MeshLookup, _timeout_ms: u64) -> J {
-    json!({ "ok": false, "error": PENDING })
+pub fn verify(src: &str, mesh: MeshLookup, timeout_ms: u64) -> J {
+    let m = match load(src, mesh) {
+        Ok(m) => m,
+        Err(d) => return failed(&d),
+    };
+    let all: Vec<&Assembled> = m.nodes.iter().collect();
+    verify_nodes(&m, &all, &solver_options(timeout_ms)).1
 }
 
 /// vg_run: run a node in vg-interp. `inputs` maps parameter (and LEARNABLE) names to docs/15 values;
@@ -164,8 +294,9 @@ fn target(name: &str) -> Option<vg_codegen::Target> {
     })
 }
 
-/// vg_build: compile a root node for each target. Until vg-smt lands, only `unverified` builds are
-/// possible: no proof facts, and a runtime check on every partial op (exit code 4 when one fails).
+/// vg_build: verify the root and everything it calls, then compile it for each target. With
+/// `unverified`, a node that is not fully proven still builds, with a runtime check on every partial
+/// op (exit code 4 when one fails) and no proof facts.
 pub fn build(
     src: &str,
     mesh: MeshLookup,
@@ -174,12 +305,6 @@ pub fn build(
     out_dir: &Path,
     unverified: bool,
 ) -> J {
-    if !unverified {
-        return json!({
-            "ok": false,
-            "error": "vg verify is not available yet, so only --unverified builds are possible",
-        });
-    }
     let m = match load(src, mesh) {
         Ok(m) => m,
         Err(d) => return failed(&d),
@@ -188,6 +313,14 @@ pub fn build(
         Ok((a, _)) => a,
         Err(e) => return json!({ "ok": false, "error": e }),
     };
+    let (proven, report) = verify_nodes(&m, &m.closure(a), &solver_options(10_000));
+    if !proven && !unverified {
+        return json!({
+            "ok": false,
+            "error": "not every obligation is proven; fix them or build with --unverified",
+            "verify": report,
+        });
+    }
     let callee = m.callee();
     let mut artifacts = vec![];
     for t in targets {
@@ -196,8 +329,8 @@ pub fn build(
         };
         let opts = vg_codegen::Options {
             target,
-            proof_facts: false,
-            runtime_checks: true,
+            proof_facts: proven,
+            runtime_checks: !proven,
         };
         let out = out_dir.join(format!("{}-{t}", a.label));
         match vg_codegen::build(&a.node, &callee, &opts, &out) {
@@ -215,5 +348,5 @@ pub fn build(
             Err(d) => return json!({ "ok": false, "diagnostics": [diag(&d)] }),
         }
     }
-    json!({ "ok": true, "verified": false, "artifacts": artifacts })
+    json!({ "ok": true, "verified": proven, "artifacts": artifacts })
 }

@@ -1,0 +1,14 @@
+// expect: verify
+module g04_post_sat;
+
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= x;
+  }
+  BODY {
+    %0 = ADD.sat(x, 1:u8);
+    RETURN(%0);
+  }
+}

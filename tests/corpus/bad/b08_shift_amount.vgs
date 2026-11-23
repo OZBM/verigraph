@@ -1,0 +1,13 @@
+// expect: reject @f/%0/SHL.amount
+module b08_shift_amount;
+
+NODE @f {
+  SIGNATURE: (x: u32, s: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = SHL.checked(x, s);
+    RETURN(%0);
+  }
+}

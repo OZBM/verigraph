@@ -1,0 +1,28 @@
+// expect: verify
+module g10_call_pre_met;
+
+NODE @g {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 10;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @f {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 5;
+    POST: result < 6;
+  }
+  BODY {
+    %0 = CALL_HASH(@g, x);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,15 @@
+// expect: verify
+module g05_fclamp_constant;
+
+NODE @f {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FCLAMP(x, -1.0:f32, 1.0:f32);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,13 @@
+// expect: reject @f/%0/FCLAMP.bounds
+module b05_fclamp_bounds;
+
+NODE @f {
+  SIGNATURE: (x: f32, lo: f32, hi: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = FCLAMP(x, lo, hi);
+    RETURN(%0);
+  }
+}

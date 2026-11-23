@@ -11,9 +11,8 @@ use vg_core::types::Type;
 use crate::solver::SmtQuery;
 use crate::sort::{
     SymVal, bv_lit_i128, bv_lit_u128, canonical_nan_bv, const_to_symval, declare_symval,
-    flatten_type, fp_bit_width, fp_format, fp_lit, int_to_fp_bits, scalar_const_smt,
-    scalar_same_smt, smt_fcopysign, smt_float_fits_int, smt_fmax, smt_fmin, symval_atoms,
-    symval_from_atoms, symval_ite, symval_select, symval_store,
+    flatten_type, fp_bit_width, fp_format, scalar_same_smt, smt_fcopysign, smt_float_fits_int,
+    smt_fmax, smt_fmin, symval_atoms, symval_from_atoms, symval_ite, symval_select, symval_store,
 };
 
 /// Symbolic integer/arena/heap resource expressions used when encoding `COST` clauses.
@@ -189,11 +188,7 @@ pub enum CollLink {
         else_id: u32,
     },
     /// `AS_BYTES(src)` where each `src` element is `elem_bytes > 1`: byte index `i` maps to `i / K`.
-    AsBytes {
-        dst: u32,
-        src: u32,
-        elem_bytes: u64,
-    },
+    AsBytes { dst: u32, src: u32, elem_bytes: u64 },
 }
 
 #[derive(Clone, Debug)]
@@ -270,6 +265,8 @@ pub struct SavedEnv {
 }
 
 #[derive(Clone, Debug)]
+// Short-lived queue entries; boxing the large variant would only add indirection.
+#[allow(clippy::large_enum_variant)]
 pub enum PendingForall {
     Term {
         ranges: Vec<(Term, Term)>,
@@ -313,6 +310,8 @@ pub struct QueryBuilder {
     pub instantiated_schemas: BTreeSet<(usize, Vec<String>)>,
     /// When set, the query cannot be proven (e.g., missing callee/spec or unprovable resource).
     pub unresolved_error: Option<String>,
+    /// `(tag, domain)` of every partial op evaluated in DomainMode::Strict since the last clear.
+    pub domains: Vec<(String, String)>,
 }
 
 impl QueryBuilder {
@@ -440,10 +439,7 @@ impl QueryBuilder {
         let snapshot = self.pending_foralls.clone();
         for (idx, pf) in snapshot.iter().enumerate() {
             let PendingForall::Term {
-                ranges,
-                body,
-                env,
-                ..
+                ranges, body, env, ..
             } = pf
             else {
                 continue;
@@ -453,10 +449,9 @@ impl QueryBuilder {
             let mut const_bounds: Vec<(i128, i128)> = Vec::new();
             let mut all_const = true;
             for (lo, hi) in ranges {
-                if let (Some(lv), Some(hv)) = (
-                    eval_const_int(lo, &env.node),
-                    eval_const_int(hi, &env.node),
-                ) {
+                if let (Some(lv), Some(hv)) =
+                    (eval_const_int(lo, &env.node), eval_const_int(hi, &env.node))
+                {
                     const_bounds.push((lv, hv));
                 } else {
                     all_const = false;
@@ -575,12 +570,7 @@ impl QueryBuilder {
                         }
                     }
                 }
-                CollLink::Concat {
-                    dst,
-                    a,
-                    b,
-                    len_a,
-                } => {
+                CollLink::Concat { dst, a, b, len_a } => {
                     let d_set = self.index_pool.get(&dst).cloned().unwrap_or_default();
                     for item in d_set {
                         let ia = IndexAccess {
@@ -655,11 +645,9 @@ impl QueryBuilder {
                     for w in watches {
                         let accesses = self.index_pool.get(&w.coll_id).cloned().unwrap_or_default();
                         for acc in accesses {
-                            let Some(bound_vals) = match_watch_to_range_vars(
-                                ranges.len(),
-                                &w.dim_patterns,
-                                &acc,
-                            ) else {
+                            let Some(bound_vals) =
+                                match_watch_to_range_vars(ranges.len(), &w.dim_patterns, &acc)
+                            else {
                                 continue;
                             };
                             let key: Vec<String> =
@@ -681,7 +669,8 @@ impl QueryBuilder {
                                 let ls = sext(&le, lw, cw);
                                 let hs = sext(&he, hw, cw);
                                 let vs = sext(ve, *vw, cw);
-                                range_conds.push(format!("(and (bvsle {ls} {vs}) (bvslt {vs} {hs}))"));
+                                range_conds
+                                    .push(format!("(and (bvsle {ls} {vs}) (bvslt {vs} {hs}))"));
                                 sub_env.bound.push(FVal::Int {
                                     expr: ve.clone(),
                                     width: *vw,
@@ -723,10 +712,7 @@ impl QueryBuilder {
                         }
                     }
                     for flat in idxs {
-                        if !self
-                            .instantiated_foralls
-                            .insert((idx, vec![flat.clone()]))
-                        {
+                        if !self.instantiated_foralls.insert((idx, vec![flat.clone()])) {
                             continue;
                         }
                         let l_elem = symval_select(left, &flat, &mut self.next_coll_id);
@@ -750,9 +736,8 @@ impl QueryBuilder {
                             &mut dummy_env,
                             self,
                         );
-                        self.assertions.push(format!(
-                            "(=> (bvult {flat} {len_bv64}) {elem_eq})"
-                        ));
+                        self.assertions
+                            .push(format!("(=> (bvult {flat} {len_bv64}) {elem_eq})"));
                         changed = true;
                     }
                 }
@@ -820,8 +805,14 @@ impl QueryBuilder {
                         }
                         if let Some(res_vec) = inlined
                             && let Some(out0) = res_vec.first()
-                            && let Some(eq) =
-                                try_scalar_or_val_same(&out_elem_ty, &dst_elem, out0, kernel, callee, self)
+                            && let Some(eq) = try_scalar_or_val_same(
+                                &out_elem_ty,
+                                &dst_elem,
+                                out0,
+                                kernel,
+                                callee,
+                                self,
+                            )
                         {
                             conjs.push(eq);
                         }
@@ -893,8 +884,14 @@ impl QueryBuilder {
                         }
                         if let Some(res_vec) = inlined
                             && let Some(out0) = res_vec.first()
-                            && let Some(eq) =
-                                try_scalar_or_val_same(&out_elem_ty, &dst_elem, out0, kernel, callee, self)
+                            && let Some(eq) = try_scalar_or_val_same(
+                                &out_elem_ty,
+                                &dst_elem,
+                                out0,
+                                kernel,
+                                callee,
+                                self,
+                            )
                         {
                             conjs.push(eq);
                         }
@@ -1134,10 +1131,18 @@ fn is_smt_ident_byte(b: u8) -> bool {
 
 fn coll_in_bounds(sv: &SymVal, flat: &str) -> Option<String> {
     match sv {
-        SymVal::Array { len, .. } => Some(format!("(bvult {flat} {})", bv_lit_u128(u128::from(*len), 64))),
+        SymVal::Array { len, .. } => Some(format!(
+            "(bvult {flat} {})",
+            bv_lit_u128(u128::from(*len), 64)
+        )),
         SymVal::Tensor { dims, .. } => {
-            let total: u64 = dims.iter().fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
-            Some(format!("(bvult {flat} {})", bv_lit_u128(u128::from(total), 64)))
+            let total: u64 = dims
+                .iter()
+                .fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
+            Some(format!(
+                "(bvult {flat} {})",
+                bv_lit_u128(u128::from(total), 64)
+            ))
         }
         SymVal::Slice { len, .. } => Some(format!("(bvult {flat} {len})")),
         _ => None,
@@ -1484,10 +1489,7 @@ fn eval_term_depth(
                     (FVal::Float { expr: fa, .. }, FVal::Float { expr: fb, .. }) => {
                         format!("(fp.eq {fa} {fb})")
                     }
-                    (
-                        FVal::Val { val: sa, ty },
-                        FVal::Val { val: sb, .. },
-                    ) => {
+                    (FVal::Val { val: sa, ty }, FVal::Val { val: sb, .. }) => {
                         if *op == Bin::Eq {
                             encode_val_eq_assume(ty, sa, sb, false, env, qb)
                         } else {
@@ -1602,7 +1604,8 @@ fn eval_index_access(
             qb.register_coll_id(&selected);
             if **elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
                 let oob = qb.fresh_symval("idx_oob", elem_ty);
-                let guarded = symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
+                let guarded =
+                    symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
                 qb.register_coll_id(&guarded);
                 symval_to_fval(&guarded, elem_ty)
             } else {
@@ -1627,7 +1630,8 @@ fn eval_index_access(
             qb.register_coll_id(&selected);
             if **elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
                 let oob = qb.fresh_symval("idx_oob", elem_ty);
-                let guarded = symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
+                let guarded =
+                    symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
                 qb.register_coll_id(&guarded);
                 symval_to_fval(&guarded, elem_ty)
             } else {
@@ -1651,7 +1655,10 @@ fn eval_index_access(
                 if k == 0 {
                     flat = i_64;
                 } else {
-                    flat = format!("(bvadd (bvmul {flat} {}) {i_64})", bv_lit_u128(u128::from(d), 64));
+                    flat = format!(
+                        "(bvadd (bvmul {flat} {}) {i_64})",
+                        bv_lit_u128(u128::from(d), 64)
+                    );
                 }
             }
             let in_bounds = if in_bounds_parts.len() == 1 {
@@ -1664,7 +1671,8 @@ fn eval_index_access(
             qb.register_coll_id(&selected);
             if **elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
                 let oob = qb.fresh_symval("idx_oob", elem_ty);
-                let guarded = symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
+                let guarded =
+                    symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
                 qb.register_coll_id(&guarded);
                 symval_to_fval(&guarded, elem_ty)
             } else {
@@ -1713,7 +1721,9 @@ fn eval_builtin(
             let FVal::Float { expr, .. } = eval_term_depth(&args[0], env, qb, unfold_depth) else {
                 panic!("is_finite expects float");
             };
-            FVal::Bool(format!("(and (not (fp.isNaN {expr})) (not (fp.isInfinite {expr})))"))
+            FVal::Bool(format!(
+                "(and (not (fp.isNaN {expr})) (not (fp.isInfinite {expr})))"
+            ))
         }
         Builtin::IsNan => {
             let FVal::Float { expr, .. } = eval_term_depth(&args[0], env, qb, unfold_depth) else {
@@ -1778,15 +1788,28 @@ fn eval_builtin(
             let v = eval_term_depth(&args[0], env, qb, unfold_depth);
             let (sv, ty) = match v {
                 FVal::Bool(e) => (SymVal::Bool(e), Type::Bool),
-                FVal::Float { expr, ty } => (SymVal::Float { expr, ty: ty.clone() }, ty),
+                FVal::Float { expr, ty } => (
+                    SymVal::Float {
+                        expr,
+                        ty: ty.clone(),
+                    },
+                    ty,
+                ),
                 FVal::Int {
                     orig: Some((ty, expr)),
                     ..
-                } => (SymVal::Int { expr, ty: ty.clone() }, ty),
+                } => (
+                    SymVal::Int {
+                        expr,
+                        ty: ty.clone(),
+                    },
+                    ty,
+                ),
                 FVal::Val { val, ty } => (val, ty),
                 other => {
-                    qb.unresolved_error
-                        .get_or_insert_with(|| format!("as_bytes on untyped formula value {other:?}"));
+                    qb.unresolved_error.get_or_insert_with(|| {
+                        format!("as_bytes on untyped formula value {other:?}")
+                    });
                     let sv = qb.fresh_symval("as_bytes_err", &Type::Slice(Box::new(Type::UInt(8))));
                     return FVal::Val {
                         val: sv,
@@ -1813,7 +1836,9 @@ fn eval_builtin(
         }
         Builtin::Ok => {
             let FVal::Val {
-                val: SymVal::Result { is_ok, ok_ty, ok, .. },
+                val: SymVal::Result {
+                    is_ok, ok_ty, ok, ..
+                },
                 ..
             } = eval_term_depth(&args[0], env, qb, unfold_depth)
             else {
@@ -1826,13 +1851,9 @@ fn eval_builtin(
         }
         Builtin::Err => {
             let FVal::Val {
-                val:
-                    SymVal::Result {
-                        is_ok,
-                        err_ty,
-                        err,
-                        ..
-                    },
+                val: SymVal::Result {
+                    is_ok, err_ty, err, ..
+                },
                 ..
             } = eval_term_depth(&args[0], env, qb, unfold_depth)
             else {
@@ -1930,9 +1951,7 @@ pub fn encode_as_bytes(ty: &Type, val: &SymVal, qb: &mut QueryBuilder) -> SymVal
                 "(Array (_ BitVec 64) (_ BitVec 8))".into(),
             );
             let arr = format!("(bool_to_bytes {b})");
-            let ax = format!(
-                "(= (select {arr} #x0000000000000000) (ite {b} #x01 #x00))"
-            );
+            let ax = format!("(= (select {arr} #x0000000000000000) (ite {b} #x01 #x00))");
             qb.dep_axioms.push(("bool_to_bytes".into(), ax));
             let len = bv_lit_u128(1, 64);
             let cid = qb.intern_coll(Some(len.clone()), std::slice::from_ref(&arr));
@@ -2011,7 +2030,9 @@ pub fn encode_as_bytes(ty: &Type, val: &SymVal, qb: &mut QueryBuilder) -> SymVal
             let src_len_bv64 = match val {
                 SymVal::Array { len, .. } => bv_lit_u128(u128::from(*len), 64),
                 SymVal::Tensor { dims, .. } => {
-                    let tot: u64 = dims.iter().fold(1u64, |a, &d| a.saturating_mul(u64::from(d)));
+                    let tot: u64 = dims
+                        .iter()
+                        .fold(1u64, |a, &d| a.saturating_mul(u64::from(d)));
                     bv_lit_u128(u128::from(tot), 64)
                 }
                 SymVal::Slice { len, .. } => len.clone(),
@@ -2038,7 +2059,9 @@ pub fn encode_as_bytes(ty: &Type, val: &SymVal, qb: &mut QueryBuilder) -> SymVal
                 .byte_size()
                 .expect("MVP AS_BYTES collection holds scalar or Bool elements");
             let total_bytes_bv64 = match val {
-                SymVal::Array { len, .. } => bv_lit_u128(u128::from(*len) * u128::from(elem_bytes), 64),
+                SymVal::Array { len, .. } => {
+                    bv_lit_u128(u128::from(*len) * u128::from(elem_bytes), 64)
+                }
                 SymVal::Tensor { dims, .. } => {
                     let tot: u128 = dims.iter().map(|&d| u128::from(d)).product();
                     bv_lit_u128(tot * u128::from(elem_bytes), 64)
@@ -2537,8 +2560,11 @@ pub fn encode_val_eq_assume(
     qb: &mut QueryBuilder,
 ) -> String {
     if !is_same
-        && let (Type::Float(_) | Type::BFloat16, SymVal::Float { expr: fa, .. }, SymVal::Float { expr: fb, .. }) =
-            (ty, a, b)
+        && let (
+            Type::Float(_) | Type::BFloat16,
+            SymVal::Float { expr: fa, .. },
+            SymVal::Float { expr: fb, .. },
+        ) = (ty, a, b)
     {
         return format!("(fp.eq {fa} {fb})");
     }
@@ -2553,9 +2579,7 @@ pub fn encode_val_eq_assume(
                 .iter()
                 .zip(ea)
                 .zip(eb)
-                .map(|((t, (_, va)), (_, vb))| {
-                    encode_val_eq_assume(t, va, vb, is_same, env, qb)
-                })
+                .map(|((t, (_, va)), (_, vb))| encode_val_eq_assume(t, va, vb, is_same, env, qb))
                 .collect();
             if parts.len() == 1 {
                 parts.into_iter().next().expect("1")
@@ -2611,7 +2635,9 @@ pub fn encode_val_eq_assume(
             }
         }
         (Type::Tensor(elem_ty, dims), _, _) => {
-            let total: u64 = dims.iter().fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
+            let total: u64 = dims
+                .iter()
+                .fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
             if total <= 16 {
                 let mut parts = Vec::with_capacity(total as usize);
                 for idx in 0..total {
@@ -2639,11 +2665,7 @@ pub fn encode_val_eq_assume(
                 "true".to_string()
             }
         }
-        (
-            Type::Slice(elem_ty),
-            SymVal::Slice { len: la, .. },
-            SymVal::Slice { len: lb, .. },
-        ) => {
+        (Type::Slice(elem_ty), SymVal::Slice { len: la, .. }, SymVal::Slice { len: lb, .. }) => {
             qb.pending_foralls.push(PendingForall::CollEq {
                 len_bv64: la.clone(),
                 left: a.clone(),
@@ -2659,6 +2681,8 @@ pub fn encode_val_eq_assume(
 }
 
 /// Negated equality `!(a == b)` in Goal polarity (Skolemizes element index for large collections/Slices).
+// `env` keeps the signature of the other encoders; only the recursion reads it.
+#[allow(clippy::only_used_in_recursion)]
 pub fn encode_val_eq_goal_neg(
     ty: &Type,
     a: &SymVal,
@@ -2668,8 +2692,11 @@ pub fn encode_val_eq_goal_neg(
     qb: &mut QueryBuilder,
 ) -> String {
     if !is_same
-        && let (Type::Float(_) | Type::BFloat16, SymVal::Float { expr: fa, .. }, SymVal::Float { expr: fb, .. }) =
-            (ty, a, b)
+        && let (
+            Type::Float(_) | Type::BFloat16,
+            SymVal::Float { expr: fa, .. },
+            SymVal::Float { expr: fb, .. },
+        ) = (ty, a, b)
     {
         return format!("(not (fp.eq {fa} {fb}))");
     }
@@ -2684,9 +2711,7 @@ pub fn encode_val_eq_goal_neg(
                 .iter()
                 .zip(ea)
                 .zip(eb)
-                .map(|((t, (_, va)), (_, vb))| {
-                    encode_val_eq_goal_neg(t, va, vb, is_same, env, qb)
-                })
+                .map(|((t, (_, va)), (_, vb))| encode_val_eq_goal_neg(t, va, vb, is_same, env, qb))
                 .collect();
             if parts.len() == 1 {
                 parts.into_iter().next().expect("1")
@@ -2741,7 +2766,9 @@ pub fn encode_val_eq_goal_neg(
             }
         }
         (Type::Tensor(elem_ty, dims), _, _) => {
-            let total: u64 = dims.iter().fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
+            let total: u64 = dims
+                .iter()
+                .fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
             if total <= 16 {
                 let mut parts = Vec::with_capacity(total as usize);
                 for idx in 0..total {
@@ -2768,11 +2795,7 @@ pub fn encode_val_eq_goal_neg(
                 format!("(and (bvult {sk} {len_lit}) {elem_neg})")
             }
         }
-        (
-            Type::Slice(elem_ty),
-            SymVal::Slice { len: la, .. },
-            SymVal::Slice { len: lb, .. },
-        ) => {
+        (Type::Slice(elem_ty), SymVal::Slice { len: la, .. }, SymVal::Slice { len: lb, .. }) => {
             let sk = qb.fresh_sym("eq_sk", "(_ BitVec 64)");
             qb.record_index(a, vec![sk.clone()], sk.clone());
             qb.record_index(b, vec![sk.clone()], sk.clone());
@@ -2781,7 +2804,10 @@ pub fn encode_val_eq_goal_neg(
             let elem_neg = encode_val_eq_goal_neg(elem_ty, &va, &vb, is_same, env, qb);
             format!("(or (not (= {la} {lb})) (and (bvult {sk} {la}) {elem_neg}))")
         }
-        _ => format!("(not {})", scalar_same_smt(ty, a, b).unwrap_or_else(|| "true".into())),
+        _ => format!(
+            "(not {})",
+            scalar_same_smt(ty, a, b).unwrap_or_else(|| "true".into())
+        ),
     }
 }
 
@@ -3077,12 +3103,7 @@ fn mentions_bound_range(t: &Term, total_bound: usize, extra: usize) -> bool {
     }
 }
 
-fn match_idx_pattern(
-    t: &Term,
-    num_ranges: usize,
-    extra: usize,
-    node: &Node,
-) -> Option<IdxPattern> {
+fn match_idx_pattern(t: &Term, num_ranges: usize, extra: usize, node: &Node) -> Option<IdxPattern> {
     let var_of = |d: u32| -> Option<usize> {
         let d = d as usize;
         if d >= extra && d < extra + num_ranges {
@@ -3129,14 +3150,29 @@ fn match_idx_pattern(
 
 /// Typed condition for ADR 0010 well-definedness checks (avoids mutating `node.consts`).
 #[derive(Clone, Debug)]
+// One per obligation, built once; boxing the large variant would only add indirection.
+#[allow(clippy::large_enum_variant)]
 pub enum WdCond {
     DivisorNonZero(Term),
-    IndexInBounds { base: Term, idxs: Vec<Term> },
+    IndexInBounds {
+        base: Term,
+        idxs: Vec<Term>,
+    },
     ResultIsOk(Term),
     ResultIsErr(Term),
-    FoldBound { xs: Term, k: Term },
-    CalleePre { callee_node: Node, args: Vec<Term>, pre: Term },
-    IntArgFitsType { arg: Term, target: Type },
+    FoldBound {
+        xs: Term,
+        k: Term,
+    },
+    CalleePre {
+        callee_node: Node,
+        args: Vec<Term>,
+        pre: Term,
+    },
+    IntArgFitsType {
+        arg: Term,
+        target: Type,
+    },
     MissingCallee(Hash),
 }
 
@@ -3169,12 +3205,13 @@ fn walk_wd(
     ranges: &mut Vec<(Term, Term)>,
     out: &mut Vec<WdObligation>,
 ) {
-    let snap = |cond: WdCond, reason: String, hyps: &[Term], ranges: &[(Term, Term)]| WdObligation {
-        path_hyps: hyps.to_vec(),
-        bound_ranges: ranges.to_vec(),
-        cond,
-        reason,
-    };
+    let snap =
+        |cond: WdCond, reason: String, hyps: &[Term], ranges: &[(Term, Term)]| WdObligation {
+            path_hyps: hyps.to_vec(),
+            bound_ranges: ranges.to_vec(),
+            cond,
+            reason,
+        };
     match t {
         Term::Bin(Bin::And, a, b) => {
             walk_wd(a, node, callee, hyps, ranges, out);
@@ -3407,12 +3444,16 @@ fn is_exact_int_of(t: &Term, target: &Type, node: &Node) -> bool {
     match t {
         Term::Input(i) => node.input_type(*i) == Some(target),
         Term::Result(j) => node.results.get(*j as usize) == Some(target),
-        Term::Port(i, s) => node
-            .ops
-            .get(*i as usize)
-            .and_then(|op| op.results.get(*s as usize))
-            == Some(target),
-        Term::Const(c) => node.consts.get(*c as usize).is_some_and(|c| c.ty == *target),
+        Term::Port(i, s) => {
+            node.ops
+                .get(*i as usize)
+                .and_then(|op| op.results.get(*s as usize))
+                == Some(target)
+        }
+        Term::Const(c) => node
+            .consts
+            .get(*c as usize)
+            .is_some_and(|c| c.ty == *target),
         _ => false,
     }
 }
@@ -3664,6 +3705,8 @@ pub fn eval_op_core(
                          tag: &str|
      -> SymVal {
         if mode == DomainMode::Strict {
+            // The verify driver turns each recorded domain into the op's own obligation.
+            qb_in.domains.push((tag.to_string(), domain_ok.to_string()));
             return normal;
         }
         let mut op_sorts = Vec::new();
@@ -3782,7 +3825,14 @@ pub fn eval_op_core(
             let SymVal::Result { is_ok, ok, .. } = &arg_syms[0] else {
                 unreachable!()
             };
-            let res = guard_partial(qb, is_ok, (**ok).clone(), &op.results[0], arg_syms, "get_ok");
+            let res = guard_partial(
+                qb,
+                is_ok,
+                (**ok).clone(),
+                &op.results[0],
+                arg_syms,
+                "get_ok",
+            );
             single(res)
         }
         "GET_ERR" => {
@@ -3790,7 +3840,14 @@ pub fn eval_op_core(
                 unreachable!()
             };
             let cond = format!("(not {is_ok})");
-            let res = guard_partial(qb, &cond, (**err).clone(), &op.results[0], arg_syms, "get_err");
+            let res = guard_partial(
+                qb,
+                &cond,
+                (**err).clone(),
+                &op.results[0],
+                arg_syms,
+                "get_err",
+            );
             single(res)
         }
         "ADD" | "SUB" | "MUL" => {
@@ -3926,7 +3983,10 @@ pub fn eval_op_core(
                     let lo = f(1);
                     let hi = f(2);
                     // Bind intermediate FMAX(x, lo) to avoid 25x exponential duplication.
-                    let tmp = qb.fresh_sym(&format!("{prefix}_fclamp"), &format!("(_ FloatingPoint {eb} {sb})"));
+                    let tmp = qb.fresh_sym(
+                        &format!("{prefix}_fclamp"),
+                        &format!("(_ FloatingPoint {eb} {sb})"),
+                    );
                     let fmax_expr = smt_fmax(&x, &lo, eb, sb);
                     let mut syms = BTreeSet::new();
                     syms.insert(tmp.clone());
@@ -3935,7 +3995,9 @@ pub fn eval_op_core(
                         expr: smt_fmin(&tmp, &hi, eb, sb),
                         ty: ty.clone(),
                     };
-                    let dom = format!("(and (not (fp.isNaN {lo})) (not (fp.isNaN {hi})) (fp.leq {lo} {hi}))");
+                    let dom = format!(
+                        "(and (not (fp.isNaN {lo})) (not (fp.isNaN {hi})) (fp.leq {lo} {hi}))"
+                    );
                     single(guard_partial(qb, &dom, clamped, ty, arg_syms, "FCLAMP"))
                 }
                 "FCOPYSIGN" => {
@@ -3959,10 +4021,18 @@ pub fn eval_op_core(
             let ty = node.operand_type(op.operands[0]).expect("eq operand type");
             let eq = match (ty, &arg_syms[0], &arg_syms[1]) {
                 (Type::Bool, SymVal::Bool(a), SymVal::Bool(b)) => format!("(= {a} {b})"),
-                (Type::UInt(_) | Type::SInt(_), SymVal::Int { expr: a, .. }, SymVal::Int { expr: b, .. }) => {
+                (
+                    Type::UInt(_) | Type::SInt(_),
+                    SymVal::Int { expr: a, .. },
+                    SymVal::Int { expr: b, .. },
+                ) => {
                     format!("(= {a} {b})")
                 }
-                (Type::Float(_) | Type::BFloat16, SymVal::Float { expr: a, .. }, SymVal::Float { expr: b, .. }) => {
+                (
+                    Type::Float(_) | Type::BFloat16,
+                    SymVal::Float { expr: a, .. },
+                    SymVal::Float { expr: b, .. },
+                ) => {
                     format!("(fp.eq {a} {b})")
                 }
                 (Type::Handle(_), SymVal::Handle(a), SymVal::Handle(b)) => format!("(= {a} {b})"),
@@ -4073,7 +4143,10 @@ pub fn eval_op_core(
                 if let Some(src_id) = arg_syms[0].coll_id()
                     && cid != src_id
                 {
-                    qb.coll_links.push(CollLink::Identity { dst: cid, src: src_id });
+                    qb.coll_links.push(CollLink::Identity {
+                        dst: cid,
+                        src: src_id,
+                    });
                 }
                 SymVal::Slice {
                     coll_id: cid,
@@ -4161,7 +4234,14 @@ pub fn eval_op_core(
                     zext(&la, 64, 65),
                     zext(&lb, 64, 65)
                 );
-                single(guard_partial(qb, &dom, normal, &op.results[0], arg_syms, "CONCAT"))
+                single(guard_partial(
+                    qb,
+                    &dom,
+                    normal,
+                    &op.results[0],
+                    arg_syms,
+                    "CONCAT",
+                ))
             } else {
                 single(normal)
             }
@@ -4173,12 +4253,18 @@ pub fn eval_op_core(
             let kernel_hash = node.calls[cix as usize];
             let Some(kernel) = callee(&kernel_hash) else {
                 qb.unresolved_error.get_or_insert_with(|| {
-                    format!("missing kernel {} in SIMD_MAP", vg_core::ir::hex(&kernel_hash))
+                    format!(
+                        "missing kernel {} in SIMD_MAP",
+                        vg_core::ir::hex(&kernel_hash)
+                    )
                 });
                 return vec![qb.fresh_symval(&format!("{prefix}_map_miss"), &op.results[0])];
             };
             let src_val = arg_syms[1].clone();
-            let src_ty = node.operand_type(op.operands[1]).expect("simd src ty").clone();
+            let src_ty = node
+                .operand_type(op.operands[1])
+                .expect("simd src ty")
+                .clone();
             let broadcasts: Vec<(Type, SymVal)> = op.operands[2..]
                 .iter()
                 .zip(&arg_syms[2..])
@@ -4225,11 +4311,17 @@ pub fn eval_op_core(
             let kernel_hash = node.calls[cix as usize];
             let Some(kernel) = callee(&kernel_hash) else {
                 qb.unresolved_error.get_or_insert_with(|| {
-                    format!("missing kernel {} in GENERATE", vg_core::ir::hex(&kernel_hash))
+                    format!(
+                        "missing kernel {} in GENERATE",
+                        vg_core::ir::hex(&kernel_hash)
+                    )
                 });
                 return vec![qb.fresh_symval(&format!("{prefix}_gen_miss"), &op.results[0])];
             };
-            let SymVal::Int { expr: count_bv64, .. } = &arg_syms[1] else {
+            let SymVal::Int {
+                expr: count_bv64, ..
+            } = &arg_syms[1]
+            else {
                 unreachable!()
             };
             let broadcasts: Vec<(Type, SymVal)> = op.operands[2..]
@@ -4272,7 +4364,10 @@ pub fn eval_op_core(
             let kernel_hash = node.calls[cix as usize];
             let Some(kernel) = callee(&kernel_hash) else {
                 qb.unresolved_error.get_or_insert_with(|| {
-                    format!("missing kernel {} in FOLD_BOUNDED", vg_core::ir::hex(&kernel_hash))
+                    format!(
+                        "missing kernel {} in FOLD_BOUNDED",
+                        vg_core::ir::hex(&kernel_hash)
+                    )
                 });
                 return vec![qb.fresh_symval(&format!("{prefix}_fold_miss"), &op.results[0])];
             };
@@ -4283,7 +4378,12 @@ pub fn eval_op_core(
             let b_vals: Vec<(Type, SymVal)> = op.operands[2..k - 2]
                 .iter()
                 .zip(&arg_syms[2..k - 2])
-                .map(|(o, sv)| (node.operand_type(*o).expect("fold bcast ty").clone(), sv.clone()))
+                .map(|(o, sv)| {
+                    (
+                        node.operand_type(*o).expect("fold bcast ty").clone(),
+                        sv.clone(),
+                    )
+                })
                 .collect();
             let fold_res = apply_fold_values(
                 &kernel,
@@ -4306,7 +4406,10 @@ pub fn eval_op_core(
             let cal_hash = node.calls[cix as usize];
             let Some(cal_node) = callee(&cal_hash) else {
                 qb.unresolved_error.get_or_insert_with(|| {
-                    format!("missing callee {} in CALL_HASH", vg_core::ir::hex(&cal_hash))
+                    format!(
+                        "missing callee {} in CALL_HASH",
+                        vg_core::ir::hex(&cal_hash)
+                    )
                 });
                 return op
                     .results
@@ -4366,9 +4469,8 @@ pub fn eval_op_core(
             let th = node.calls[t_ix as usize];
             let eh = node.calls[e_ix as usize];
             let (Some(tn), Some(en)) = (callee(&th), callee(&eh)) else {
-                qb.unresolved_error.get_or_insert_with(|| {
-                    "missing branch callee in ASSERT_GUARD".to_string()
-                });
+                qb.unresolved_error
+                    .get_or_insert_with(|| "missing branch callee in ASSERT_GUARD".to_string());
                 return op
                     .results
                     .iter()
@@ -4426,11 +4528,7 @@ pub fn eval_op_core(
     }
 }
 
-pub fn assume_conjuncts(
-    terms: &[Term],
-    env: &mut FormulaEnv<'_>,
-    qb: &mut QueryBuilder,
-) -> String {
+pub fn assume_conjuncts(terms: &[Term], env: &mut FormulaEnv<'_>, qb: &mut QueryBuilder) -> String {
     if terms.is_empty() {
         return "true".to_string();
     }
@@ -4446,7 +4544,9 @@ pub fn coll_len_bv64(sv: &SymVal) -> String {
     match sv {
         SymVal::Array { len, .. } => bv_lit_u128(u128::from(*len), 64),
         SymVal::Tensor { dims, .. } => {
-            let tot: u64 = dims.iter().fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
+            let tot: u64 = dims
+                .iter()
+                .fold(1u64, |acc, &d| acc.saturating_mul(u64::from(d)));
             bv_lit_u128(u128::from(tot), 64)
         }
         SymVal::Slice { len, .. } => len.clone(),
@@ -4638,7 +4738,10 @@ pub fn inline_pure_node(
                     if let Some(rcid) = rhs.coll_id()
                         && rcid != cid
                     {
-                        qb.coll_links.push(CollLink::Identity { dst: cid, src: rcid });
+                        qb.coll_links.push(CollLink::Identity {
+                            dst: cid,
+                            src: rcid,
+                        });
                     }
                     // Bind the declared arrays directly without changing `len` formula.
                     let _ = len;
@@ -4911,7 +5014,14 @@ pub fn encode_add_sub_mul(
         );
         (ok, sat)
     } else {
-        let max_w = bv_lit_u128(if w == 64 { u64::MAX as u128 } else { (1u128 << w) - 1 }, w);
+        let max_w = bv_lit_u128(
+            if w == 64 {
+                u64::MAX as u128
+            } else {
+                (1u128 << w) - 1
+            },
+            w,
+        );
         let zero_w = bv_lit_u128(0, w);
         let ok = if name == "MUL" {
             format!("(= ((_ extract {} {w}) {exact}) {zero_w})", ext_w - 1)
@@ -4947,13 +5057,7 @@ pub fn encode_add_sub_mul(
     }
 }
 
-pub fn encode_div_mod(
-    name: &str,
-    mode: u8,
-    ty: &Type,
-    a: &str,
-    b: &str,
-) -> (SymVal, String) {
+pub fn encode_div_mod(name: &str, mode: u8, ty: &Type, a: &str, b: &str) -> (SymVal, String) {
     let (w, signed) = match ty {
         Type::UInt(w) => (u32::from(*w), false),
         Type::SInt(w) => (u32::from(*w), true),
@@ -5338,18 +5442,8 @@ NODE @test_fold {
         };
 
         let mut qb = QueryBuilder::default();
-        let a0 = declare_symval(
-            "a0",
-            &node.params[0],
-            &mut qb.decls,
-            &mut qb.next_coll_id,
-        );
-        let a1 = declare_symval(
-            "a1",
-            &node.params[1],
-            &mut qb.decls,
-            &mut qb.next_coll_id,
-        );
+        let a0 = declare_symval("a0", &node.params[0], &mut qb.decls, &mut qb.next_coll_id);
+        let a1 = declare_symval("a1", &node.params[1], &mut qb.decls, &mut qb.next_coll_id);
         qb.register_coll_id(&a0);
         let mut env = FormulaEnv {
             node,

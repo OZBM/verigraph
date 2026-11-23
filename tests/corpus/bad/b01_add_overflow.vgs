@@ -1,0 +1,13 @@
+// expect: reject @f/%0/ADD.no_overflow
+module b01_add_overflow;
+
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u8);
+    RETURN(%0);
+  }
+}

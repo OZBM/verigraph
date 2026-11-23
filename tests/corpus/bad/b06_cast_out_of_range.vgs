@@ -1,0 +1,13 @@
+// expect: reject @f/%0/CAST.in_range
+module b06_cast_out_of_range;
+
+NODE @f {
+  SIGNATURE: (x: u32) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+  }
+  BODY {
+    %0 = CAST.u8(x);
+    RETURN(%0);
+  }
+}

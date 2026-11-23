@@ -1,0 +1,15 @@
+// expect: verify
+module g06_cast_in_range;
+
+NODE @f {
+  SIGNATURE: (x: u32) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 256;
+    POST: result == x;
+  }
+  BODY {
+    %0 = CAST.u8(x);
+    RETURN(%0);
+  }
+}
