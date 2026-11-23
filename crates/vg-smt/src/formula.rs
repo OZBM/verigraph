@@ -305,6 +305,9 @@ pub struct QueryBuilder {
     pub coll_links: Vec<CollLink>,
     pub pending_foralls: Vec<PendingForall>,
     pub pending_schemas: Vec<ElemSchema>,
+    /// A SIMD_MAP or GENERATE element gets only its kernel's POST when the kernel has one, as the
+    /// docs/05 rule states, and not the inlined body too: a cheaper first attempt.
+    pub post_only_kernels: bool,
     pub fold_apps: BTreeSet<String>,
     pub spec_apps: BTreeSet<String>,
     pub fp_to_bv_apps: BTreeSet<String>,
@@ -792,15 +795,20 @@ impl QueryBuilder {
 
                         let (k_pre_ok, k_post_ok) =
                             kernel_contract_facts(kernel, &k_args, &dst_elem, callee, self);
-                        let inlined = inline_pure_node(
-                            kernel,
-                            *kernel_hash,
-                            &k_args,
-                            &format!("map{idx}"),
-                            callee,
-                            self,
-                            0,
-                        );
+                        let inlined = if self.post_only_kernels && !kernel.contract.post.is_empty()
+                        {
+                            None
+                        } else {
+                            inline_pure_node(
+                                kernel,
+                                *kernel_hash,
+                                &k_args,
+                                &format!("map{idx}"),
+                                callee,
+                                self,
+                                0,
+                            )
+                        };
                         let mut conjs = Vec::new();
                         if !k_post_ok.is_empty() {
                             conjs.push(k_post_ok);
@@ -871,15 +879,20 @@ impl QueryBuilder {
 
                         let (k_pre_ok, k_post_ok) =
                             kernel_contract_facts(kernel, &k_args, &dst_elem, callee, self);
-                        let inlined = inline_pure_node(
-                            kernel,
-                            *kernel_hash,
-                            &k_args,
-                            &format!("gen{idx}"),
-                            callee,
-                            self,
-                            0,
-                        );
+                        let inlined = if self.post_only_kernels && !kernel.contract.post.is_empty()
+                        {
+                            None
+                        } else {
+                            inline_pure_node(
+                                kernel,
+                                *kernel_hash,
+                                &k_args,
+                                &format!("gen{idx}"),
+                                callee,
+                                self,
+                                0,
+                            )
+                        };
                         let mut conjs = Vec::new();
                         if !k_post_ok.is_empty() {
                             conjs.push(k_post_ok);

@@ -1,5 +1,6 @@
-//! `vg mcp`: the docs/15 tools vg_check, vg_verify, vg_run and vg_build over MCP stdio (rmcp).
-//! The other four tools (mesh query, publish, lift, explain) arrive with P6-P8.
+//! `vg mcp`: the docs/15 tools over MCP stdio (rmcp): vg_check, vg_verify, vg_run, vg_build,
+//! vg_explain, vg_mesh_query and vg_mesh_publish, against the project in the working directory.
+//! vg_lift arrives with P8.
 
 use std::sync::Arc;
 
@@ -42,7 +43,38 @@ fn tools_list() -> Vec<Tool> {
         tool(
             "vg_verify",
             "Prove every obligation of every node with the SMT solver; counterexamples are replayed in vg-interp.",
-            json!({ "timeout_ms": { "type": "integer", "description": "per obligation, default 10000" } }),
+            json!({
+                "timeout_ms": { "type": "integer", "description": "per obligation, default 10000" },
+                "detail": { "type": "integer", "description": "0: no reports; 1 (default): reports for the first 3 failures; 2: all" },
+            }),
+            &[],
+        ),
+        tool(
+            "vg_explain",
+            "The failure report of one obligation (its failing slice, counterexample and diff) and a plain-language account.",
+            json!({ "obligation": { "type": "string", "description": "an obligation ID, such as @soft_knee/POST.0" } }),
+            &["obligation"],
+        ),
+        tool(
+            "vg_mesh_query",
+            "Find verified nodes in the project's Mesh registry by contract (docs/09 MeshContractQuery); source and path are not used.",
+            json!({
+                "input_types": { "type": "array", "items": { "type": "string" } },
+                "output_types": { "type": "array", "items": { "type": "string" } },
+                "max_effects": { "type": "array", "items": { "type": "string" } },
+                "pre": { "type": "string" },
+                "post": { "type": "string" },
+                "max_cost": { "type": "string" },
+                "intent": { "type": "string" },
+                "spec": { "type": "string", "description": "a spec class name, for an exact match" },
+                "limit": { "type": "integer" },
+            }),
+            &[],
+        ),
+        tool(
+            "vg_mesh_publish",
+            "Publish every node of a module to the project's Mesh registry through the six-check ingestion gate.",
+            json!({}),
             &[],
         ),
         tool(
@@ -81,6 +113,9 @@ fn source(args: &JsonObject) -> Result<String, String> {
 }
 
 pub fn dispatch(name: &str, args: &JsonObject) -> J {
+    if name == "vg_mesh_query" {
+        return crate::mesh::query(&J::Object(args.clone()), std::path::Path::new("."));
+    }
     let src = match source(args) {
         Ok(s) => s,
         Err(e) => return json!({ "ok": false, "error": e }),
@@ -107,8 +142,11 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
         "vg_check" => tools::check(&src, &env),
         "vg_verify" => {
             let t = args.get("timeout_ms").and_then(J::as_u64).unwrap_or(10_000);
-            tools::verify(&src, &env, t)
+            let detail = args.get("detail").and_then(J::as_u64).unwrap_or(1).min(2) as u8;
+            tools::verify(&src, &env, t, detail)
         }
+        "vg_explain" => tools::explain(&src, &env, str_arg("obligation"), 10_000),
+        "vg_mesh_publish" => crate::mesh::publish(&src, &env, std::path::Path::new(".")),
         "vg_run" => {
             let inputs = args
                 .get("inputs")

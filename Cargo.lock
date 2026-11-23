@@ -1029,6 +1029,7 @@ name = "vg-cli"
 version = "0.0.0"
 dependencies = [
  "blake3",
+ "ed25519-dalek",
  "rmcp",
  "serde_json",
  "tokio",

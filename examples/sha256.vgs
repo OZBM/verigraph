@@ -1,6 +1,7 @@
 // expect: verify
-// SHA-256 (FIPS 180-4) in VG-Sym: @sha256 digests a byte slice and is proven equal to the reference
-// SPEC @sha256_spec; examples/audio_limiter.vgs's @MESH_QUERY @sha256 resolves to it through vg.lock.
+// SHA-256 (FIPS 180-4) in VG-Sym: @sha256_impl digests a byte slice and is proven equal to the
+// reference SPEC @sha256, so it joins the spec class @sha256 that examples/audio_limiter.vgs's
+// @MESH_QUERY @sha256 asks for (vg mesh publish, then vg mesh resolve, pins it in vg.lock).
 // A FOLD step sees only its kernel's POST (docs/05), so each kernel @k has a SPEC twin @k_def with
 // the same body and the POST result == spec:k_def(...), which pins its result exactly (ADR 0008).
 // K and H are the first 32 bits of the fractional parts of the cube and square roots of the first
@@ -486,8 +487,8 @@ NODE @digest_byte {
   }
 }
 
-// Reference definition of @sha256 (FIPS 180-4); a spec: application unfolds it (ADR 0008).
-SPEC @sha256_spec {
+// Reference definition of SHA-256 (FIPS 180-4), the spec class @sha256; a spec: application unfolds it (ADR 0008).
+SPEC @sha256 {
   SIGNATURE: (m: Slice<u8>) -> (Array<u8, 32>);
   EFFECTS: [];
   CONTRACT {
@@ -519,11 +520,11 @@ SPEC @sha256_spec {
   }
 }
 
-NODE @sha256 [intent: "SHA-256 digest of a byte slice (FIPS 180-4)", export] {
+NODE @sha256_impl [intent: "SHA-256 digest of a byte slice (FIPS 180-4)", export] {
   SIGNATURE: (m: Slice<u8>) -> (Array<u8, 32>);
   EFFECTS: [];
   CONTRACT {
-    POST: result == spec:sha256_spec(m);
+    POST: result == spec:sha256(m);
     INVARIANT @absorbed(k, acc): acc == fold:absorb(%2, m, k);
   }
   BODY {

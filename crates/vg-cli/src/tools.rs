@@ -56,6 +56,27 @@ impl Loaded<'_> {
         }
     }
 
+    /// A node's `intent:` attribute, without its quotes.
+    pub fn intent(&self, label: &str) -> Option<String> {
+        self.defs
+            .iter()
+            .find(|d| d.label == label)?
+            .attrs
+            .iter()
+            .find_map(|a| match a {
+                vg_core::ast::Attr::Intent(s) => Some(s.trim_matches('"').to_string()),
+                _ => None,
+            })
+    }
+
+    /// The labels of the module's nodes, by hash, for reports.
+    fn labels(&self) -> std::collections::BTreeMap<Hash, String> {
+        self.nodes
+            .iter()
+            .map(|a| (a.hashes.node, format!("@{}", a.label)))
+            .collect()
+    }
+
     fn find(&self, label: &str) -> Result<(&Assembled, &NodeDef), String> {
         let label = label.trim_start_matches('@');
         let a = self.nodes.iter().find(|a| a.label == label);
@@ -174,10 +195,57 @@ fn named_inputs(a: &Assembled, d: &NodeDef, inputs: &[Value]) -> J {
     J::Object(o)
 }
 
-/// Verifies the nodes `which` selects; returns (all proven, docs/15 VerifyOut).
-fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options) -> (bool, J) {
+/// One obligation's outcome after concrete replay (ADR 0006): a counterexample that does not
+/// reproduce with the real callees becomes a contract gap.
+fn classify(o: &vg_smt::Outcome, a: &Assembled, m: &Loaded) -> (vg_smt::Outcome, &'static str) {
+    let mut o = o.clone();
+    let Some(inputs) = o.inputs.clone() else {
+        return (o, "no");
+    };
+    let reproduced = match replay(a, &inputs, m) {
+        Some(true) => "concrete",
+        Some(false) => {
+            if o.verdict == vg_smt::Verdict::Counterexample {
+                o.verdict = vg_smt::Verdict::ContractGap;
+                o.code = Some("VG-V0002");
+            }
+            "no"
+        }
+        None => "no",
+    };
+    (o, reproduced)
+}
+
+/// The docs/15 FailureReport of a failed obligation, from vg-telemetry, or the inputs alone when
+/// telemetry cannot build one.
+fn failure_report(
+    m: &Loaded,
+    a: &Assembled,
+    d: &NodeDef,
+    o: &vg_smt::Outcome,
+    reproduced: &str,
+) -> Option<J> {
+    let names = vg_telemetry::Names::from_def(&a.node, d, m.labels());
+    if let Some(r) = vg_telemetry::report(&a.node, &a.label, &names, o, &m.callee()) {
+        return Some(r.to_json());
+    }
+    o.inputs.as_ref().map(|inputs| {
+        json!({
+            "node": format!("@{}", a.label),
+            "obligation": o.id,
+            "inputs": named_inputs(a, d, inputs),
+            "reproduced": reproduced,
+        })
+    })
+}
+
+/// Verifies the nodes `which` selects; returns (all proven, docs/15 VerifyOut). `detail` follows
+/// docs/15's budget: 0 attaches no report, 1 reports the first 3 failing obligations in ID order,
+/// 2 reports every one.
+fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail: u8) -> (bool, J) {
     let callee = m.callee();
     let (mut nodes, mut results, mut all) = (vec![], vec![], true);
+    let mut failed = std::collections::BTreeMap::new();
     for a in which {
         if a.node.spec {
             continue;
@@ -187,31 +255,15 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options) -> (bo
         };
         let mut verified = true;
         for o in vg_smt::verify(&a.node, &a.label, &callee, opts) {
-            let mut verdict = verdict_name(&o.verdict);
+            let (o, reproduced) = classify(&o, a, m);
+            let verdict = verdict_name(&o.verdict);
             let mut r =
                 json!({ "id": o.id, "verdict": verdict, "solver": o.solver, "message": o.message });
             if let Some(code) = o.code {
                 r["code"] = json!(code);
             }
-            if let Some(inputs) = &o.inputs {
-                let reproduced = match replay(a, inputs, m) {
-                    Some(true) => "concrete",
-                    Some(false) => {
-                        if verdict == "counterexample" {
-                            verdict = "contract_gap";
-                            r["verdict"] = json!(verdict);
-                            r["code"] = json!("VG-V0002");
-                        }
-                        "no"
-                    }
-                    None => "no",
-                };
-                r["report"] = json!({
-                    "node": format!("@{}", a.label),
-                    "obligation": o.id,
-                    "inputs": named_inputs(a, d, inputs),
-                    "reproduced": reproduced,
-                });
+            if verdict != "proven" {
+                failed.insert(o.id.clone(), (*a, d, o, reproduced));
             }
             verified &= verdict == "proven";
             results.push(r);
@@ -220,10 +272,59 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options) -> (bo
         nodes.push(json!({ "label": format!("@{}", a.label), "verified": verified }));
     }
     results.sort_by(|x, y| x["id"].as_str().cmp(&y["id"].as_str()));
+    let cap = match detail {
+        0 => 0,
+        1 => 3,
+        _ => usize::MAX,
+    };
+    for r in results
+        .iter_mut()
+        .filter(|r| r["verdict"] != "proven")
+        .take(cap)
+    {
+        let id = r["id"].as_str().unwrap_or_default().to_string();
+        if let Some((a, d, o, reproduced)) = failed.get(&id)
+            && let Some(rep) = failure_report(m, a, d, o, reproduced)
+        {
+            r["report"] = rep;
+        }
+    }
     (
         all,
         json!({ "ok": all, "nodes": nodes, "results": results }),
     )
+}
+
+/// vg_explain: one obligation's FailureReport and its plain-language account (docs/15).
+pub fn explain(src: &str, env: &Env, obligation: &str, timeout_ms: u64) -> J {
+    let m = match load(src, env) {
+        Ok(m) => m,
+        Err(d) => return failed(&d),
+    };
+    let label = obligation.split('/').next().unwrap_or_default();
+    let (a, d) = match m.find(label) {
+        Ok(x) => x,
+        Err(e) => return json!({ "ok": false, "error": e }),
+    };
+    let outcomes = vg_smt::verify(&a.node, &a.label, &m.callee(), &solver_options(timeout_ms));
+    let Some(o) = outcomes.iter().find(|o| o.id == obligation) else {
+        return json!({ "ok": false, "error": format!("{label} has no obligation {obligation}") });
+    };
+    let (o, reproduced) = classify(o, a, &m);
+    if o.verdict == vg_smt::Verdict::Proven {
+        return json!({ "ok": true, "verdict": "proven", "prose": format!("{obligation} is proven.") });
+    }
+    let names = vg_telemetry::Names::from_def(&a.node, d, m.labels());
+    match vg_telemetry::report(&a.node, &a.label, &names, &o, &m.callee()) {
+        Some(r) => json!({ "ok": true, "report": r.to_json(), "prose": vg_telemetry::prose(&r) }),
+        None => json!({
+            "ok": true,
+            "verdict": verdict_name(&o.verdict),
+            "code": o.code,
+            "reproduced": reproduced,
+            "prose": format!("{obligation}: {} ({}).", verdict_name(&o.verdict), o.message),
+        }),
+    }
 }
 
 pub fn solver_options(timeout_ms: u64) -> vg_smt::Options {
@@ -236,13 +337,13 @@ pub fn solver_options(timeout_ms: u64) -> vg_smt::Options {
 }
 
 /// vg_verify: prove every obligation of every node in the module.
-pub fn verify(src: &str, env: &Env, timeout_ms: u64) -> J {
+pub fn verify(src: &str, env: &Env, timeout_ms: u64, detail: u8) -> J {
     let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
     let all: Vec<&Assembled> = m.nodes.iter().collect();
-    verify_nodes(&m, &all, &solver_options(timeout_ms)).1
+    verify_nodes(&m, &all, &solver_options(timeout_ms), detail).1
 }
 
 /// vg_run: run a node in vg-interp. `inputs` maps parameter (and LEARNABLE) names to docs/15 values;
@@ -326,7 +427,7 @@ pub fn build(
         Ok((a, _)) => a,
         Err(e) => return json!({ "ok": false, "error": e }),
     };
-    let (proven, report) = verify_nodes(&m, &m.closure(a), &solver_options(10_000));
+    let (proven, report) = verify_nodes(&m, &m.closure(a), &solver_options(10_000), 1);
     if !proven && !unverified {
         return json!({
             "ok": false,

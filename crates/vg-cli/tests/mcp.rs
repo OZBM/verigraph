@@ -41,7 +41,18 @@ fn mcp_lists_and_calls_tools() {
         .iter()
         .filter_map(|t| t["name"].as_str())
         .collect();
-    assert_eq!(names, ["vg_check", "vg_verify", "vg_run", "vg_build"]);
+    assert_eq!(
+        names,
+        [
+            "vg_check",
+            "vg_verify",
+            "vg_explain",
+            "vg_mesh_query",
+            "vg_mesh_publish",
+            "vg_run",
+            "vg_build"
+        ]
+    );
     let check = call(json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
         "params": {"name": "vg_check", "arguments": {"source": MODULE}}}))
     .unwrap();

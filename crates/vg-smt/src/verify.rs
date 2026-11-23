@@ -5,21 +5,22 @@
 //! the ops before it in canonical order, never its own or later ones; UNSAT is the only proof, and
 //! anything not encoded (a missing callee, a COST conjunct) is Unknown, never Proven.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use vg_core::ir::{Hash, Node, Operand};
+use vg_core::ir::{Hash, Node, Operand, Term};
 use vg_core::opcode;
 use vg_core::types::Type;
 
 use crate::formula::{
-    DomainMode, FVal, FormulaEnv, QueryBuilder, assume_conjuncts, coll_len_bv64,
+    CostResources, DomainMode, FVal, FormulaEnv, QueryBuilder, assume_conjuncts, coll_len_bv64,
     collect_wd_obligations, encode_assume, encode_neg_goal, encode_wd_obligation, eval_op_core,
     symval_to_fval, zext,
 };
 use crate::model::{DecodedModel, decode_inputs};
 use crate::solver::{CheckResult, Solver, Z3Session};
 use crate::sort::{
-    SymVal, const_to_symval, declare_symval, scalar_const_smt, symval_atoms, symval_select,
+    SymVal, bv_lit_i128, const_to_symval, declare_symval, scalar_const_smt, symval_atoms,
+    symval_select,
 };
 use crate::{Options, Outcome, ReplayVerdict, Verdict, classify_sat_model};
 
@@ -29,6 +30,113 @@ struct Ob {
     qb: QueryBuilder,
     /// The NONVACUOUS check: SAT is the good answer.
     nonvacuous: bool,
+    /// The whole context, when `qb` holds only part of it: `qb` is solved first, and only an UNSAT
+    /// answer is taken from it (dropping assumptions is sound); anything else is solved again here.
+    full: Option<QueryBuilder>,
+}
+
+/// Where each op's facts sit in a QueryBuilder: (assertions, pending schemas, pending foralls).
+type OpFacts = (
+    std::ops::Range<usize>,
+    std::ops::Range<usize>,
+    std::ops::Range<usize>,
+);
+
+/// The ops a formula's results depend on: the ops that compute the outputs it reads, and their
+/// operands' ops, transitively.
+fn result_cone(node: &Node, t: &Term) -> BTreeSet<usize> {
+    fn results(t: &Term, out: &mut BTreeSet<u32>) {
+        match t {
+            Term::Result(j) => {
+                out.insert(*j);
+            }
+            Term::Not(a) | Term::Neg(a) | Term::Proj(a, _) => results(a, out),
+            Term::Bin(_, a, b) => {
+                results(a, out);
+                results(b, out);
+            }
+            Term::Index(a, xs) => {
+                results(a, out);
+                xs.iter().for_each(|x| results(x, out));
+            }
+            Term::Forall(rs, b) => {
+                for (lo, hi) in rs {
+                    results(lo, out);
+                    results(hi, out);
+                }
+                results(b, out);
+            }
+            Term::Builtin(_, xs) | Term::Spec(_, xs) | Term::Fold(_, xs) | Term::Apply(_, xs) => {
+                xs.iter().for_each(|x| results(x, out));
+            }
+            Term::Input(_)
+            | Term::Port(..)
+            | Term::Bound(_)
+            | Term::Const(_)
+            | Term::Resource(_) => {}
+        }
+    }
+    let mut js = BTreeSet::new();
+    results(t, &mut js);
+    let mut todo: Vec<usize> = js
+        .iter()
+        .filter_map(|&j| match node.outputs.get(j as usize) {
+            Some(Operand::Op(i, _)) => Some(*i as usize),
+            _ => None,
+        })
+        .collect();
+    let mut cone = BTreeSet::new();
+    while let Some(i) = todo.pop() {
+        if cone.insert(i) {
+            for o in &node.ops[i].operands {
+                if let Operand::Op(k, _) = o {
+                    todo.push(*k as usize);
+                }
+            }
+        }
+    }
+    cone
+}
+
+/// `qb` without the facts of the ops outside `cone`.
+fn restrict(qb: &QueryBuilder, facts: &[OpFacts], cone: &BTreeSet<usize>) -> QueryBuilder {
+    let drop = |sel: fn(&OpFacts) -> &std::ops::Range<usize>, n: usize| -> Vec<bool> {
+        let mut keep = vec![true; n];
+        for (i, f) in facts.iter().enumerate() {
+            if !cone.contains(&i) {
+                for k in sel(f).clone() {
+                    keep[k] = false;
+                }
+            }
+        }
+        keep
+    };
+    let mut q = qb.clone();
+    let keep = drop(|f| &f.0, q.assertions.len());
+    q.assertions = q
+        .assertions
+        .into_iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(a, _)| a)
+        .collect();
+    let keep = drop(|f| &f.1, q.pending_schemas.len());
+    q.pending_schemas = q
+        .pending_schemas
+        .into_iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(a, _)| a)
+        .collect();
+    let keep = drop(|f| &f.2, q.pending_foralls.len());
+    q.pending_foralls = q
+        .pending_foralls
+        .into_iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(a, _)| a)
+        .collect();
+    q
 }
 
 /// The op kind docs/14 gives each domain that eval_op_core records.
@@ -132,6 +240,7 @@ fn pre_obligations(
             id: format!("{id}.{j}"),
             qb: q,
             nonvacuous: false,
+            full: None,
         });
     }
 }
@@ -247,13 +356,20 @@ pub fn verify(
         id: format!("@{label}/NONVACUOUS"),
         qb: qb.clone(),
         nonvacuous: true,
+        full: None,
     });
 
     // Ops in canonical order: obligations first, against the context of earlier ops only.
     let mut vals: Vec<Vec<SymVal>> = Vec::new();
     let mut consts = BTreeMap::new();
     let mut ports = BTreeMap::new();
+    let mut op_facts: Vec<OpFacts> = Vec::with_capacity(node.ops.len());
     for (i, op) in node.ops.iter().enumerate() {
+        let at_start = (
+            qb.assertions.len(),
+            qb.pending_schemas.len(),
+            qb.pending_foralls.len(),
+        );
         let info = opcode::by_code(op.opcode).expect("validated opcode");
         let at = format!("@{label}/%{i}");
         let args: Vec<SymVal> = op
@@ -282,6 +398,7 @@ pub fn verify(
                 id: format!("{at}/{}", kind(info.name, tag)),
                 qb: q,
                 nonvacuous: false,
+                full: None,
             });
         }
 
@@ -433,6 +550,7 @@ pub fn verify(
                     id: format!("{at}/FOLD.base"),
                     qb: q,
                     nonvacuous: false,
+                    full: None,
                 });
                 // FOLD.pre.j and FOLD.step, for a fresh k < len(xs) and a fresh acc with I(k, acc).
                 let mut q = qb.clone();
@@ -487,6 +605,7 @@ pub fn verify(
                     id: format!("{at}/FOLD.step"),
                     qb: q,
                     nonvacuous: false,
+                    full: None,
                 });
                 // The result: a fresh value with I(len(xs), result) (docs/05).
                 let res = qb.fresh_symval(&format!("p{i}_fold"), &acc_ty);
@@ -528,6 +647,11 @@ pub fn verify(
             ports.insert((i as u32, s as u8), (op.results[s].clone(), sv.clone()));
         }
         vals.push(results);
+        op_facts.push((
+            at_start.0..qb.assertions.len(),
+            at_start.1..qb.pending_schemas.len(),
+            at_start.2..qb.pending_foralls.len(),
+        ));
     }
 
     // POST, against the whole body.
@@ -546,12 +670,18 @@ pub fn verify(
         let mut q = qb.clone();
         let mut e = env(node, callee, inputs.clone(), results.clone());
         e.ports = ports.clone();
+        let mut small = restrict(&q, &op_facts, &result_cone(node, t));
         let neg = encode_neg_goal(t, &mut e, &mut q);
-        q.assertions.push(neg);
+        q.assertions.push(neg.clone());
+        let mut e = env(node, callee, inputs.clone(), results.clone());
+        e.ports = ports.clone();
+        let small_neg = encode_neg_goal(t, &mut e, &mut small);
+        small.assertions.push(small_neg);
         obs.push(Ob {
             id: format!("@{label}/POST.{j}"),
-            qb: q,
+            qb: small,
             nonvacuous: false,
+            full: Some(q),
         });
     }
 
@@ -567,6 +697,7 @@ pub fn verify(
                 id: format!("@{label}/PRE.{j}.wd.{w}"),
                 qb: q,
                 nonvacuous: false,
+                full: None,
             });
         }
         let mut e = env(node, callee, inputs.clone(), vec![]);
@@ -584,6 +715,7 @@ pub fn verify(
                 id: format!("@{label}/POST.{j}.wd.{w}"),
                 qb: q,
                 nonvacuous: false,
+                full: None,
             });
         }
     }
@@ -594,16 +726,218 @@ pub fn verify(
         .into_iter()
         .map(|ob| solve(ob, node, callee, &input_syms, &mut z3))
         .collect();
-    // COST is not encoded yet: each conjunct stays unproven rather than silently skipped.
-    for j in 0..node.contract.cost.len() {
-        out.push(Outcome {
-            id: format!("@{label}/COST.{j}"),
-            verdict: Verdict::Unknown,
-            code: Some("VG-V0005"),
-            solver: "none".into(),
-            inputs: None,
-            message: "COST obligations are not encoded yet".into(),
-        });
+    out.extend(cost_obligations(
+        node,
+        label,
+        callee,
+        opts,
+        &inputs,
+        &vals,
+        &mut consts,
+        &qb,
+        &results,
+        &ports,
+    ));
+    out
+}
+
+/// The SMT value of a static cost expression (docs/05, "Cost model"), at the integer widths of
+/// docs/05 so that no sum or product wraps. `exact` turns false where a callee's cost is unknown.
+#[allow(clippy::too_many_arguments)]
+fn cost_fval(
+    c: &vg_types::CostExpr,
+    node: &Node,
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+    inputs: &[(Type, SymVal)],
+    vals: &[Vec<SymVal>],
+    consts: &mut BTreeMap<u32, SymVal>,
+    qb: &mut QueryBuilder,
+    exact: &mut bool,
+) -> (String, u32) {
+    use vg_types::CostExpr as C;
+    let ext = |(e, w): (String, u32), to: u32| if w == to { e } else { zext(&e, w, to) };
+    match c {
+        C::Const(k) => {
+            let w = (64 - k.leading_zeros()).max(1) + 1;
+            (bv_lit_i128(i128::from(*k), w), w)
+        }
+        C::Len(o) => {
+            let sv = operand(node, *o, inputs, vals, consts, qb);
+            (zext(&coll_len_bv64(&sv), 64, 65), 65)
+        }
+        C::Val(o) => match operand(node, *o, inputs, vals, consts, qb) {
+            SymVal::Int { expr, ty } => {
+                let w = match ty {
+                    Type::UInt(w) | Type::SInt(w) => u32::from(w),
+                    _ => 64,
+                };
+                (zext(&expr, w, w + 1), w + 1)
+            }
+            _ => {
+                *exact = false;
+                (qb.fresh_sym("cost_val", "(_ BitVec 65)"), 65)
+            }
+        },
+        // A callee without ARENA allocates nothing (docs/05); otherwise its bound is not modeled.
+        C::CalleeArenaBytes(i) => {
+            let pure = node
+                .calls
+                .get(*i as usize)
+                .and_then(callee)
+                .is_some_and(|n| {
+                    n.effects.0 & vg_core::types::EffectMask::bit("ARENA").unwrap_or(u32::MAX) == 0
+                });
+            if pure {
+                (bv_lit_i128(0, 2), 2)
+            } else {
+                *exact = false;
+                (qb.fresh_sym("callee_arena", "(_ BitVec 65)"), 65)
+            }
+        }
+        C::CalleeOps(_) => {
+            *exact = false;
+            (qb.fresh_sym("callee_ops", "(_ BitVec 65)"), 65)
+        }
+        C::Add(a, b) | C::Mul(a, b) | C::Max(a, b) => {
+            let x = cost_fval(a, node, callee, inputs, vals, consts, qb, exact);
+            let y = cost_fval(b, node, callee, inputs, vals, consts, qb, exact);
+            let w = match c {
+                C::Add(..) => x.1.max(y.1) + 1,
+                C::Mul(..) => x.1 + y.1,
+                _ => x.1.max(y.1),
+            };
+            let (ex, ey) = (ext(x, w), ext(y, w));
+            let e = match c {
+                C::Add(..) => format!("(bvadd {ex} {ey})"),
+                C::Mul(..) => format!("(bvmul {ex} {ey})"),
+                _ => format!("(ite (bvuge {ex} {ey}) {ex} {ey})"),
+            };
+            (e, w)
+        }
+        C::Align16(a) => {
+            let x = cost_fval(a, node, callee, inputs, vals, consts, qb, exact);
+            let w = x.1 + 1;
+            let ex = ext(x, w);
+            // (x + 15) with its four low bits cleared: the next multiple of 16.
+            let four = bv_lit_i128(4, w);
+            let sum = format!("(bvadd {ex} {})", bv_lit_i128(15, w));
+            (format!("(bvshl (bvlshr {sum} {four}) {four})"), w)
+        }
+    }
+}
+
+/// One obligation per COST conjunct: the resources vg-types computes, against the bound, under
+/// PRE and the body's facts (docs/05, `@n/COST.i`).
+#[allow(clippy::too_many_arguments)]
+fn cost_obligations(
+    node: &Node,
+    label: &str,
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+    opts: &Options,
+    inputs: &[(Type, SymVal)],
+    vals: &[Vec<SymVal>],
+    consts: &mut BTreeMap<u32, SymVal>,
+    qb: &QueryBuilder,
+    results: &[(Type, SymVal)],
+    ports: &BTreeMap<(u32, u8), (Type, SymVal)>,
+) -> Vec<Outcome> {
+    if node.contract.cost.is_empty() {
+        return vec![];
+    }
+    let unknown = |j: usize, message: String| Outcome {
+        id: format!("@{label}/COST.{j}"),
+        verdict: Verdict::Unknown,
+        code: Some("VG-V0005"),
+        solver: "none".into(),
+        inputs: None,
+        message,
+    };
+    let summary = match vg_types::check_node(node, callee) {
+        Ok(s) => s,
+        Err(_) => {
+            return (0..node.contract.cost.len())
+                .map(|j| {
+                    unknown(
+                        j,
+                        "vg-types rejects the node, so its cost is unknown".into(),
+                    )
+                })
+                .collect();
+        }
+    };
+    let mut q = qb.clone();
+    let mut exact = true;
+    let ops = cost_fval(
+        &summary.ops_expr,
+        node,
+        callee,
+        inputs,
+        vals,
+        consts,
+        &mut q,
+        &mut exact,
+    );
+    let arena = cost_fval(
+        &summary.arena_bytes,
+        node,
+        callee,
+        inputs,
+        vals,
+        consts,
+        &mut q,
+        &mut exact,
+    );
+    let int = |(expr, width): (String, u32)| FVal::Int {
+        expr,
+        width,
+        orig: None,
+    };
+    let resources = CostResources {
+        ops: int(ops),
+        arena_bytes: int(arena),
+        heap_bytes: int((bv_lit_i128(0, 2), 2)),
+    };
+    let input_syms: Vec<SymVal> = inputs.iter().map(|(_, s)| s.clone()).collect();
+    let mut z3 = Z3Session::new(&opts.z3, opts.timeout_ms);
+    let mut out = Vec::new();
+    for (j, t) in node.contract.cost.iter().enumerate() {
+        let mut cq = q.clone();
+        let mut e = env(node, callee, inputs.to_vec(), results.to_vec());
+        e.ports = ports.clone();
+        e.resources = Some(resources.clone());
+        let neg = encode_neg_goal(t, &mut e, &mut cq);
+        cq.assertions.push(neg);
+        let mut o = solve(
+            Ob {
+                id: format!("@{label}/COST.{j}"),
+                qb: cq,
+                nonvacuous: false,
+                full: None,
+            },
+            node,
+            callee,
+            &input_syms,
+            &mut z3,
+        );
+        // The cost model is not run by vg-interp, so a model is checked against nothing more: it
+        // refutes the bound when every cost term is exact, and proves nothing otherwise.
+        if matches!(
+            o.verdict,
+            Verdict::Counterexample | Verdict::ContractGap | Verdict::Error
+        ) && o.inputs.is_some()
+        {
+            if exact {
+                o.verdict = Verdict::Counterexample;
+                o.code = Some("VG-V0001");
+                o.message = "the cost model exceeds the bound on these inputs".into();
+            } else {
+                o.verdict = Verdict::Unknown;
+                o.code = Some("VG-V0005");
+                o.message = "a callee's cost is not modeled".into();
+                o.inputs = None;
+            }
+        }
+        out.push(o);
     }
     out
 }
@@ -623,7 +957,24 @@ fn solve(
         inputs: None,
         message: String::new(),
     };
-    let mut q = ob.qb;
+    // First a smaller query: the obligation's own context restricted as `qb` is, with kernels
+    // known by their POST alone. Only UNSAT is taken from it, since dropping assumptions is sound;
+    // anything else is decided by the whole query. NONVACUOUS wants SAT, so it skips this.
+    let mut q = ob.full.unwrap_or_else(|| ob.qb.clone());
+    if !ob.nonvacuous {
+        let mut small = ob.qb;
+        small.post_only_kernels = true;
+        if small.unresolved_error.is_none() {
+            small.finalize_instantiations(callee);
+            if small.unresolved_error.is_none()
+                && z3.check_query(&small.into_pruned_query()) == CheckResult::Unsat
+            {
+                o.verdict = Verdict::Proven;
+                o.code = None;
+                return o;
+            }
+        }
+    }
     if let Some(e) = &q.unresolved_error {
         o.message = format!("not encoded: {e}");
         return o;

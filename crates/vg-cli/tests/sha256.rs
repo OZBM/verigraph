@@ -1,6 +1,6 @@
 //! examples/sha256.vgs, the node M1's audio limiter binds through `@MESH_QUERY @sha256`: its digest
-//! matches FIPS 180-4 and Python's hashlib in vg-interp, and every obligation, `@sha256/POST.0:
-//! result == spec:sha256_spec(m)` included, is proven.
+//! matches FIPS 180-4 and Python's hashlib in vg-interp, and every obligation, `@sha256_impl/POST.0:
+//! result == spec:sha256(m)` included, is proven.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -53,7 +53,7 @@ fn digests_match_fips_180_4() {
     let path = example();
     for (m, want) in cases {
         let inputs = serde_json::json!({ "m": m }).to_string();
-        let out = vg(&["run", path.to_str().unwrap(), "@sha256", &inputs]);
+        let out = vg(&["run", path.to_str().unwrap(), "@sha256_impl", &inputs]);
         assert_eq!(out["ok"], true, "{out}");
         let got = hex(out["outputs"][0].as_array().expect("a digest"));
         assert_eq!(got, want, "digest of a {}-byte message", m.len());
@@ -71,7 +71,7 @@ fn every_obligation_is_proven() {
         .collect();
     assert!(open.is_empty(), "not proven: {open:?}");
     assert!(
-        results.iter().any(|r| r["id"] == "@sha256/POST.0"),
+        results.iter().any(|r| r["id"] == "@sha256_impl/POST.0"),
         "the refinement of the SPEC is among the obligations"
     );
 }
