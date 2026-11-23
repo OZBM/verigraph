@@ -65,7 +65,12 @@ pub fn eval_bool_term(
     }
 }
 
-fn to_f64(f: &mut FnBuilder, m: &mut ModBuilder, ty: &Type, val: &str) -> Result<String, Diagnostic> {
+fn to_f64(
+    f: &mut FnBuilder,
+    m: &mut ModBuilder,
+    ty: &Type,
+    val: &str,
+) -> Result<String, Diagnostic> {
     Ok(match ty {
         Type::Float(64) => val.to_string(),
         Type::Float(32) => {
@@ -95,7 +100,12 @@ fn to_f64(f: &mut FnBuilder, m: &mut ModBuilder, ty: &Type, val: &str) -> Result
     })
 }
 
-fn from_f64(f: &mut FnBuilder, m: &mut ModBuilder, ty: &Type, val: &str) -> Result<String, Diagnostic> {
+fn from_f64(
+    f: &mut FnBuilder,
+    m: &mut ModBuilder,
+    ty: &Type,
+    val: &str,
+) -> Result<String, Diagnostic> {
     Ok(match ty {
         Type::Float(64) => val.to_string(),
         Type::Float(32) => {
@@ -331,7 +341,11 @@ pub fn eval_term(
             let member_ty = ms
                 .get(idx)
                 .ok_or_else(|| {
-                    Diagnostic::error("VG-S0203", Span::default(), "formula tuple proj out of range")
+                    Diagnostic::error(
+                        "VG-S0203",
+                        Span::default(),
+                        "formula tuple proj out of range",
+                    )
                 })?
                 .clone();
             let tup_lty = llvm_type(&Type::Tuple(ms), m.target)?;
@@ -1103,7 +1117,9 @@ fn eval_builtin(
                     };
                     m.require_decl(decl);
                     let r = f.reg();
-                    f.emit(format!("{r} = call {lty} {fn_name}({lty} {fa}, {lty} {fb})"));
+                    f.emit(format!(
+                        "{r} = call {lty} {fn_name}({lty} {fa}, {lty} {fb})"
+                    ));
                     let out = from_arith_float(f, m, &ta, &r)?;
                     Ok(FVal::Float(ta, out))
                 }
@@ -1329,9 +1345,11 @@ fn eval_fold_in_formula(
     let ch = *cx.node.calls.get(call_ix as usize).ok_or_else(|| {
         Diagnostic::error("VG-S0203", Span::default(), "fold callee out of range")
     })?;
-    let cnode = cx.graph.by_hash.get(&ch).ok_or_else(|| {
-        Diagnostic::error("VG-S0009", Span::default(), "fold callee missing")
-    })?;
+    let cnode = cx
+        .graph
+        .by_hash
+        .get(&ch)
+        .ok_or_else(|| Diagnostic::error("VG-S0009", Span::default(), "fold callee missing"))?;
     let cprefix = &cx.graph.prefixes[&ch];
     let acc_ty = cnode.results[0].clone();
     let elem_ty = cnode.params[1].clone();
@@ -1433,7 +1451,9 @@ fn eval_fold_in_formula(
     f.emit(format!("call void @vgi_{cprefix}({})", cargs.join(", ")));
     if is_scalar_abi(&acc_ty) {
         let nv = emit_load_scalar(f, &acc_ty, &out_buf, m.target)?;
-        f.emit(format!("store {acc_lty} {nv}, ptr {acc_buf}, align {acc_align}"));
+        f.emit(format!(
+            "store {acc_lty} {nv}, ptr {acc_buf}, align {acc_align}"
+        ));
     } else {
         let sz = size_of(&acc_ty, m.target)?;
         emit_memcpy(f, m, &acc_buf, &out_buf, sz);
@@ -1533,7 +1553,9 @@ pub fn emit_arena_bytes_fn(
         let is_pos = f.reg();
         f.emit(format!("{is_pos} = icmp sgt i128 {v128}, 0"));
         let clamped = f.reg();
-        f.emit(format!("{clamped} = select i1 {is_pos}, i128 {v128}, i128 0"));
+        f.emit(format!(
+            "{clamped} = select i1 {is_pos}, i128 {v128}, i128 0"
+        ));
         let res = f.reg();
         f.emit(format!("{res} = trunc i128 {clamped} to i64"));
         res
@@ -1594,7 +1616,9 @@ fn operand_len_i64(
         Operand::Op(i, 0) => match &node.ops[i as usize].results[0] {
             Type::Array(_, n) => Ok(format!("{n}")),
             Type::Tensor(_, dims) => Ok(format!("{}", tensor_elem_count(dims)?)),
-            Type::Slice(_) => Ok(op_lens[i as usize].clone().unwrap_or_else(|| "0".to_string())),
+            Type::Slice(_) => Ok(op_lens[i as usize]
+                .clone()
+                .unwrap_or_else(|| "0".to_string())),
             _ => Ok("0".to_string()),
         },
         _ => Ok("0".to_string()),
@@ -1633,7 +1657,10 @@ fn emit_dynamic_arena_sum(
                 Operand::Input(k) => inputs[k as usize].ssa.clone(),
                 Operand::Const(ci) => {
                     let b = &node.consts[ci as usize].bytes;
-                    format!("{}", u64::from_le_bytes(b[..8].try_into().unwrap_or([0; 8])))
+                    format!(
+                        "{}",
+                        u64::from_le_bytes(b[..8].try_into().unwrap_or([0; 8]))
+                    )
                 }
                 Operand::Op(k, 0) => scalar_u64_vals
                     .get(&(k as usize))
@@ -1682,7 +1709,10 @@ fn emit_dynamic_arena_sum(
                 Operand::Input(k) => inputs[k as usize].ssa.clone(),
                 Operand::Const(ci) => {
                     let b = &node.consts[ci as usize].bytes;
-                    format!("{}", u64::from_le_bytes(b[..8].try_into().unwrap_or([0; 8])))
+                    format!(
+                        "{}",
+                        u64::from_le_bytes(b[..8].try_into().unwrap_or([0; 8]))
+                    )
                 }
                 _ => "0".to_string(),
             };

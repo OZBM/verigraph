@@ -44,18 +44,20 @@ impl Module {
             .node
     }
 
-    fn build_to(
-        &self,
-        label: &str,
-        opts: &Options,
-        out: &Path,
-    ) -> Result<BuildReport, Diagnostic> {
-        build(self.node(label), &|h| self.by_hash.get(h).cloned(), opts, out)
+    fn build_to(&self, label: &str, opts: &Options, out: &Path) -> Result<BuildReport, Diagnostic> {
+        build(
+            self.node(label),
+            &|h| self.by_hash.get(h).cloned(),
+            opts,
+            out,
+        )
     }
 }
 
 fn corpus(rel: &str) -> String {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel);
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(rel);
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
 }
 
@@ -1019,7 +1021,9 @@ fn fold_bounded_matches_a_rust_fold() {
 #[test]
 fn generate_builds_arrays_and_slices() {
     // a35: Array<u64, 8> from a literal count; the kernel is a saturating product.
-    let m = Module::new(&corpus("tests/corpus/alpha/a35_generate_literal_count/01.vgs"));
+    let m = Module::new(&corpus(
+        "tests/corpus/alpha/a35_generate_literal_count/01.vgs",
+    ));
     let e = exe(&m, "gen_table", true, true);
     for step in [0u64, 1, 3, u64::MAX / 3, u64::MAX] {
         let want: Vec<u8> = (0..8u64)
@@ -1036,7 +1040,9 @@ fn generate_builds_arrays_and_slices() {
     for count in [0u64, 1, 7, 100] {
         for base in [0.5f32, -3.0, 1e30] {
             let mut want = le(i128::from(count), 8);
-            want.extend(f32s(&(0..count).map(|i| (i as f32) + base).collect::<Vec<_>>()));
+            want.extend(f32s(
+                &(0..count).map(|i| (i as f32) + base).collect::<Vec<_>>(),
+            ));
             let o = run(&e, &cat(&[le(i128::from(count), 8), f32s(&[base])]));
             assert_eq!(o.code, 0, "count {count}: {}", o.stderr);
             assert_eq!(o.stdout, want, "count {count} base {base}");
@@ -1080,19 +1086,37 @@ fn assert_guard_dispatches_and_keeps_a_runtime_guard() {
     let m = Module::new(&corpus("tests/corpus/alpha/a38_assert_guard_branch/01.vgs"));
     let e = exe(&m, "select_operation", true, true);
     assert_eq!(e.residual_guards, 0, "a branch is not a guard");
-    let enc = |c: u8, a: u32, b: u32| cat(&[vec![c], a.to_le_bytes().to_vec(), b.to_le_bytes().to_vec()]);
+    let enc =
+        |c: u8, a: u32, b: u32| cat(&[vec![c], a.to_le_bytes().to_vec(), b.to_le_bytes().to_vec()]);
     let o = run(&e, &enc(1, 7, 5));
     assert_eq!(o.code, 0, "{}", o.stderr);
-    assert_eq!(o.stdout, cat(&[12u32.to_le_bytes().to_vec(), 35u32.to_le_bytes().to_vec()]));
+    assert_eq!(
+        o.stdout,
+        cat(&[12u32.to_le_bytes().to_vec(), 35u32.to_le_bytes().to_vec()])
+    );
     let o = run(&e, &enc(0, 7, 5));
-    assert_eq!(o.stdout, cat(&[2u32.to_le_bytes().to_vec(), 5u32.to_le_bytes().to_vec()]));
+    assert_eq!(
+        o.stdout,
+        cat(&[2u32.to_le_bytes().to_vec(), 5u32.to_le_bytes().to_vec()])
+    );
     let o = run(&e, &enc(0, 5, 7));
     assert_eq!(
         o.stdout,
-        cat(&[5u32.wrapping_sub(7).to_le_bytes().to_vec(), 5u32.to_le_bytes().to_vec()])
+        cat(&[
+            5u32.wrapping_sub(7).to_le_bytes().to_vec(),
+            5u32.to_le_bytes().to_vec()
+        ])
     );
-    assert_eq!(run(&e, &enc(1, u32::MAX, 2)).code, 4, "ADD.checked overflow");
-    assert_eq!(run(&e, &enc(2, 1, 1)).code, 2, "Bool byte 2 is an invalid encoding");
+    assert_eq!(
+        run(&e, &enc(1, u32::MAX, 2)).code,
+        4,
+        "ADD.checked overflow"
+    );
+    assert_eq!(
+        run(&e, &enc(2, 1, 1)).code,
+        2,
+        "Bool byte 2 is an invalid encoding"
+    );
 }
 
 #[test]
@@ -1137,7 +1161,14 @@ fn quickstart_nodes_match_independent_oracles() {
     let q = Module::new(&corpus("examples/quickstart.vgs"));
 
     let e = exe(&q, "add_sat", true, true);
-    for (a, b) in [(200u8, 100u8), (0, 0), (255, 1), (254, 1), (1, 254), (255, 255)] {
+    for (a, b) in [
+        (200u8, 100u8),
+        (0, 0),
+        (255, 1),
+        (254, 1),
+        (1, 254),
+        (255, 255),
+    ] {
         let o = run(&e, &[a, b]);
         assert_eq!(o.stdout, vec![a.saturating_add(b)], "{a}+{b}");
     }
@@ -1152,7 +1183,10 @@ fn quickstart_nodes_match_independent_oracles() {
         (123_456_789, 987_654_321),
     ] {
         let want = ((u64::from(a) + u64::from(b)) / 2) as u32;
-        let o = run(&e, &cat(&[a.to_le_bytes().to_vec(), b.to_le_bytes().to_vec()]));
+        let o = run(
+            &e,
+            &cat(&[a.to_le_bytes().to_vec(), b.to_le_bytes().to_vec()]),
+        );
         assert_eq!(o.stdout, want.to_le_bytes(), "midpoint {a} {b}");
     }
 
@@ -1193,7 +1227,11 @@ fn quickstart_nodes_match_independent_oracles() {
         f32s(&[1.0]),
         "quickstart // run:"
     );
-    assert_eq!(run(&e, &f32s(&[f32::INFINITY, 0.5])).code, 1, "PRE is_finite(x)");
+    assert_eq!(
+        run(&e, &f32s(&[f32::INFINITY, 0.5])).code,
+        1,
+        "PRE is_finite(x)"
+    );
     assert_eq!(run(&e, &f32s(&[0.0, 0.4])).code, 1, "PRE knee >= 0.5");
 }
 
@@ -1222,7 +1260,10 @@ fn x86_64_and_wasm32_produce_object_files_reported_as_not_linked() {
                     &out,
                 )
                 .unwrap_or_else(|d| panic!("{target:?} {label}: {d:?}"));
-            assert!(!rep.linked, "{target:?} has no sysroot, so it is not linked");
+            assert!(
+                !rep.linked,
+                "{target:?} has no sysroot, so it is not linked"
+            );
             assert_eq!(rep.artifact, out);
             let bytes = std::fs::read(&out).unwrap();
             assert!(bytes.starts_with(magic), "{target:?} {label}: bad magic");
@@ -1251,7 +1292,11 @@ fn gen_value(ty: &Type, rng: &mut Rng, zero: bool, out: &mut Vec<u8>) -> bool {
         }
         Type::Float(32) | Type::Float(64) => {
             let table = [0.0f64, -0.0, 1.0, 0.5, -2.5, 100.0, 0.25, 7.0];
-            let x = if zero { 0.0 } else { table[(rng.next() % 8) as usize] };
+            let x = if zero {
+                0.0
+            } else {
+                table[(rng.next() % 8) as usize]
+            };
             if matches!(ty, Type::Float(32)) {
                 out.extend((x as f32).to_bits().to_le_bytes());
             } else {
@@ -1318,8 +1363,10 @@ fn sweep(shard: usize, shards: usize) {
     for file in alpha_files() {
         let src = std::fs::read_to_string(&file).unwrap();
         let Ok(all) = asm_local(&src) else { continue };
-        let by_hash: HashMap<Hash, Node> =
-            all.iter().map(|a| (a.hashes.node, a.node.clone())).collect();
+        let by_hash: HashMap<Hash, Node> = all
+            .iter()
+            .map(|a| (a.hashes.node, a.node.clone()))
+            .collect();
         for a in &all {
             let n = &a.node;
             if n.spec || n.effects.0 & !EffectMask::ARENA != 0 {
@@ -1331,7 +1378,11 @@ fn sweep(shard: usize, shards: usize) {
             }
             let name = format!(
                 "{}/{}::{}",
-                file.parent().unwrap().file_name().unwrap().to_string_lossy(),
+                file.parent()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy(),
                 file.file_name().unwrap().to_string_lossy(),
                 a.label
             );
@@ -1340,7 +1391,12 @@ fn sweep(shard: usize, shards: usize) {
             let mut failed = None;
             for facts in [false, true] {
                 let path = dir.join(format!("prog-{facts}"));
-                match build(n, &|h| by_hash.get(h).cloned(), &aarch64(facts, true), &path) {
+                match build(
+                    n,
+                    &|h| by_hash.get(h).cloned(),
+                    &aarch64(facts, true),
+                    &path,
+                ) {
                     Ok(rep) => {
                         assert!(rep.linked);
                         exes.push(path);
@@ -1392,9 +1448,15 @@ fn sweep(shard: usize, shards: usize) {
                 }
                 let plain = run(&holder[0], &input);
                 let fast = run(&holder[1], &input);
-                assert_eq!(plain.code, fast.code, "{name} seed {seed}: facts changed the exit code");
+                assert_eq!(
+                    plain.code, fast.code,
+                    "{name} seed {seed}: facts changed the exit code"
+                );
                 assert!(plain.code <= 4, "{name}: exit {}", plain.code);
-                assert_eq!(plain.stdout, fast.stdout, "{name} seed {seed}: facts changed the output");
+                assert_eq!(
+                    plain.stdout, fast.stdout,
+                    "{name} seed {seed}: facts changed the output"
+                );
                 if plain.code != 0 {
                     assert!(plain.stdout.is_empty(), "{name}: output written on failure");
                 }
@@ -1402,7 +1464,10 @@ fn sweep(shard: usize, shards: usize) {
             drop(holder);
         }
     }
-    println!("sweep shard {shard}: {built} built and run, {} not lowered", unsupported.len());
+    println!(
+        "sweep shard {shard}: {built} built and run, {} not lowered",
+        unsupported.len()
+    );
     for u in &unsupported {
         println!("  not lowered: {u}");
     }

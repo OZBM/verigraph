@@ -6,7 +6,9 @@ use vg_core::diag::{Diagnostic, Span};
 use vg_core::types::Type;
 
 use crate::Target;
-use crate::layout::{align_of, align_up, llvm_type, result_union_layout, size_of, tuple_member_offsets};
+use crate::layout::{
+    align_of, align_up, llvm_type, result_union_layout, size_of, tuple_member_offsets,
+};
 
 #[derive(Clone, Debug)]
 pub struct IrVal {
@@ -107,7 +109,10 @@ impl ModBuilder {
         let mut out = String::new();
         out.push_str("; VeriGraph generated LLVM IR\n");
         out.push_str("source_filename = \"vg_module\"\n");
-        out.push_str(&format!("target datalayout = \"{}\"\n", self.target.datalayout()));
+        out.push_str(&format!(
+            "target datalayout = \"{}\"\n",
+            self.target.datalayout()
+        ));
         out.push_str(&format!("target triple = \"{}\"\n\n", self.target.triple()));
 
         if !self.globals.is_empty() {
@@ -231,8 +236,9 @@ impl FnBuilder {
 
     pub fn cond_br(&mut self, cond: &str, then_bb: &str, else_bb: &str) {
         if !self.terminated {
-            self.body
-                .push(format!("  br i1 {cond}, label %{then_bb}, label %{else_bb}"));
+            self.body.push(format!(
+                "  br i1 {cond}, label %{then_bb}, label %{else_bb}"
+            ));
             self.terminated = true;
         }
     }
@@ -294,7 +300,9 @@ pub fn emit_canon_float(f: &mut FnBuilder, ty: &Type, val: &str) -> String {
             f.emit(format!("{is_nan} = fcmp uno float {val}, {val}"));
             let res = f.reg();
             let canon = f32_const_expr(0x7FC0_0000);
-            f.emit(format!("{res} = select i1 {is_nan}, float {canon}, float {val}"));
+            f.emit(format!(
+                "{res} = select i1 {is_nan}, float {canon}, float {val}"
+            ));
             res
         }
         Type::Float(64) => {
@@ -302,7 +310,9 @@ pub fn emit_canon_float(f: &mut FnBuilder, ty: &Type, val: &str) -> String {
             f.emit(format!("{is_nan} = fcmp uno double {val}, {val}"));
             let res = f.reg();
             let canon = f64_const_expr(0x7FF8_0000_0000_0000);
-            f.emit(format!("{res} = select i1 {is_nan}, double {canon}, double {val}"));
+            f.emit(format!(
+                "{res} = select i1 {is_nan}, double {canon}, double {val}"
+            ));
             res
         }
         Type::Float(16) => {
@@ -337,7 +347,13 @@ pub fn emit_memcpy(f: &mut FnBuilder, m: &mut ModBuilder, dst: &str, src: &str, 
     ));
 }
 
-pub fn emit_memcpy_dyn(f: &mut FnBuilder, m: &mut ModBuilder, dst: &str, src: &str, bytes_i64: &str) {
+pub fn emit_memcpy_dyn(
+    f: &mut FnBuilder,
+    m: &mut ModBuilder,
+    dst: &str,
+    src: &str,
+    bytes_i64: &str,
+) {
     m.require_decl("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
     f.emit(format!(
         "call void @llvm.memcpy.p0.p0.i64(ptr {dst}, ptr {src}, i64 {bytes_i64}, i1 false)"
@@ -642,7 +658,11 @@ pub fn emit_const_val(
             let n = bytes.len().min(16);
             raw[..n].copy_from_slice(&bytes[..n]);
             let v = u128::from_le_bytes(raw);
-            let mask = if *w == 128 { u128::MAX } else { (1u128 << w) - 1 };
+            let mask = if *w == 128 {
+                u128::MAX
+            } else {
+                (1u128 << w) - 1
+            };
             let _ = f;
             format!("{}", v & mask)
         }
@@ -714,9 +734,10 @@ pub fn tuple_member_ptr(
 
 pub fn tuple_byte_offset(ms: &[Type], idx: usize, target: Target) -> Result<u64, Diagnostic> {
     let offsets = tuple_member_offsets(ms, target)?;
-    offsets.get(idx).copied().ok_or_else(|| {
-        Diagnostic::error("VG-S0203", Span::default(), "tuple index out of range")
-    })
+    offsets
+        .get(idx)
+        .copied()
+        .ok_or_else(|| Diagnostic::error("VG-S0203", Span::default(), "tuple index out of range"))
 }
 
 pub fn emit_trap(
@@ -762,7 +783,11 @@ pub fn align_up_dyn(f: &mut FnBuilder, val_i64: &str) -> String {
     res
 }
 
-pub fn result_layout_info(ok: &Type, err: &Type, target: Target) -> Result<(u64, u64, String), Diagnostic> {
+pub fn result_layout_info(
+    ok: &Type,
+    err: &Type,
+    target: Target,
+) -> Result<(u64, u64, String), Diagnostic> {
     let (u_align, count, _) = result_union_layout(ok, err, target)?;
     let lty = llvm_type(
         &Type::Result(Box::new(ok.clone()), Box::new(err.clone())),

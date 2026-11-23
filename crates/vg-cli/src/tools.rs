@@ -155,14 +155,65 @@ pub fn run(src: &str, mesh: MeshLookup, node: &str, inputs: &Map<String, J>) -> 
     }
 }
 
-/// vg_build: verify the root and everything it calls, then compile it for each target.
+fn target(name: &str) -> Option<vg_codegen::Target> {
+    Some(match name {
+        "aarch64-apple-darwin" => vg_codegen::Target::Aarch64Darwin,
+        "x86_64-unknown-linux-gnu" => vg_codegen::Target::X86_64Linux,
+        "wasm32-wasip1" => vg_codegen::Target::Wasm32Wasi,
+        _ => return None,
+    })
+}
+
+/// vg_build: compile a root node for each target. Until vg-smt lands, only `unverified` builds are
+/// possible: no proof facts, and a runtime check on every partial op (exit code 4 when one fails).
 pub fn build(
-    _src: &str,
-    _mesh: MeshLookup,
-    _root: &str,
-    _targets: &[String],
-    _out_dir: &Path,
-    _unverified: bool,
+    src: &str,
+    mesh: MeshLookup,
+    root: &str,
+    targets: &[String],
+    out_dir: &Path,
+    unverified: bool,
 ) -> J {
-    json!({ "ok": false, "error": "not available yet: vg-codegen is not merged" })
+    if !unverified {
+        return json!({
+            "ok": false,
+            "error": "vg verify is not available yet, so only --unverified builds are possible",
+        });
+    }
+    let m = match load(src, mesh) {
+        Ok(m) => m,
+        Err(d) => return failed(&d),
+    };
+    let a = match m.find(root) {
+        Ok((a, _)) => a,
+        Err(e) => return json!({ "ok": false, "error": e }),
+    };
+    let callee = m.callee();
+    let mut artifacts = vec![];
+    for t in targets {
+        let Some(target) = target(t) else {
+            return json!({ "ok": false, "error": format!("unknown target {t}") });
+        };
+        let opts = vg_codegen::Options {
+            target,
+            proof_facts: false,
+            runtime_checks: true,
+        };
+        let out = out_dir.join(format!("{}-{t}", a.label));
+        match vg_codegen::build(&a.node, &callee, &opts, &out) {
+            Ok(r) => {
+                let bytes = std::fs::read(&r.artifact).unwrap_or_default();
+                artifacts.push(json!({
+                    "target": t,
+                    "path": r.artifact.display().to_string(),
+                    "bytes": bytes.len(),
+                    "blake3": blake3::hash(&bytes).to_hex().to_string(),
+                    "linked": r.linked,
+                    "residual_guards": r.residual_guards,
+                }));
+            }
+            Err(d) => return json!({ "ok": false, "diagnostics": [diag(&d)] }),
+        }
+    }
+    json!({ "ok": true, "verified": false, "artifacts": artifacts })
 }

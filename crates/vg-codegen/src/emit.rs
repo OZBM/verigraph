@@ -82,9 +82,10 @@ fn pre_term_is_simple_assume(t: &Term) -> bool {
         Term::Input(_) | Term::Const(_) => true,
         Term::Not(a) | Term::Neg(a) => pre_term_is_simple_assume(a),
         Term::Bin(_, a, b) => pre_term_is_simple_assume(a) && pre_term_is_simple_assume(b),
-        Term::Builtin(Builtin::IsFinite | Builtin::IsNan | Builtin::Abs | Builtin::Min | Builtin::Max, args) => {
-            args.iter().all(pre_term_is_simple_assume)
-        }
+        Term::Builtin(
+            Builtin::IsFinite | Builtin::IsNan | Builtin::Abs | Builtin::Min | Builtin::Max,
+            args,
+        ) => args.iter().all(pre_term_is_simple_assume),
         _ => false,
     }
 }
@@ -275,7 +276,11 @@ fn emit_op(
             // PROJ(t, j)
             let tv = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
             let Operand::Const(ci) = op.operands[1] else {
-                return Err(Diagnostic::error("VG-S0108", Span::default(), "PROJ index must be const"));
+                return Err(Diagnostic::error(
+                    "VG-S0108",
+                    Span::default(),
+                    "PROJ index must be const",
+                ));
             };
             let b = &node.consts[ci as usize].bytes;
             let j = u32::from_le_bytes(b[..4].try_into().unwrap_or([0; 4])) as usize;
@@ -348,7 +353,11 @@ fn emit_op(
                 Type::Slice(elem) => {
                     let (dp, len) = emit_slice_parts(f, &v.ssa);
                     let esz = docs13_fixed_byte_size(elem)?.ok_or_else(|| {
-                        Diagnostic::error("VG-T0114", Span::default(), "AS_BYTES invalid slice elem")
+                        Diagnostic::error(
+                            "VG-T0114",
+                            Span::default(),
+                            "AS_BYTES invalid slice elem",
+                        )
                     })?;
                     let bytes = f.reg();
                     f.emit(format!("{bytes} = mul i64 {len}, {esz}"));
@@ -370,11 +379,15 @@ fn emit_op(
             let lty = llvm_type(&res_ty, m.target)?;
             let buf = alloc_result_buf(f, m, an, op_idx, 0, &res_ty, scratch_base)?;
             let tp = f.reg();
-            f.emit(format!("{tp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 0"));
+            f.emit(format!(
+                "{tp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 0"
+            ));
             let tag = if op.opcode == 0x0008 { 1 } else { 0 };
             f.emit(format!("store i8 {tag}, ptr {tp}, align 1"));
             let pp = f.reg();
-            f.emit(format!("{pp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 1"));
+            f.emit(format!(
+                "{pp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 1"
+            ));
             emit_store_value_canon(f, m, &v.ty.clone(), &v, &pp)?;
             one(res_ty, buf)
         }
@@ -383,7 +396,10 @@ fn emit_op(
             let r = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
             let lty = llvm_type(&r.ty, m.target)?;
             let tp = f.reg();
-            f.emit(format!("{tp} = getelementptr inbounds {lty}, ptr {}, i32 0, i32 0", r.ssa));
+            f.emit(format!(
+                "{tp} = getelementptr inbounds {lty}, ptr {}, i32 0, i32 0",
+                r.ssa
+            ));
             let tag = f.reg();
             f.emit(format!("{tag} = load i8, ptr {tp}, align 1"));
             let b = f.reg();
@@ -398,20 +414,42 @@ fn emit_op(
             let lty = llvm_type(&r.ty, m.target)?;
             if m.runtime_checks {
                 let tp = f.reg();
-                f.emit(format!("{tp} = getelementptr inbounds {lty}, ptr {}, i32 0, i32 0", r.ssa));
+                f.emit(format!(
+                    "{tp} = getelementptr inbounds {lty}, ptr {}, i32 0, i32 0",
+                    r.ssa
+                ));
                 let tag = f.reg();
                 f.emit(format!("{tag} = load i8, ptr {tp}, align 1"));
                 let cond = f.reg();
                 if op.opcode == 0x000B {
                     f.emit(format!("{cond} = icmp ne i8 {tag}, 0"));
-                    emit_branch_trap_if_false(f, m, &cond, ctx_ptr, "rt", &ob("GET_OK.is_ok"), prefix);
+                    emit_branch_trap_if_false(
+                        f,
+                        m,
+                        &cond,
+                        ctx_ptr,
+                        "rt",
+                        &ob("GET_OK.is_ok"),
+                        prefix,
+                    );
                 } else {
                     f.emit(format!("{cond} = icmp eq i8 {tag}, 0"));
-                    emit_branch_trap_if_false(f, m, &cond, ctx_ptr, "rt", &ob("GET_ERR.is_err"), prefix);
+                    emit_branch_trap_if_false(
+                        f,
+                        m,
+                        &cond,
+                        ctx_ptr,
+                        "rt",
+                        &ob("GET_ERR.is_err"),
+                        prefix,
+                    );
                 }
             }
             let pp = f.reg();
-            f.emit(format!("{pp} = getelementptr inbounds {lty}, ptr {}, i32 0, i32 1", r.ssa));
+            f.emit(format!(
+                "{pp} = getelementptr inbounds {lty}, ptr {}, i32 0, i32 1",
+                r.ssa
+            ));
             let out_ty = op.results[0].clone();
             if is_scalar_abi(&out_ty) {
                 let s = emit_load_scalar(f, &out_ty, &pp, m.target)?;
@@ -425,7 +463,8 @@ fn emit_op(
             one(op.results[0].clone(), ssa)
         }
         0x0030..=0x0037 => {
-            let ssa = emit_bitwise_and_shift(f, m, node, op_idx, op, ctx_ptr, prefix, inputs, op_vals)?;
+            let ssa =
+                emit_bitwise_and_shift(f, m, node, op_idx, op, ctx_ptr, prefix, inputs, op_vals)?;
             one(op.results[0].clone(), ssa)
         }
         0x0040..=0x004B => {
@@ -465,7 +504,15 @@ fn emit_op(
             if m.runtime_checks {
                 let ok = f.reg();
                 f.emit(format!("{ok} = icmp ult i64 {}, {len}", idx.ssa));
-                emit_branch_trap_if_false(f, m, &ok, ctx_ptr, "rt", &ob("UPDATE.in_bounds"), prefix);
+                emit_branch_trap_if_false(
+                    f,
+                    m,
+                    &ok,
+                    ctx_ptr,
+                    "rt",
+                    &ob("UPDATE.in_bounds"),
+                    prefix,
+                );
             }
             let out_ty = op.results[0].clone();
             let elem_ty = out_ty.elem().expect("collection elem").clone();
@@ -476,7 +523,8 @@ fn emit_op(
             match &out_ty {
                 Type::Array(_, n) => {
                     emit_memcpy(f, m, &out_buf, &src_dp, u64::from(*n) * elem_sz);
-                    let ep = emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &out_buf, &idx.ssa);
+                    let ep =
+                        emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &out_buf, &idx.ssa);
                     emit_store_value_canon(f, m, &elem_ty, &val, &ep)?;
                     one(out_ty, out_buf)
                 }
@@ -493,7 +541,8 @@ fn emit_op(
                         emit_memcpy_dyn(f, m, &new_dp, &src_dp, &bytes);
                         new_dp
                     };
-                    let ep = emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &dst_dp, &idx.ssa);
+                    let ep =
+                        emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &dst_dp, &idx.ssa);
                     emit_store_value_canon(f, m, &elem_ty, &val, &ep)?;
                     emit_store_slice(f, &out_buf, &dst_dp, &len);
                     one(out_ty, out_buf)
@@ -546,11 +595,16 @@ fn emit_op(
 
             match &out_ty {
                 Type::Array(_, n) => {
-                    let Type::Array(_, na) = a.ty else { unreachable!() };
-                    let Type::Array(_, nb) = b.ty else { unreachable!() };
+                    let Type::Array(_, na) = a.ty else {
+                        unreachable!()
+                    };
+                    let Type::Array(_, nb) = b.ty else {
+                        unreachable!()
+                    };
                     let _ = n;
                     emit_memcpy(f, m, &out_buf, &pa, u64::from(na) * elem_sz);
-                    let mid = emit_gep_bytes(f, m.target, true, &elem_lty, &out_buf, &format!("{na}"));
+                    let mid =
+                        emit_gep_bytes(f, m.target, true, &elem_lty, &out_buf, &format!("{na}"));
                     emit_memcpy(f, m, &mid, &pb, u64::from(nb) * elem_sz);
                     one(out_ty, out_buf)
                 }
@@ -568,7 +622,15 @@ fn emit_op(
                         f.emit(format!("{flag} = extractvalue {{ i64, i1 }} {ov}, 1"));
                         let ok = f.reg();
                         f.emit(format!("{ok} = xor i1 {flag}, true"));
-                        emit_branch_trap_if_false(f, m, &ok, ctx_ptr, "rt", &ob("CONCAT.length"), prefix);
+                        emit_branch_trap_if_false(
+                            f,
+                            m,
+                            &ok,
+                            ctx_ptr,
+                            "rt",
+                            &ob("CONCAT.length"),
+                            prefix,
+                        );
                         sum
                     } else {
                         let sum = f.reg();
@@ -595,11 +657,72 @@ fn emit_op(
                 _ => unreachable!(),
             }
         }
-        OP_SIMD_MAP => emit_simd_map(f, m, graph, node, an, op_idx, op, ctx_ptr, scratch_base, inputs, op_vals),
-        OP_FOLD_BOUNDED => emit_fold_bounded(f, m, graph, node, an, op_idx, op, ctx_ptr, scratch_base, inputs, op_vals),
-        OP_GENERATE => emit_generate(f, m, graph, node, an, op_idx, op, ctx_ptr, scratch_base, inputs, op_vals),
-        OP_ASSERT_GUARD => emit_assert_guard(f, m, graph, prefix, node, an, op_idx, op, ctx_ptr, scratch_base, inputs, op_vals),
-        OP_CALL_HASH => emit_call_hash(f, m, graph, node, an, op_idx, op, ctx_ptr, scratch_base, inputs, op_vals),
+        OP_SIMD_MAP => emit_simd_map(
+            f,
+            m,
+            graph,
+            node,
+            an,
+            op_idx,
+            op,
+            ctx_ptr,
+            scratch_base,
+            inputs,
+            op_vals,
+        ),
+        OP_FOLD_BOUNDED => emit_fold_bounded(
+            f,
+            m,
+            graph,
+            node,
+            an,
+            op_idx,
+            op,
+            ctx_ptr,
+            scratch_base,
+            inputs,
+            op_vals,
+        ),
+        OP_GENERATE => emit_generate(
+            f,
+            m,
+            graph,
+            node,
+            an,
+            op_idx,
+            op,
+            ctx_ptr,
+            scratch_base,
+            inputs,
+            op_vals,
+        ),
+        OP_ASSERT_GUARD => emit_assert_guard(
+            f,
+            m,
+            graph,
+            prefix,
+            node,
+            an,
+            op_idx,
+            op,
+            ctx_ptr,
+            scratch_base,
+            inputs,
+            op_vals,
+        ),
+        OP_CALL_HASH => emit_call_hash(
+            f,
+            m,
+            graph,
+            node,
+            an,
+            op_idx,
+            op,
+            ctx_ptr,
+            scratch_base,
+            inputs,
+            op_vals,
+        ),
         0x0400 => {
             // FILE_READ(e, h, max) -> (Eff, Result<Slice<u8>, u32>)
             m.require_decl("declare void @vg_rt_file_read(ptr, i32, i64, ptr)");
@@ -612,8 +735,14 @@ fn emit_op(
                 h.ssa, max_b.ssa
             ));
             Ok(vec![
-                IrVal { ty: Type::Eff, ssa: String::new() },
-                IrVal { ty: res_ty, ssa: buf },
+                IrVal {
+                    ty: Type::Eff,
+                    ssa: String::new(),
+                },
+                IrVal {
+                    ty: res_ty,
+                    ssa: buf,
+                },
             ])
         }
         0x0401 => {
@@ -628,8 +757,14 @@ fn emit_op(
                 h.ssa, data.ssa
             ));
             Ok(vec![
-                IrVal { ty: Type::Eff, ssa: String::new() },
-                IrVal { ty: res_ty, ssa: buf },
+                IrVal {
+                    ty: Type::Eff,
+                    ssa: String::new(),
+                },
+                IrVal {
+                    ty: res_ty,
+                    ssa: buf,
+                },
             ])
         }
         0x0402 => {
@@ -642,8 +777,14 @@ fn emit_op(
                 c.ssa
             ));
             Ok(vec![
-                IrVal { ty: Type::Eff, ssa: String::new() },
-                IrVal { ty: Type::UInt(64), ssa: r },
+                IrVal {
+                    ty: Type::Eff,
+                    ssa: String::new(),
+                },
+                IrVal {
+                    ty: Type::UInt(64),
+                    ssa: r,
+                },
             ])
         }
         other => Err(Diagnostic::error(
@@ -1072,7 +1213,9 @@ fn emit_int_arith(
                     let neg = f.reg();
                     f.emit(format!("{neg} = sub {lty} 0, {}", a.ssa));
                     let r = f.reg();
-                    f.emit(format!("{r} = select i1 {is_min}, {lty} {max_v}, {lty} {neg}"));
+                    f.emit(format!(
+                        "{r} = select i1 {is_min}, {lty} {max_v}, {lty} {neg}"
+                    ));
                     r
                 }
             }
@@ -1094,9 +1237,7 @@ fn emit_int_arith(
                 0 => {
                     if m.runtime_checks {
                         let intr = format!("@llvm.{s_ch}{intr_base}.with.overflow.{lty}");
-                        m.require_decl(&format!(
-                            "declare {{ {lty}, i1 }} {intr}({lty}, {lty})"
-                        ));
+                        m.require_decl(&format!("declare {{ {lty}, i1 }} {intr}({lty}, {lty})"));
                         let ov = f.reg();
                         f.emit(format!(
                             "{ov} = call {{ {lty}, i1 }} {intr}({lty} {}, {lty} {})",
@@ -1129,9 +1270,7 @@ fn emit_int_arith(
                 2 => {
                     if op.opcode == 0x0012 {
                         let intr = format!("@llvm.{s_ch}mul.fix.sat.{lty}");
-                        m.require_decl(&format!(
-                            "declare {lty} {intr}({lty}, {lty}, i32)"
-                        ));
+                        m.require_decl(&format!("declare {lty} {intr}({lty}, {lty}, i32)"));
                         let r = f.reg();
                         f.emit(format!(
                             "{r} = call {lty} {intr}({lty} {}, {lty} {}, i32 0)",
@@ -1201,7 +1340,10 @@ fn emit_int_arith(
             let is_edge = f.reg();
             f.emit(format!("{is_edge} = and i1 {is_min}, {is_m1}"));
             let safe_b = f.reg();
-            f.emit(format!("{safe_b} = select i1 {is_edge}, {lty} 1, {lty} {}", b.ssa));
+            f.emit(format!(
+                "{safe_b} = select i1 {is_edge}, {lty} 1, {lty} {}",
+                b.ssa
+            ));
             let instr = if is_div { "sdiv" } else { "srem" };
             let q = f.reg();
             f.emit(format!("{q} = {instr} {lty} {}, {safe_b}", a.ssa));
@@ -1213,7 +1355,9 @@ fn emit_int_arith(
                 format!("{max_v}")
             };
             let res = f.reg();
-            f.emit(format!("{res} = select i1 {is_edge}, {lty} {edge_val}, {lty} {q}"));
+            f.emit(format!(
+                "{res} = select i1 {is_edge}, {lty} {edge_val}, {lty} {q}"
+            ));
             Ok(res)
         }
         _ => unreachable!(),
@@ -1398,7 +1542,11 @@ fn emit_float_op(
         }
         0x0047 | 0x0048 => {
             let b = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
-            let name = if op.opcode == 0x0047 { "minimum" } else { "maximum" };
+            let name = if op.opcode == 0x0047 {
+                "minimum"
+            } else {
+                "maximum"
+            };
             let intr = format!("@llvm.{name}.{sfx}");
             m.require_decl(&format!("declare {lty} {intr}({lty}, {lty})"));
             let r = f.reg();
@@ -1495,7 +1643,11 @@ fn emit_cmp_and_logic(
     let c = f.reg();
     match &a.ty {
         Type::Float(32) | Type::Float(64) => {
-            let lty = if a.ty == Type::Float(32) { "float" } else { "double" };
+            let lty = if a.ty == Type::Float(32) {
+                "float"
+            } else {
+                "double"
+            };
             let pred = match op.opcode {
                 0x0050 => "oeq",
                 0x0051 => "une",
@@ -1575,7 +1727,9 @@ fn emit_simd_map(
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
-    let Operand::Callee(ci) = op.operands[0] else { unreachable!() };
+    let Operand::Callee(ci) = op.operands[0] else {
+        unreachable!()
+    };
     let kh = node.calls[ci as usize];
     let knode = &graph.by_hash[&kh];
     let kprefix = &graph.prefixes[&kh];
@@ -1675,7 +1829,9 @@ fn emit_fold_bounded(
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
     // Operands: [Callee(f), xs, b..., init, Invariant(I)]
-    let Operand::Callee(ci) = op.operands[0] else { unreachable!() };
+    let Operand::Callee(ci) = op.operands[0] else {
+        unreachable!()
+    };
     let kh = node.calls[ci as usize];
     let knode = &graph.by_hash[&kh];
     let kprefix = &graph.prefixes[&kh];
@@ -1745,7 +1901,9 @@ fn emit_fold_bounded(
 
     if is_scalar_abi(&acc_ty) {
         let nv = emit_load_scalar(f, &acc_ty, &next_buf, m.target)?;
-        f.emit(format!("store {acc_lty} {nv}, ptr {acc_buf}, align {acc_align}"));
+        f.emit(format!(
+            "store {acc_lty} {nv}, ptr {acc_buf}, align {acc_align}"
+        ));
     } else {
         let sz = size_of(&acc_ty, m.target)?;
         emit_memcpy(f, m, &acc_buf, &next_buf, sz);
@@ -1779,7 +1937,9 @@ fn emit_generate(
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
-    let Operand::Callee(ci) = op.operands[0] else { unreachable!() };
+    let Operand::Callee(ci) = op.operands[0] else {
+        unreachable!()
+    };
     let kh = node.calls[ci as usize];
     let knode = &graph.by_hash[&kh];
     let kprefix = &graph.prefixes[&kh];
@@ -1870,8 +2030,12 @@ fn emit_assert_guard(
 ) -> Result<Vec<IrVal>, Diagnostic> {
     // Operands: [cond, Callee(then), a..., Callee(else)]
     let cond = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
-    let Operand::Callee(ct) = op.operands[1] else { unreachable!() };
-    let Operand::Callee(ce) = *op.operands.last().unwrap() else { unreachable!() };
+    let Operand::Callee(ct) = op.operands[1] else {
+        unreachable!()
+    };
+    let Operand::Callee(ce) = *op.operands.last().unwrap() else {
+        unreachable!()
+    };
     let th = node.calls[ct as usize];
     let eh = node.calls[ce as usize];
     let tnode = &graph.by_hash[&th];
@@ -1997,7 +2161,9 @@ fn emit_call_hash(
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
-    let Operand::Callee(ci) = op.operands[0] else { unreachable!() };
+    let Operand::Callee(ci) = op.operands[0] else {
+        unreachable!()
+    };
     let ch = node.calls[ci as usize];
     let cnode = &graph.by_hash[&ch];
     let cprefix = &graph.prefixes[&ch];
@@ -2126,7 +2292,9 @@ fn emit_validate_encoding(
             let abs = f.reg();
             f.emit(format!("{abs} = and i64 {bits}, 9223372036854775807"));
             let is_nan = f.reg();
-            f.emit(format!("{is_nan} = icmp ugt i64 {abs}, 9218868437227405312"));
+            f.emit(format!(
+                "{is_nan} = icmp ugt i64 {abs}, 9218868437227405312"
+            ));
             let is_canon = f.reg();
             f.emit(format!(
                 "{is_canon} = icmp eq i64 {bits}, 9221120237041090560"
@@ -2378,9 +2546,15 @@ fn emit_checked_entry(
             Type::Float(16) => {
                 m.require_decl("declare double @vg_f16_to_f64(i16)");
                 let r1 = f.reg();
-                f.emit(format!("{r1} = call double @vg_f16_to_f64(i16 {})", lo_v.ssa));
+                f.emit(format!(
+                    "{r1} = call double @vg_f16_to_f64(i16 {})",
+                    lo_v.ssa
+                ));
                 let r2 = f.reg();
-                f.emit(format!("{r2} = call double @vg_f16_to_f64(i16 {})", hi_v.ssa));
+                f.emit(format!(
+                    "{r2} = call double @vg_f16_to_f64(i16 {})",
+                    hi_v.ssa
+                ));
                 let r3 = f.reg();
                 f.emit(format!("{r3} = call double @vg_f16_to_f64(i16 {})", tv.ssa));
                 (r1, r2, r3, "double")
@@ -2388,11 +2562,20 @@ fn emit_checked_entry(
             Type::BFloat16 => {
                 m.require_decl("declare double @vg_bf16_to_f64(i16)");
                 let r1 = f.reg();
-                f.emit(format!("{r1} = call double @vg_bf16_to_f64(i16 {})", lo_v.ssa));
+                f.emit(format!(
+                    "{r1} = call double @vg_bf16_to_f64(i16 {})",
+                    lo_v.ssa
+                ));
                 let r2 = f.reg();
-                f.emit(format!("{r2} = call double @vg_bf16_to_f64(i16 {})", hi_v.ssa));
+                f.emit(format!(
+                    "{r2} = call double @vg_bf16_to_f64(i16 {})",
+                    hi_v.ssa
+                ));
                 let r3 = f.reg();
-                f.emit(format!("{r3} = call double @vg_bf16_to_f64(i16 {})", tv.ssa));
+                f.emit(format!(
+                    "{r3} = call double @vg_bf16_to_f64(i16 {})",
+                    tv.ssa
+                ));
                 (r1, r2, r3, "double")
             }
             _ => unreachable!(),
@@ -2661,7 +2844,8 @@ fn emit_main_runner(m: &mut ModBuilder, graph: &CallGraph) -> Result<(), Diagnos
     f.emit(format!("call void @vg_rt_destroy(ptr {ctx_ptr})"));
     f.ret(&format!("i32 {rc}"));
 
-    m.fns.push(f.finish("define i32 @main(i32 %argc, ptr %argv)"));
+    m.fns
+        .push(f.finish("define i32 @main(i32 %argc, ptr %argv)"));
     Ok(())
 }
 
@@ -2965,4 +3149,3 @@ fn emit_write_stdout_value(
         )),
     }
 }
-
