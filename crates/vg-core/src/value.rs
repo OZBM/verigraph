@@ -33,6 +33,84 @@ pub fn int_fits(v: i128, t: &Type) -> bool {
 }
 
 impl Value {
+    /// Appends the docs/13 bytes of this value at type `ty` (AS_BYTES, the ABI, CONSTS): Bool, scalars,
+    /// Array and Tensor, and a Slice's elements. None for other types or a value of another type.
+    pub fn to_bytes(&self, ty: &Type, out: &mut Vec<u8>) -> Option<()> {
+        match (self, ty) {
+            (Value::Bool(b), Type::Bool) => out.push(u8::from(*b)),
+            (Value::Int(v), t @ (Type::UInt(w) | Type::SInt(w))) if int_fits(*v, t) => {
+                out.extend(&v.to_le_bytes()[..*w as usize / 8]);
+            }
+            (Value::Float(bits), t) if t.is_float() => {
+                let n = t.byte_size()? as usize;
+                if n < 8 && bits >> (8 * n) != 0 {
+                    return None;
+                }
+                let bits = if float::is_nan(t, *bits) {
+                    float::canonical_nan(t)
+                } else {
+                    *bits
+                };
+                out.extend(&bits.to_le_bytes()[..n]);
+            }
+            (Value::Seq(xs), Type::Array(e, _) | Type::Tensor(e, _) | Type::Slice(e)) => {
+                let elem = e.byte_size()?;
+                if ty.byte_size().is_some_and(|n| n != elem * xs.len() as u64) {
+                    return None;
+                }
+                for x in xs {
+                    x.to_bytes(e, out)?;
+                }
+            }
+            _ => return None,
+        }
+        Some(())
+    }
+
+    /// Reads a value of fixed-size type `ty` from the front of `b`, and the bytes it took. Every NaN
+    /// pattern reads as the canonical NaN (ADR 0002); a Bool byte other than 0 or 1 is no value.
+    pub fn from_bytes(b: &[u8], ty: &Type) -> Option<(Value, usize)> {
+        let n = ty.byte_size()? as usize;
+        let b = b.get(..n)?;
+        let v = match ty {
+            Type::Bool => match b[0] {
+                0 | 1 => Value::Bool(b[0] == 1),
+                _ => return None,
+            },
+            Type::UInt(_) | Type::SInt(_) => {
+                let mut w = [0u8; 16];
+                w[..n].copy_from_slice(b);
+                let u = u128::from_le_bytes(w);
+                let shift = 128 - 8 * n as u32;
+                Value::Int(if matches!(ty, Type::SInt(_)) {
+                    ((u << shift) as i128) >> shift
+                } else {
+                    u as i128
+                })
+            }
+            t if t.is_float() => {
+                let mut w = [0u8; 8];
+                w[..n].copy_from_slice(b);
+                let bits = u64::from_le_bytes(w);
+                Value::Float(if float::is_nan(t, bits) {
+                    float::canonical_nan(t)
+                } else {
+                    bits
+                })
+            }
+            Type::Array(e, _) | Type::Tensor(e, _) => {
+                let size = e.byte_size()? as usize;
+                let count = if size == 0 { 0 } else { n / size };
+                let xs: Option<Vec<_>> = (0..count)
+                    .map(|i| Value::from_bytes(&b[i * size..], e).map(|(v, _)| v))
+                    .collect();
+                Value::Seq(xs?)
+            }
+            _ => return None,
+        };
+        Some((v, n))
+    }
+
     /// The docs/15 JSON text of this value at type `ty`, or None when the value does not have that
     /// type (or is Eff).
     pub fn to_json(&self, ty: &Type) -> Option<String> {
@@ -162,6 +240,42 @@ mod tests {
         for (v, t, want) in cases {
             assert_eq!(v.to_json(&t).as_deref(), Some(want), "{v:?} at {t}");
         }
+    }
+
+    #[test]
+    fn bytes_round_trip_and_follow_docs_13() {
+        let f32 = Type::Float(32);
+        let cases: Vec<(Value, Type, Vec<u8>)> = vec![
+            (Value::Bool(true), Type::Bool, vec![1]),
+            (Value::Int(-2), Type::SInt(16), vec![0xFE, 0xFF]),
+            (Value::Int(0x0102_0304), Type::UInt(32), vec![4, 3, 2, 1]),
+            (
+                Value::Int(i64::MIN.into()),
+                Type::SInt(64),
+                i64::MIN.to_le_bytes().to_vec(),
+            ),
+            (Value::Float(0x8000_0000), f32.clone(), vec![0, 0, 0, 0x80]),
+            (Value::Float(0x3C00), Type::Float(16), vec![0, 0x3C]),
+            (
+                Value::Seq(vec![Value::Int(1), Value::Int(-1)]),
+                Type::Tensor(Box::new(Type::SInt(8)), vec![1, 2]),
+                vec![1, 0xFF],
+            ),
+        ];
+        for (v, t, want) in cases {
+            let mut b = Vec::new();
+            v.to_bytes(&t, &mut b).expect("representable");
+            assert_eq!(b, want, "{v:?} at {t}");
+            assert_eq!(Value::from_bytes(&b, &t), Some((v, want.len())));
+        }
+        // Any NaN pattern reads as the canonical NaN; a Bool byte of 2 is no value.
+        let nan = Value::from_bytes(&0xFFC0_0001u32.to_le_bytes(), &f32);
+        assert_eq!(nan, Some((Value::Float(0x7FC0_0000), 4)));
+        assert_eq!(Value::from_bytes(&[2], &Type::Bool), None);
+        assert_eq!(
+            Value::Int(300).to_bytes(&Type::UInt(8), &mut Vec::new()),
+            None
+        );
     }
 
     #[test]
