@@ -22,3 +22,7 @@ vg-decode = { path = "../vg-decode" }
 vg-telemetry = { path = "../vg-telemetry" }
 vg-mesh = { path = "../vg-mesh" }
 vg-omnilift = { path = "../vg-omnilift" }
+serde_json = "1"
+rmcp = { version = "3.11", default-features = false, features = ["server", "transport-io"] }
+tokio = { version = "1", features = ["rt"] }
+blake3 = "1"
