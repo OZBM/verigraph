@@ -1,5 +1,6 @@
 //! Verification conditions, SMT-LIB2 emission, solver drivers, counterexamples, proof cache.
 
+pub mod formula;
 pub mod model;
 pub mod sexpr;
 pub mod solver;
