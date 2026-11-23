@@ -44,11 +44,22 @@ jobs:
       - name: Confirm the host architecture
         run: |
           rustc -vV | grep -Fx "host: ${{ matrix.triple }}"
-      - name: Confirm that clang has the wasm32 target
+      # The image's default Xcode can lack the wasm32 target (run 45246814395: clang-2100.1.1.101),
+      # so pick an installed Xcode whose clang has it; /usr/bin/clang follows DEVELOPER_DIR.
+      - name: Select an Xcode whose clang has the wasm32 target
         if: runner.os == 'macOS'
         run: |
-          clang --version | head -n 1
-          clang -print-targets | grep -q wasm32 || { echo "this clang has no wasm32 target"; exit 1; }
+          for x in /Applications/Xcode*.app; do
+            dev="$x/Contents/Developer"
+            if DEVELOPER_DIR="$dev" xcrun clang -print-targets 2>/dev/null | grep -q wasm32; then
+              echo "DEVELOPER_DIR=$dev" >> "$GITHUB_ENV"
+              DEVELOPER_DIR="$dev" xcrun clang --version | head -n 1
+              exit 0
+            fi
+          done
+          echo "no installed Xcode has a clang with the wasm32 target:"
+          ls -d /Applications/Xcode*.app
+          exit 1
       - name: Test the Antigravity extension
         run: node --test editors/antigravity/extension/test/*.test.js
       - run: cargo fmt --all --check
