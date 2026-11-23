@@ -1,0 +1,17 @@
+// expect: reject @diff_pos/POST.0
+// slice-max: 5
+module s09_swapped_sub_operands;
+
+NODE @diff_pos {
+  SIGNATURE: (hi: i32, lo: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: hi >= lo && lo >= 0 && hi <= 10000;
+    POST: result >= 0;
+  }
+  BODY {
+    %0 = ADD.checked(lo, 0:i32);
+    %1 = SUB.checked(%0, hi); // BUG: swapped operands (lo - hi)
+    RETURN(%1);
+  }
+}

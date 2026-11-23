@@ -1,0 +1,16 @@
+// expect: reject @to_u32/%1/CAST.in_range
+// slice-max: 5
+module s14_cast_signed_to_unsigned;
+
+NODE @to_u32 {
+  SIGNATURE: (x: i32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0 && x <= 1000;
+  }
+  BODY {
+    %0 = SUB.checked(x, 1:i32); // BUG: -1 when x == 0
+    %1 = CAST.u32(%0);
+    RETURN(%1);
+  }
+}

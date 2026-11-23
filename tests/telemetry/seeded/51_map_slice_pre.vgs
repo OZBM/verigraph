@@ -1,0 +1,28 @@
+// expect: reject @map_slice_half/%0/MAP.pre.0
+// slice-max: 5
+module s51_map_slice_pre;
+
+NODE @k_sub {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 10;
+    POST: result == x - 10;
+  }
+  BODY {
+    %0 = SUB.checked(x, 10:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @map_slice_half {
+  SIGNATURE: (xs: Slice<u32>) -> (Slice<u32>);
+  EFFECTS: [ARENA];
+  CONTRACT {
+    PRE: forall(i in 0..len(xs)) { xs[i] >= 5 }; // BUG: 5 < 10
+  }
+  BODY {
+    %0 = SIMD_MAP(@k_sub, xs);
+    RETURN(%0);
+  }
+}

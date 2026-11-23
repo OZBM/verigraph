@@ -1,0 +1,29 @@
+// expect: reject @caller/%1/CALL.pre.0
+// slice-max: 5
+module s41_call_pre_off_by_one;
+
+NODE @helper {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 100;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @caller {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 100;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32); // BUG: 100 when x == 99
+    %1 = CALL_HASH(@helper, %0);
+    RETURN(%1);
+  }
+}

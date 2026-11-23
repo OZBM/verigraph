@@ -1,0 +1,16 @@
+// expect: reject @copy_dir/%1/FCOPYSIGN.sign
+// slice-max: 5
+module s25_fcopysign_nan_sign;
+
+NODE @copy_dir {
+  SIGNATURE: (mag: f32, dir: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: mag >= 0.0 && is_finite(mag); // BUG: dir is unconstrained, may be NaN
+  }
+  BODY {
+    %0 = FABS(mag);
+    %1 = FCOPYSIGN(%0, dir);
+    RETURN(%1);
+  }
+}

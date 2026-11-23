@@ -1,0 +1,23 @@
+// expect: reject @knee_clip/POST.0
+// slice-max: 5
+module s30_soft_knee_bad_guard;
+
+NODE @knee_clip {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FABS(x);
+    %1 = FSUB(%0, knee);
+    %2 = FMAX(%1, 0.0:f32);
+    %3 = FSUB(1.0:f32, knee);
+    %4 = FDIV(%2, %3);
+    %5 = FADD(1.0:f32, %4);
+    %6 = FDIV(%4, %5); // BUG: inf / inf = NaN
+    %7 = FCLAMP(%6, -1.0:f32, 1.0:f32);
+    RETURN(%7);
+  }
+}

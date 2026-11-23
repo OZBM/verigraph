@@ -1,0 +1,16 @@
+// expect: reject @sub_margin/%1/SUB.no_overflow
+// slice-max: 5
+module s02_sub_underflow;
+
+NODE @sub_margin {
+  SIGNATURE: (x: u32, y: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 10 && y <= 10;
+  }
+  BODY {
+    %0 = SUB.checked(x, 1:u32); // min 9
+    %1 = SUB.checked(%0, y);    // BUG: 9 - 10 underflows
+    RETURN(%1);
+  }
+}

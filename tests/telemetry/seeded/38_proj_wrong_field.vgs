@@ -1,0 +1,15 @@
+// expect: reject @get_snd/POST.0
+// slice-max: 5
+module s38_proj_wrong_field;
+
+NODE @get_snd {
+  SIGNATURE: (p: Tuple<u32, u32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == p.1;
+  }
+  BODY {
+    %0 = PROJ(p, 0:u32); // BUG: projected field 0 instead of 1
+    RETURN(%0);
+  }
+}

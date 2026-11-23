@@ -1,0 +1,29 @@
+// expect: reject @map_double/POST.0
+// slice-max: 5
+module s49_map_wrong_kernel_post;
+
+NODE @k_triple {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 100;
+    POST: result == x * 3;
+  }
+  BODY {
+    %0 = MUL.checked(x, 3:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @map_double {
+  SIGNATURE: (xs: Array<u32, 4>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { xs[i] <= 100 };
+    POST: forall(i in 0..4) { result[i] == xs[i] * 2 };
+  }
+  BODY {
+    %0 = SIMD_MAP(@k_triple, xs); // BUG: used k_triple instead of k_double
+    RETURN(%0);
+  }
+}

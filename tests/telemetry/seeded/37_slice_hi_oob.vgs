@@ -1,0 +1,16 @@
+// expect: reject @tail_slice/%1/SLICE.in_bounds
+// slice-max: 5
+module s37_slice_hi_oob;
+
+NODE @tail_slice {
+  SIGNATURE: (xs: Slice<u32>, n: u64) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n <= len(xs) && len(xs) <= 32;
+  }
+  BODY {
+    %0 = ADD.checked(n, 1:u64); // BUG: len(xs) + 1 when n == len(xs)
+    %1 = SLICE(xs, 0:u64, %0);
+    RETURN(%1);
+  }
+}

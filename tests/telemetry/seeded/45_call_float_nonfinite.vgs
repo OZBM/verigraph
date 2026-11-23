@@ -1,0 +1,29 @@
+// expect: reject @norm_call/%1/CALL.pre.0
+// slice-max: 5
+module s45_call_float_nonfinite;
+
+NODE @clip_unit {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FCLAMP(x, -1.0:f32, 1.0:f32);
+    RETURN(%0);
+  }
+}
+
+NODE @norm_call {
+  SIGNATURE: (x: f32, d: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && d >= 0.0 && d <= 1.0; // BUG: allows d == 0.0 -> x/0 = inf or NaN
+  }
+  BODY {
+    %0 = FDIV(x, d);
+    %1 = CALL_HASH(@clip_unit, %0);
+    RETURN(%1);
+  }
+}

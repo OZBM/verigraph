@@ -1,0 +1,42 @@
+// expect: reject @outer/%1/CALL.pre.0
+// slice-max: 5
+module s46_call_chain_pre;
+
+NODE @step_a {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 50;
+    POST: result == x + 10;
+  }
+  BODY {
+    %0 = ADD.checked(x, 10:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @step_b {
+  SIGNATURE: (y: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: y <= 55; // BUG: step_a can return up to 60
+    POST: result == y * 2;
+  }
+  BODY {
+    %0 = MUL.checked(y, 2:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @outer {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 50;
+  }
+  BODY {
+    %0 = CALL_HASH(@step_a, x);
+    %1 = CALL_HASH(@step_b, %0);
+    RETURN(%1);
+  }
+}

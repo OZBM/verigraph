@@ -1,0 +1,28 @@
+// expect: reject @caller2/%0/CALL.pre.1
+// slice-max: 5
+module s43_call_second_pre;
+
+NODE @bounded_add {
+  SIGNATURE: (a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a < 100 && b < 50;
+    POST: result == a + b;
+  }
+  BODY {
+    %0 = ADD.checked(a, b);
+    RETURN(%0);
+  }
+}
+
+NODE @caller2 {
+  SIGNATURE: (a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a < 100 && b <= 50; // BUG: allows b == 50
+  }
+  BODY {
+    %0 = CALL_HASH(@bounded_add, a, b);
+    RETURN(%0);
+  }
+}

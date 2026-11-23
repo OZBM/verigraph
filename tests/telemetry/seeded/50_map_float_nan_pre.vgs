@@ -1,0 +1,28 @@
+// expect: reject @map_clip/%0/MAP.pre.0
+// slice-max: 5
+module s50_map_float_nan_pre;
+
+NODE @k_clip {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FCLAMP(x, -1.0:f32, 1.0:f32);
+    RETURN(%0);
+  }
+}
+
+NODE @map_clip {
+  SIGNATURE: (xs: Array<f32, 4>) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    // BUG: missing forall(i in 0..4) { is_finite(xs[i]) }
+  }
+  BODY {
+    %0 = SIMD_MAP(@k_clip, xs);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,16 @@
+// expect: reject @narrow_u8/%1/CAST.in_range
+// slice-max: 5
+module s13_cast_int_narrowing;
+
+NODE @narrow_u8 {
+  SIGNATURE: (x: u32) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 255;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32); // BUG: 256 when x == 255
+    %1 = CAST.u8(%0);
+    RETURN(%1);
+  }
+}

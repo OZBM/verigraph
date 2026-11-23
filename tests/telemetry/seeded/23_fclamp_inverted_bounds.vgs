@@ -1,0 +1,16 @@
+// expect: reject @dyn_clamp/%1/FCLAMP.bounds
+// slice-max: 5
+module s23_fclamp_inverted_bounds;
+
+NODE @dyn_clamp {
+  SIGNATURE: (x: f32, hi: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && hi >= 0.5 && hi <= 5.0;
+  }
+  BODY {
+    %0 = FADD(hi, 1.0:f32);
+    %1 = FCLAMP(x, %0, hi); // BUG: lo = hi + 1 > hi
+    RETURN(%1);
+  }
+}

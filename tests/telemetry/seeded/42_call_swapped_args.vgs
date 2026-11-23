@@ -1,0 +1,28 @@
+// expect: reject @caller_sub/%0/CALL.pre.0
+// slice-max: 5
+module s42_call_swapped_args;
+
+NODE @ordered_sub {
+  SIGNATURE: (hi: u32, lo: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: hi >= lo;
+    POST: result == hi - lo;
+  }
+  BODY {
+    %0 = SUB.checked(hi, lo);
+    RETURN(%0);
+  }
+}
+
+NODE @caller_sub {
+  SIGNATURE: (hi: u32, lo: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: hi >= lo;
+  }
+  BODY {
+    %0 = CALL_HASH(@ordered_sub, lo, hi); // BUG: swapped lo and hi
+    RETURN(%0);
+  }
+}

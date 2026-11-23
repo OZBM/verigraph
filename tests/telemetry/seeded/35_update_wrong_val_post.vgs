@@ -1,0 +1,17 @@
+// expect: reject @set_first/POST.0
+// slice-max: 5
+module s35_update_wrong_val_post;
+
+NODE @set_first {
+  SIGNATURE: (xs: Array<u32, 4>, v: u32) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: v < 10;
+    POST: result[0] == v;
+  }
+  BODY {
+    %0 = ADD.checked(v, 1:u32); // BUG: stores v + 1 instead of v
+    %1 = UPDATE(xs, 0:u64, %0);
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,34 @@
+// expect: reject @guarded_idx/%2/GUARD.else.pre.0
+// slice-max: 5
+module s59_guard_else_pre;
+
+NODE @read_zero {
+  SIGNATURE: (xs: Slice<u32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: len(xs) > 0;
+  }
+  BODY {
+    %0 = INDEX(xs, 0:u64);
+    RETURN(%0);
+  }
+}
+
+NODE @ret_zero {
+  SIGNATURE: (xs: Slice<u32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY { RETURN(0:u32); }
+}
+
+NODE @guarded_idx {
+  SIGNATURE: (xs: Slice<u32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY {
+    %0 = LEN(xs);
+    %1 = GT.u(%0, 1:u64); // BUG: when len == 0, else branch calls @read_zero on empty slice
+    %2 = ASSERT_GUARD.branch(%1, @ret_zero, xs, else=@read_zero);
+    RETURN(%2);
+  }
+}

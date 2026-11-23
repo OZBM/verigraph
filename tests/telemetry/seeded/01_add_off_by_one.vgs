@@ -1,0 +1,17 @@
+// expect: reject @inc_bound/%1/ADD.no_overflow
+// slice-max: 5
+module s01_add_off_by_one;
+
+NODE @inc_bound {
+  SIGNATURE: (x: u8, bias: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 250 && bias <= 5;
+    POST: result >= x;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u8);
+    %1 = ADD.checked(%0, bias); // BUG: max 251 + 5 = 256 overflows u8
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,17 @@
+// expect: reject @sqrt_shifted/POST.0
+// slice-max: 5
+module s22_fsqrt_negative;
+
+NODE @sqrt_shifted {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0.0 && x <= 100.0;
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FSUB(x, 1.0:f32); // BUG: negative when x < 1.0
+    %1 = FSQRT(%0);
+    RETURN(%1);
+  }
+}

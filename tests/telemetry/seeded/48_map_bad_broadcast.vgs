@@ -1,0 +1,29 @@
+// expect: reject @map_bias/%1/MAP.pre.1
+// slice-max: 5
+module s48_map_bad_broadcast;
+
+NODE @k_add {
+  SIGNATURE: (x: u32, bias: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 100 && bias <= 50;
+    POST: result == x + bias;
+  }
+  BODY {
+    %0 = ADD.checked(x, bias);
+    RETURN(%0);
+  }
+}
+
+NODE @map_bias {
+  SIGNATURE: (xs: Array<u32, 4>, bias: u32) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { xs[i] <= 100 } && bias <= 50;
+  }
+  BODY {
+    %0 = ADD.checked(bias, 1:u32); // BUG: bias + 1 can be 51 > 50
+    %1 = SIMD_MAP(@k_add, xs, %0);
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,16 @@
+// expect: reject @negate_shifted/%1/NEG.no_overflow
+// slice-max: 5
+module s06_neg_min_i32;
+
+NODE @negate_shifted {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x > -2147483648;
+  }
+  BODY {
+    %0 = SUB.wrap(x, 1:i32); // BUG: reaches i32::MIN when x == i32::MIN + 1
+    %1 = NEG.checked(%0);
+    RETURN(%1);
+  }
+}

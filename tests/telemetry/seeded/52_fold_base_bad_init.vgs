@@ -1,0 +1,29 @@
+// expect: reject @sum_base/%0/FOLD.base
+// slice-max: 5
+module s52_fold_base_bad_init;
+
+NODE @step {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc <= 100 && x <= 10;
+    POST: result == acc + x;
+  }
+  BODY {
+    %0 = ADD.checked(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @sum_base {
+  SIGNATURE: (xs: Array<u32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { xs[i] <= 10 };
+    INVARIANT @inv(k, acc): acc <= k * 10;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@step, xs, init=5:u32, invariant=@inv); // BUG: init=5 violates 5 <= 0 at k=0
+    RETURN(%0);
+  }
+}
