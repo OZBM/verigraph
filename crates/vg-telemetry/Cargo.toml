@@ -10,3 +10,5 @@ publish.workspace = true
 vg-core = { path = "../vg-core" }
 vg-interp = { path = "../vg-interp" }
 vg-smt = { path = "../vg-smt" }
+# The FailureReport JSON of docs/15.
+serde_json = "1"

@@ -10,3 +10,5 @@ publish.workspace = true
 vg-core = { path = "../vg-core" }
 vg-types = { path = "../vg-types" }
 vg-smt = { path = "../vg-smt" }
+# JSON results of the incremental checker API (docs/15).
+serde_json = "1"

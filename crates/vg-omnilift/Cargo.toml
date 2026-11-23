@@ -12,3 +12,5 @@ vg-types = { path = "../vg-types" }
 vg-interp = { path = "../vg-interp" }
 vg-smt = { path = "../vg-smt" }
 vg-codegen = { path = "../vg-codegen" }
+# The vg_lift report JSON (docs/15).
+serde_json = "1"
