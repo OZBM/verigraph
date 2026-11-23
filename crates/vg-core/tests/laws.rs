@@ -44,7 +44,9 @@ fn asm_laws() {
     let mut skipped = Vec::new();
     for f in parsing_files() {
         let src = fs::read_to_string(&f).unwrap();
-        if src.contains("@MESH_QUERY") {
+        // tests/corpus/errors holds programs a static check must reject (docs/16): they parse, and
+        // vg-types tests their codes; they are not meant to assemble.
+        if src.contains("@MESH_QUERY") || rel(&f).starts_with("tests/corpus/errors/") {
             skipped.push(rel(&f));
             continue;
         }

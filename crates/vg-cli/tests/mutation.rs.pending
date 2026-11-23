@@ -166,7 +166,7 @@ fn violation(
         if vg_interp::holds(n, vg_interp::Clause::Pre, &args, &[], callee) != Ok(true) {
             continue;
         }
-        let mut host = vg_interp::NoHost;
+        let mut host = vg_interp::NoEffectsHost;
         match vg_interp::run(n, &args, callee, &mut host) {
             Err(_) => return Some(args),
             Ok(r)

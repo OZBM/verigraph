@@ -1,0 +1,86 @@
+// expect: verify
+// run: @add_sat {"a": 200, "b": 100} => [255]
+// run: @midpoint {"a": 4294967295, "b": 4294967293} => [4294967294]
+// run: @sum4 {"xs": [1, 2, 3, 994]} => [1000]
+// run: @soft_knee {"x": "3e38", "knee": "0.5"} => ["1.0"]
+// The examples of the README quick start: each node verifies, runs and builds.
+module quickstart;
+
+NODE @add_sat [intent: "Add two bytes, saturating at 255"] {
+  SIGNATURE: (a: u8, b: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= a && result >= b && (a + b <= 255 ==> result == a + b);
+  }
+  BODY {
+    %0 = ADD.sat(a, b);
+    RETURN(%0);
+  }
+}
+
+NODE @midpoint [intent: "The floor of the mean of two u32, without overflow"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == (a + b) / 2;
+  }
+  BODY {
+    %0 = AND(a, b);
+    %1 = XOR(a, b);
+    %2 = SHR.checked(%1, 1:u32);
+    %3 = ADD.checked(%0, %2);
+    RETURN(%3);
+  }
+}
+
+NODE @add_step {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  acc <= 3000 && x <= 1000;
+    POST: result == acc + x;
+  }
+  BODY {
+    %0 = ADD.checked(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @sum4 [intent: "Sum four readings of at most 1000 each"] {
+  SIGNATURE: (xs: Array<u32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  forall(i in 0..4) { xs[i] <= 1000 };
+    POST: result <= 4000;
+    INVARIANT @bounded(k, acc): acc <= 1000 * k;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@add_step, xs, init=0:u32, invariant=@bounded);
+    RETURN(%0);
+  }
+}
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}

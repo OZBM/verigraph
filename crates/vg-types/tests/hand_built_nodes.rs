@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use vg_core::codec::{decode, encode};
 use vg_core::ir::{
     Bin, Builtin, Const, Contract, Hash, Learnable, Node, Op, Operand, Resource, Term,
 };
@@ -97,11 +96,15 @@ fn decoded_node_forked_eff_two_distinct_effects_rejected() {
     ];
     n.outputs = vec![Operand::Op(1, 0), Operand::Op(0, 1)];
 
-    let canonical = vg_core::canon::canonicalize(&n).unwrap().node;
-    let (bytes, _) = encode(&canonical);
-    let decoded = decode(&bytes).expect("codec::decode accepts canonical forked-Eff node (B4/B5)");
-    let diags = check_node(&decoded, &no_callees)
-        .expect_err("vg-types must reject forked Eff token after decode");
+    // vg-core now rejects it on every path (canonicalize, and so decode); vg-types must reject it
+    // too, without relying on vg-core.
+    let core = vg_core::canon::canonicalize(&n).err().map(|d| d.code);
+    assert_eq!(
+        core,
+        Some("VG-E0102"),
+        "vg-core must reject a forked Eff token"
+    );
+    let diags = check_node(&n, &no_callees).expect_err("vg-types must reject a forked Eff token");
     assert!(
         diags.iter().any(|d| d.code == "VG-E0102"),
         "expected VG-E0102, got {diags:#?}"

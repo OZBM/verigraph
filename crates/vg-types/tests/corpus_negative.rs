@@ -23,7 +23,7 @@ fn bad_vgs_files_sorted(dir: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn types_bad_corpus_rejected_with_expected_codes() {
-    let dir = repo().join("tests/corpus/types-bad");
+    let dir = repo().join("tests/corpus/errors");
     let files = bad_vgs_files_sorted(&dir);
     assert!(
         files.len() >= 50,
@@ -44,7 +44,7 @@ fn types_bad_corpus_rejected_with_expected_codes() {
                 )
             });
 
-        // Every file in tests/corpus/types-bad/ must be syntactically valid VG-Sym.
+        // Every file in tests/corpus/errors/ must be syntactically valid VG-Sym.
         parser::parse(&src).unwrap_or_else(|e| {
             panic!(
                 "{}: expected valid VG-Sym syntax, got parse error {e}",

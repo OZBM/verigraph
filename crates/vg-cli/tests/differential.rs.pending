@@ -202,7 +202,7 @@ fn native_builds_agree_with_vg_interp() {
                 continue;
             }
             k += 1;
-            let mut host = vg_interp::NoHost;
+            let mut host = vg_interp::NoEffectsHost;
             let want = vg_interp::run(root, &args, &callee, &mut host);
             let got = native(&built.artifact, root, &args);
             match (&want, &got) {
