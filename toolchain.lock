@@ -9,8 +9,8 @@ clang     23.1.6
 host-clang apple-21.0.0
 # z3 installed with Homebrew on 2026-11-23 (/opt/homebrew/bin/z3) by W0, for vg-smt.
 z3        5.4.1
-# cvc5 has no Homebrew formula; its release binary is not installed.
-cvc5      none
+# cvc5 release binary installed 2026-11-23 (/opt/homebrew/bin/cvc5).
+cvc5      1.4.2
 # Homebrew, 2026-11-23.
 bitwuzla  0.11.0
 # Homebrew wasi-libc and wasi-runtimes replace wasi-sdk: the same sysroot and builtins.

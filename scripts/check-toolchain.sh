@@ -18,7 +18,7 @@ found() {
                 *clang\ version*) echo "$v" | sed -n 's/.*clang version \([0-9][0-9.]*\).*/\1/p' ;;
               esac ;;
     z3)       z3 --version 2>/dev/null | awk '{print $3}' ;;
-    cvc5)     cvc5 --version 2>/dev/null | head -n 1 | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p' ;;
+    cvc5)     cvc5 --version 2>/dev/null | head -n 1 | awk '{print $2}' ;;
     bitwuzla) bitwuzla --version 2>/dev/null | head -n 1 ;;
     # The WASI sysroot and compiler-rt builtins (Homebrew's wasi-libc and wasi-runtimes).
     wasi-libc|wasi-runtimes) d=$(readlink "/opt/homebrew/opt/$1" 2>/dev/null) && basename "$d" ;;
