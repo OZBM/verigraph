@@ -1,0 +1,1 @@
+Divide one 32-bit signed integer by another safely, returning 0 when the divisor is zero. Reject the single signed overflow pair where the dividend is -2147483648 and the divisor is -1. Ensure the output equals the truncated integer quotient whenever the divisor is nonzero.

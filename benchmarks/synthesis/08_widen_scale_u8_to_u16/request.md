@@ -1,0 +1,1 @@
+Widen two 8-bit unsigned integers x and offset to 16-bit unsigned values and compute x * scale + offset, where scale is also an 8-bit unsigned integer. Because the product of two u8 values plus a u8 offset fits comfortably inside a u16, all arithmetic must be checked and overflow-free.

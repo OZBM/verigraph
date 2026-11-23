@@ -1,0 +1,12 @@
+// Grader reference contract for @safe_div_i32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module safe_div_i32_contract;
+
+@MESH_QUERY @safe_div_i32 {
+  signature: (i32, i32) -> (i32);
+  effects: [];
+  pre: !(arg0 == -2147483648 && arg1 == -1);
+  post: (arg1 == 0 ==> result == 0) && (arg1 == 1 ==> result == arg0) && (arg1 == -1 ==> result == -arg0) && (arg0 == 0 ==> result == 0) && (arg1 > 0 && arg0 >= 0 ==> result >= 0 && result <= arg0) && (arg1 > 0 && arg0 <= 0 ==> result <= 0 && result >= arg0) && (arg1 < 0 && arg0 >= 0 ==> result <= 0 && -result <= arg0) && (arg1 < 0 && arg0 <= 0 ==> result >= 0 && result <= -arg0);
+  intent: "Total signed i32 division guarding 0 and MIN/-1 (SELECT, DIV.checked)";
+}

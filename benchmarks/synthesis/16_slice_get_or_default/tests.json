@@ -1,0 +1,110 @@
+{
+  "node": "@slice_get_or_default",
+  "cases": [
+    {
+      "inputs": {
+        "xs": [],
+        "i": "0",
+        "fallback": 99
+      },
+      "outputs": [
+        99
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          5
+        ],
+        "i": "0",
+        "fallback": 99
+      },
+      "outputs": [
+        5
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          5
+        ],
+        "i": "1",
+        "fallback": 99
+      },
+      "outputs": [
+        99
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          5,
+          10,
+          15
+        ],
+        "i": "0",
+        "fallback": 99
+      },
+      "outputs": [
+        5
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          5,
+          10,
+          15
+        ],
+        "i": "1",
+        "fallback": 99
+      },
+      "outputs": [
+        10
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          5,
+          10,
+          15
+        ],
+        "i": "2",
+        "fallback": 99
+      },
+      "outputs": [
+        15
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          5,
+          10,
+          15
+        ],
+        "i": "3",
+        "fallback": 42
+      },
+      "outputs": [
+        42
+      ]
+    },
+    {
+      "inputs": {
+        "xs": [
+          100,
+          200,
+          300,
+          400
+        ],
+        "i": "10",
+        "fallback": 0
+      },
+      "outputs": [
+        0
+      ]
+    }
+  ]
+}

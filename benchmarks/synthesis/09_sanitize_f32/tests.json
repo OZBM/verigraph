@@ -1,0 +1,77 @@
+{
+  "node": "@sanitize_f32",
+  "cases": [
+    {
+      "inputs": {
+        "x": "0.0",
+        "fallback": "1.0"
+      },
+      "outputs": [
+        "0.0"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "-0.0",
+        "fallback": "1.0"
+      },
+      "outputs": [
+        "-0.0"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "3.5",
+        "fallback": "0.0"
+      },
+      "outputs": [
+        "3.5"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "-1e30",
+        "fallback": "0.0"
+      },
+      "outputs": [
+        "-1e30"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "inf",
+        "fallback": "1.0"
+      },
+      "outputs": [
+        "1.0"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "-inf",
+        "fallback": "-1.0"
+      },
+      "outputs": [
+        "-1.0"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "nan",
+        "fallback": "0.25"
+      },
+      "outputs": [
+        "0.25"
+      ]
+    },
+    {
+      "inputs": {
+        "x": "nan",
+        "fallback": "-0.0"
+      },
+      "outputs": [
+        "-0.0"
+      ]
+    }
+  ]
+}

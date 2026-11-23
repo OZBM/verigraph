@@ -1,0 +1,1 @@
+Count how many elements in a slice of single-precision floats are strictly greater than a given threshold thr. Assume the slice length is strictly below 4294967295 so the 32-bit unsigned counter cannot overflow. Guarantee the output is at most len(xs) and matches the exact fold of the counting kernel.

@@ -1,0 +1,1 @@
+Compute the difference of two 32-bit unsigned integers where the first argument is guaranteed to be at least as large as the second. Use checked subtraction so underflow is statically impossible. Ensure the output added to the second argument equals the first.

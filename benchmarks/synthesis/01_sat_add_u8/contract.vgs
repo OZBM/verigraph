@@ -1,0 +1,11 @@
+// Grader reference contract for @sat_add_u8.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module sat_add_u8_contract;
+
+@MESH_QUERY @sat_add_u8 {
+  signature: (u8, u8) -> (u8);
+  effects: [];
+  post: result >= arg0 && result >= arg1 && (arg0 + arg1 <= 255 ==> result == arg0 + arg1) && (arg0 + arg1 > 255 ==> result == 255);
+  intent: "Saturating u8 addition (ADD.sat)";
+}

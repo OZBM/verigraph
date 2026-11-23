@@ -1,0 +1,11 @@
+// Grader reference contract for @checked_div_result.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module checked_div_result_contract;
+
+@MESH_QUERY @checked_div_result {
+  signature: (u32, u32) -> (Result<u32, u32>);
+  effects: [];
+  post: (arg1 != 0 ==> is_ok(result) && ok(result) <= arg0) && (arg1 == 1 ==> ok(result) == arg0) && (arg1 > arg0 ==> ok(result) == 0) && (arg1 == 0 ==> !is_ok(result) && err(result) == 1);
+  intent: "ASSERT_GUARD.branch returning Result<u32, u32> (OK/ERR)";
+}

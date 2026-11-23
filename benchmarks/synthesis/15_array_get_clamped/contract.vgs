@@ -1,0 +1,11 @@
+// Grader reference contract for @array_get_clamped.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module array_get_clamped_contract;
+
+@MESH_QUERY @array_get_clamped {
+  signature: (Array<u32, 8>, u64) -> (u32);
+  effects: [];
+  post: (arg1 < 8 ==> result == arg0[arg1]) && (arg1 >= 8 ==> result == arg0[7]);
+  intent: "Clamped Array<u32, 8> indexing (INDEX, LT.u, SELECT)";
+}

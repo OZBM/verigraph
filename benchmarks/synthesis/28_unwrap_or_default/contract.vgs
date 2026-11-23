@@ -1,0 +1,11 @@
+// Grader reference contract for @unwrap_or_default.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module unwrap_or_default_contract;
+
+@MESH_QUERY @unwrap_or_default {
+  signature: (Result<u32, u32>, u32) -> (u32);
+  effects: [];
+  post: (is_ok(arg0) ==> result == ok(arg0)) && (!is_ok(arg0) ==> result == arg1);
+  intent: "IS_OK, ASSERT_GUARD.branch, and GET_OK on Result<u32, u32>";
+}

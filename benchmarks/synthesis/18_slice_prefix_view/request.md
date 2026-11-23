@@ -1,0 +1,1 @@
+Return a zero-allocation prefix view containing at most n elements from the start of a byte slice xs. If n is greater than the length of xs, clamp the prefix length to len(xs). Guarantee the returned slice has length min(n, len(xs)) and matches xs at every valid index.

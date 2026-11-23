@@ -1,0 +1,1 @@
+Compute the absolute value of any 32-bit signed integer using saturating negation for negative inputs. For -2147483648, saturate to 2147483647 instead of overflowing or wrapping negative. The result must always be non-negative and equal |x| for all inputs other than -2147483648.

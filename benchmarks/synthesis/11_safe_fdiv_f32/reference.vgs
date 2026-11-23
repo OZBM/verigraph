@@ -1,0 +1,30 @@
+// expect: verify
+// run: @safe_fdiv_f32 {"a": "6.0", "b": "2.0"} => ["3.0"]
+// run: @safe_fdiv_f32 {"a": "1.0", "b": "0.0"} => ["0.0"]
+module safe_fdiv_f32;
+
+NODE @safe_fdiv_f32 [intent: "Finite-preserving f32 division returning 0.0 on invalid or overflowing cases"] {
+  SIGNATURE: (a: f32, b: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: is_finite(result) && ((!is_finite(a) || !is_finite(b) || b == 0.0) ==> result == 0.0);
+  }
+  BODY {
+    %0 = FABS(a);
+    %1 = FSUB(%0, %0);
+    %2 = EQ(%1, 0.0:f32);
+    %3 = FABS(b);
+    %4 = FSUB(%3, %3);
+    %5 = EQ(%4, 0.0:f32);
+    %6 = NE(b, 0.0:f32);
+    %7 = BAND(%2, %5);
+    %8 = BAND(%7, %6);
+    %9 = FDIV(a, b);
+    %10 = FABS(%9);
+    %11 = FSUB(%10, %10);
+    %12 = EQ(%11, 0.0:f32);
+    %13 = BAND(%8, %12);
+    %14 = SELECT(%13, %9, 0.0:f32);
+    RETURN(%14);
+  }
+}

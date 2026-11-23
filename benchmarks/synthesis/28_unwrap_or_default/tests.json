@@ -1,0 +1,93 @@
+{
+  "node": "@unwrap_or_default",
+  "cases": [
+    {
+      "inputs": {
+        "r": {
+          "ok": 0
+        },
+        "default": 7
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "ok": 42
+        },
+        "default": 7
+      },
+      "outputs": [
+        42
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "ok": 4294967295
+        },
+        "default": 0
+      },
+      "outputs": [
+        4294967295
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "err": 0
+        },
+        "default": 7
+      },
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "err": 99
+        },
+        "default": 7
+      },
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "err": 1
+        },
+        "default": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "err": 4294967295
+        },
+        "default": 123
+      },
+      "outputs": [
+        123
+      ]
+    },
+    {
+      "inputs": {
+        "r": {
+          "ok": 123
+        },
+        "default": 123
+      },
+      "outputs": [
+        123
+      ]
+    }
+  ]
+}

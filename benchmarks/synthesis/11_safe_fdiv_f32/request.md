@@ -1,0 +1,1 @@
+Divide single-precision float a by b safely so the output is always finite. If either input is non-finite, if b is zero, or if the quotient overflows to infinity, return 0.0 instead. When both inputs are finite with nonzero b and finite quotient, return the exact IEEE quotient a / b.

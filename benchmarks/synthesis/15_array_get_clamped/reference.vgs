@@ -1,0 +1,18 @@
+// expect: verify
+// run: @array_get_clamped {"xs": [10, 20, 30, 40, 50, 60, 70, 80], "i": "2"} => [30]
+// run: @array_get_clamped {"xs": [10, 20, 30, 40, 50, 60, 70, 80], "i": "99"} => [80]
+module array_get_clamped;
+
+NODE @array_get_clamped [intent: "Index an 8-element u32 array, clamping indices >= 8 to 7"] {
+  SIGNATURE: (xs: Array<u32, 8>, i: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: (i < 8 ==> result == xs[i]) && (i >= 8 ==> result == xs[7]);
+  }
+  BODY {
+    %0 = LT.u(i, 8:u64);
+    %1 = SELECT(%0, i, 7:u64);
+    %2 = INDEX(xs, %1);
+    RETURN(%2);
+  }
+}

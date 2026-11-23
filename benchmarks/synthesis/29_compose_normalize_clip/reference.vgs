@@ -1,0 +1,56 @@
+// expect: verify
+// run: @compose_normalize_clip {"x": "0.25", "gain": "1.5", "knee": "0.5"} => ["0.375"]
+// run: @compose_normalize_clip {"x": "-10.0", "gain": "2.0", "knee": "0.5"} => ["-0.9875"]
+module compose_normalize_clip;
+
+NODE @scale_sample {
+  SIGNATURE: (x: f32, gain: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && abs(x) <= 1e37 && is_finite(gain) && gain >= 0.0 && gain <= 2.0;
+    POST: is_finite(result) && (x >= 0.0 ==> result >= 0.0) && (x <= 0.0 ==> result <= 0.0);
+  }
+  BODY {
+    %0 = FMUL(x, gain);
+    RETURN(%0);
+  }
+}
+
+NODE @clip_sample {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: is_finite(result) && result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0)) && (x <= 0.0 ==> result <= 0.0);
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}
+
+NODE @compose_normalize_clip [intent: "Scale an f32 sample then soft-clip via CALL_HASH"] {
+  SIGNATURE: (x: f32, gain: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && abs(x) <= 1e37 && is_finite(gain) && gain >= 0.0 && gain <= 2.0 && is_finite(knee) && knee >= 0.5 && knee <= 0.99;
+    POST: is_finite(result) && result >= -1.0 && result <= 1.0 && (x >= 0.0 ==> result >= 0.0) && (x <= 0.0 ==> result <= 0.0);
+  }
+  BODY {
+    %0 = CALL_HASH(@scale_sample, x, gain);
+    %1 = CALL_HASH(@clip_sample, %0, knee);
+    RETURN(%1);
+  }
+}

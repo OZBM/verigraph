@@ -1,0 +1,27 @@
+// Grader reference contract for @fold_count_above.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module fold_count_above_contract;
+
+NODE @count_step {
+  SIGNATURE: (acc: u32, x: f32, thr: f32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc < 4294967295;
+    POST: (x > thr ==> result == acc + 1) && (!(x > thr) ==> result == acc);
+  }
+  BODY {
+    %0 = GT.f(x, thr);
+    %1 = SELECT(%0, 1:u32, 0:u32);
+    %2 = ADD.checked(acc, %1);
+    RETURN(%2);
+  }
+}
+
+@MESH_QUERY @fold_count_above {
+  signature: (Slice<f32>, f32) -> (u32);
+  effects: [];
+  pre: len(arg0) < 4294967295;
+  post: result == fold:count_step(0:u32, arg0, len(arg0), arg1) && result <= len(arg0);
+  intent: "FOLD_BOUNDED count over Slice<f32> with broadcast threshold";
+}

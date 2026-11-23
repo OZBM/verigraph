@@ -1,0 +1,11 @@
+// Grader reference contract for @slice_get_or_default.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module slice_get_or_default_contract;
+
+@MESH_QUERY @slice_get_or_default {
+  signature: (Slice<u32>, u64, u32) -> (u32);
+  effects: [];
+  post: (arg1 < len(arg0) ==> result == arg0[arg1]) && (arg1 >= len(arg0) ==> result == arg2);
+  intent: "Bounds-checked Slice<u32> lookup via ASSERT_GUARD.branch";
+}

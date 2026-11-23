@@ -1,0 +1,30 @@
+// expect: verify
+// run: @map_inc_array {"xs": [1, 2, 3, 4, 5, 6, 7, 8], "delta": 10} => [[11, 12, 13, 14, 15, 16, 17, 18]]
+// run: @map_inc_array {"xs": [0, 0, 0, 0, 0, 0, 0, 100], "delta": 5} => [[5, 5, 5, 5, 5, 5, 5, 105]]
+module map_inc_array;
+
+NODE @add_delta {
+  SIGNATURE: (x: u32, delta: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x + delta <= 4294967295;
+    POST: result == x + delta;
+  }
+  BODY {
+    %0 = ADD.checked(x, delta);
+    RETURN(%0);
+  }
+}
+
+NODE @map_inc_array [intent: "Add broadcast delta to each element of an 8-element u32 array"] {
+  SIGNATURE: (xs: Array<u32, 8>, delta: u32) -> (Array<u32, 8>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..8) { xs[i] + delta <= 4294967295 };
+    POST: forall(i in 0..8) { result[i] == xs[i] + delta };
+  }
+  BODY {
+    %0 = SIMD_MAP(@add_delta, xs, delta);
+    RETURN(%0);
+  }
+}

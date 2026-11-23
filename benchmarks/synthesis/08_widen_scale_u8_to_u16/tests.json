@@ -1,0 +1,85 @@
+{
+  "node": "@widen_scale_u8_to_u16",
+  "cases": [
+    {
+      "inputs": {
+        "x": 0,
+        "scale": 0,
+        "offset": 0
+      },
+      "outputs": [
+        0
+      ]
+    },
+    {
+      "inputs": {
+        "x": 0,
+        "scale": 255,
+        "offset": 42
+      },
+      "outputs": [
+        42
+      ]
+    },
+    {
+      "inputs": {
+        "x": 10,
+        "scale": 20,
+        "offset": 5
+      },
+      "outputs": [
+        205
+      ]
+    },
+    {
+      "inputs": {
+        "x": 200,
+        "scale": 3,
+        "offset": 10
+      },
+      "outputs": [
+        610
+      ]
+    },
+    {
+      "inputs": {
+        "x": 255,
+        "scale": 1,
+        "offset": 0
+      },
+      "outputs": [
+        255
+      ]
+    },
+    {
+      "inputs": {
+        "x": 255,
+        "scale": 255,
+        "offset": 0
+      },
+      "outputs": [
+        65025
+      ]
+    },
+    {
+      "inputs": {
+        "x": 255,
+        "scale": 255,
+        "offset": 255
+      },
+      "outputs": [
+        65280
+      ]
+    },
+    {
+      "inputs": {
+        "x": 128,
+        "scale": 255,
+        "offset": 127
+      },
+      "outputs": [
+        32767
+      ]
+    }
+  ]
+}

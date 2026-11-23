@@ -1,0 +1,1 @@
+Compute the floor of the average of two 32-bit unsigned integers without overflowing intermediate sums. The result must equal the exact mathematical integer floor of their sum divided by two for every pair of 32-bit unsigned inputs.

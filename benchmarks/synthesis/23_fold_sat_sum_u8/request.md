@@ -1,0 +1,1 @@
+Compute the saturating sum of all bytes in a Slice<u8>, starting from 0 and clamping at 255 if the running sum ever exceeds 255. Use a bounded fold with a saturating addition kernel and an invariant tying the accumulator to the fold specification and monotonicity bound.

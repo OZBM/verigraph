@@ -1,0 +1,1 @@
+Clamp every element of an 8-element finite single-precision float array into [-1.0, 1.0] using SIMD_MAP. Guarantee every output element lies in [-1.0, 1.0] and equals the input element whenever it was already in range.

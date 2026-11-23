@@ -1,0 +1,1 @@
+Compose two nodes via CALL_HASH: first scale a finite single-precision sample x by a gain factor in [0.0, 2.0], then pass the scaled sample through a soft-knee clipper with knee in [0.5, 0.99]. Assume |x| <= 1e37 so scaling stays finite. Guarantee the final output is in [-1.0, 1.0] and preserves sign.

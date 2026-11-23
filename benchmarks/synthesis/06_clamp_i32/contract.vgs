@@ -1,0 +1,12 @@
+// Grader reference contract for @clamp_i32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module clamp_i32_contract;
+
+@MESH_QUERY @clamp_i32 {
+  signature: (i32, i32, i32) -> (i32);
+  effects: [];
+  pre: arg1 <= arg2;
+  post: result >= arg1 && result <= arg2 && (arg0 < arg1 ==> result == arg1) && (arg0 > arg2 ==> result == arg2) && (arg0 >= arg1 && arg0 <= arg2 ==> result == arg0);
+  intent: "Signed i32 clamping with ordered comparisons (LT.s, GT.s, SELECT)";
+}

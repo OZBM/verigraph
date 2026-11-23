@@ -1,0 +1,1 @@
+Clamp a 32-bit signed integer x into an inclusive range [lo, hi], assuming lo is at most hi. Return lo if x is smaller than lo, hi if x is larger than hi, and x otherwise. Keep the operation pure with no overflow.

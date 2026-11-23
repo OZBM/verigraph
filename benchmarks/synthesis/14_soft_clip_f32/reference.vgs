@@ -1,0 +1,29 @@
+// expect: verify
+// run: @soft_clip_f32 {"x": "3e38", "knee": "0.5"} => ["1.0"]
+// run: @soft_clip_f32 {"x": "-0.25", "knee": "0.5"} => ["-0.25"]
+module soft_clip_f32;
+
+NODE @soft_clip_f32 [intent: "Soft-knee clip of a finite f32 sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0)) && (abs(x) <= knee ==> result == x);
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}

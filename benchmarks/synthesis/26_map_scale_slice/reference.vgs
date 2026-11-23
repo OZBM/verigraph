@@ -1,0 +1,30 @@
+// expect: verify
+// run: @map_scale_slice {"xs": [1, 10, 32767]} => [[2, 20, 65534]]
+// run: @map_scale_slice {"xs": []} => [[]]
+module map_scale_slice;
+
+NODE @double_u16 {
+  SIGNATURE: (x: u16) -> (u16);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 32767;
+    POST: result == 2 * x;
+  }
+  BODY {
+    %0 = MUL.checked(x, 2:u16);
+    RETURN(%0);
+  }
+}
+
+NODE @map_scale_slice [intent: "Double every element of a u16 slice using ARENA"] {
+  SIGNATURE: (xs: Slice<u16>) -> (Slice<u16>);
+  EFFECTS: [ARENA];
+  CONTRACT {
+    PRE: forall(i in 0..len(xs)) { xs[i] <= 32767 };
+    POST: len(result) == len(xs) && forall(i in 0..len(xs)) { result[i] == 2 * xs[i] };
+  }
+  BODY {
+    %0 = SIMD_MAP(@double_u16, xs);
+    RETURN(%0);
+  }
+}

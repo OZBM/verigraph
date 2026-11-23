@@ -1,0 +1,1 @@
+Look up element i in a slice of 32-bit unsigned integers, returning a caller-supplied default value when i is out of bounds. Use a lazy branch guard so the indexing operation only executes when i is strictly less than the slice length. Ensure the postcondition pins both the in-bounds and out-of-bounds cases.

@@ -1,0 +1,48 @@
+// expect: verify
+// run: @compose_affine_clamp {"x": 5, "a": 3, "b": 2, "lo": 10, "hi": 20} => [17]
+// run: @compose_affine_clamp {"x": 10, "a": 3, "b": 2, "lo": 10, "hi": 20} => [20]
+module compose_affine_clamp;
+
+NODE @affine_u32 {
+  SIGNATURE: (x: u32, a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a * x + b <= 4294967295;
+    POST: result == a * x + b;
+  }
+  BODY {
+    %0 = MUL.checked(a, x);
+    %1 = ADD.checked(%0, b);
+    RETURN(%1);
+  }
+}
+
+NODE @clamp_u32 {
+  SIGNATURE: (v: u32, lo: u32, hi: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lo <= hi;
+    POST: result >= lo && result <= hi && (v < lo ==> result == lo) && (v > hi ==> result == hi) && (v >= lo && v <= hi ==> result == v);
+  }
+  BODY {
+    %0 = LT.u(v, lo);
+    %1 = SELECT(%0, lo, v);
+    %2 = GT.u(%1, hi);
+    %3 = SELECT(%2, hi, %1);
+    RETURN(%3);
+  }
+}
+
+NODE @compose_affine_clamp [intent: "Compute a * x + b then clamp to [lo, hi] via CALL_HASH"] {
+  SIGNATURE: (x: u32, a: u32, b: u32, lo: u32, hi: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a * x + b <= 4294967295 && lo <= hi;
+    POST: result >= lo && result <= hi && (a * x + b < lo ==> result == lo) && (a * x + b > hi ==> result == hi) && (a * x + b >= lo && a * x + b <= hi ==> result == a * x + b);
+  }
+  BODY {
+    %0 = CALL_HASH(@affine_u32, x, a, b);
+    %1 = CALL_HASH(@clamp_u32, %0, lo, hi);
+    RETURN(%1);
+  }
+}

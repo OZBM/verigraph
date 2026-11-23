@@ -1,0 +1,18 @@
+// expect: verify
+// run: @abs_sat_i32 {"x": -42} => [42]
+// run: @abs_sat_i32 {"x": -2147483648} => [2147483647]
+module abs_sat_i32;
+
+NODE @abs_sat_i32 [intent: "Saturating absolute value of i32"] {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0 && (x >= 0 ==> result == x) && (x < 0 && x > -2147483648 ==> result == -x) && (x == -2147483648 ==> result == 2147483647);
+  }
+  BODY {
+    %0 = LT.s(x, 0:i32);
+    %1 = NEG.sat(x);
+    %2 = SELECT(%0, %1, x);
+    RETURN(%2);
+  }
+}

@@ -1,0 +1,1 @@
+Clamp an arbitrary single-precision float x—which may be NaN or infinite—into a finite range [lo, hi] where lo is at most hi. If x is NaN, return lo instead of propagating NaN; otherwise clamp x into [lo, hi]. Guarantee the output is always finite and within [lo, hi].

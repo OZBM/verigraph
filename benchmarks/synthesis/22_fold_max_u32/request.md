@@ -1,0 +1,1 @@
+Find the maximum value in a 6-element array of 32-bit unsigned integers using a bounded fold starting from 0. Write an inductive invariant showing that at step k the accumulator equals the fold and is at least as large as every element seen in 0..k. Guarantee the result equals the exact fold and dominates every element in the array.

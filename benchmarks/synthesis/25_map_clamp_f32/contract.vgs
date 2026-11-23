@@ -1,0 +1,12 @@
+// Grader reference contract for @map_clamp_f32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module map_clamp_f32_contract;
+
+@MESH_QUERY @map_clamp_f32 {
+  signature: (Array<f32, 8>) -> (Array<f32, 8>);
+  effects: [];
+  pre: forall(i in 0..8) { is_finite(arg0[i]) };
+  post: forall(i in 0..8) { result[i] >= -1.0 && result[i] <= 1.0 && ((arg0[i] >= -1.0 && arg0[i] <= 1.0) ==> result[i] == arg0[i]) };
+  intent: "SIMD_MAP clamping finite Array<f32, 8> into [-1.0, 1.0]";
+}

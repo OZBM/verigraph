@@ -1,0 +1,1 @@
+Sum the elements of an 8-element array of 32-bit unsigned integers where each element is at most 100000. Use a bounded fold with a checked addition kernel and an inductive invariant relating the accumulator to the step count and fold specification. Guarantee the result equals the exact fold sum and is at most 800000.

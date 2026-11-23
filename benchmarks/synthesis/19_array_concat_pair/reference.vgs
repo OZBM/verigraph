@@ -1,0 +1,16 @@
+// expect: verify
+// run: @array_concat_pair {"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]} => [[1, 2, 3, 4, 5, 6, 7, 8]]
+// run: @array_concat_pair {"a": [0, 0, 0, 0], "b": [65535, 1, 2, 3]} => [[0, 0, 0, 0, 65535, 1, 2, 3]]
+module array_concat_pair;
+
+NODE @array_concat_pair [intent: "Concatenate two 4-element u16 arrays into an 8-element array"] {
+  SIGNATURE: (a: Array<u16, 4>, b: Array<u16, 4>) -> (Array<u16, 8>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: forall(i in 0..4) { result[i] == a[i] } && forall(j in 0..4) { result[j + 4] == b[j] };
+  }
+  BODY {
+    %0 = CONCAT(a, b);
+    RETURN(%0);
+  }
+}

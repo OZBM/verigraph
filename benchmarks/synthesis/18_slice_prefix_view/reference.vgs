@@ -1,0 +1,19 @@
+// expect: verify
+// run: @slice_prefix_view {"xs": [10, 20, 30, 40], "n": "2"} => [[10, 20]]
+// run: @slice_prefix_view {"xs": [10, 20], "n": "5"} => [[10, 20]]
+module slice_prefix_view;
+
+NODE @slice_prefix_view [intent: "Pure prefix view of at most n bytes of xs"] {
+  SIGNATURE: (xs: Slice<u8>, n: u64) -> (Slice<u8>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: len(result) == min(n, len(xs)) && forall(i in 0..len(result)) { result[i] == xs[i] };
+  }
+  BODY {
+    %0 = LEN(xs);
+    %1 = LT.u(n, %0);
+    %2 = SELECT(%1, n, %0);
+    %3 = SLICE(xs, 0:u64, %2);
+    RETURN(%3);
+  }
+}

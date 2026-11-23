@@ -1,0 +1,12 @@
+// Grader reference contract for @compose_affine_clamp.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module compose_affine_clamp_contract;
+
+@MESH_QUERY @compose_affine_clamp {
+  signature: (u32, u32, u32, u32, u32) -> (u32);
+  effects: [];
+  pre: arg1 * arg0 + arg2 <= 4294967295 && arg3 <= arg4;
+  post: result >= arg3 && result <= arg4 && (arg1 * arg0 + arg2 < arg3 ==> result == arg3) && (arg1 * arg0 + arg2 > arg4 ==> result == arg4) && (arg1 * arg0 + arg2 >= arg3 && arg1 * arg0 + arg2 <= arg4 ==> result == arg1 * arg0 + arg2);
+  intent: "CALL_HASH composition of affine step and u32 range clamp";
+}

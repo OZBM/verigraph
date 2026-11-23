@@ -1,0 +1,12 @@
+// Grader reference contract for @soft_clip_f32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module soft_clip_f32_contract;
+
+@MESH_QUERY @soft_clip_f32 {
+  signature: (f32, f32) -> (f32);
+  effects: [];
+  pre: is_finite(arg0) && arg1 >= 0.5 && arg1 <= 0.99;
+  post: result >= -1.0 && result <= 1.0 && ((arg0 >= 0.0) == (result >= 0.0)) && (abs(arg0) <= arg1 ==> result == arg0);
+  intent: "Soft-knee audio clipper (docs/03) avoiding inf/inf = NaN";
+}

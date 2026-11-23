@@ -1,0 +1,29 @@
+// expect: verify
+// run: @fold_sat_sum_u8 {"xs": [10, 20, 30]} => [60]
+// run: @fold_sat_sum_u8 {"xs": [200, 100, 1]} => [255]
+module fold_sat_sum_u8;
+
+NODE @sat_step {
+  SIGNATURE: (acc: u8, x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= acc && result >= x && (acc + x <= 255 ==> result == acc + x) && (acc + x > 255 ==> result == 255);
+  }
+  BODY {
+    %0 = ADD.sat(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @fold_sat_sum_u8 [intent: "Saturating sum of a byte slice"] {
+  SIGNATURE: (xs: Slice<u8>) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == fold:sat_step(0:u8, xs, len(xs)) && (len(xs) == 0 ==> result == 0) && forall(i in 0..len(xs)) { result >= xs[i] };
+    INVARIANT @sat_inv(k, acc): acc == fold:sat_step(0:u8, xs, k) && forall(i in 0..k) { acc >= xs[i] };
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@sat_step, xs, init=0:u8, invariant=@sat_inv);
+    RETURN(%0);
+  }
+}

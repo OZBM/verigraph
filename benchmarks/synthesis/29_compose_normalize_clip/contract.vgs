@@ -1,0 +1,12 @@
+// Grader reference contract for @compose_normalize_clip.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module compose_normalize_clip_contract;
+
+@MESH_QUERY @compose_normalize_clip {
+  signature: (f32, f32, f32) -> (f32);
+  effects: [];
+  pre: is_finite(arg0) && abs(arg0) <= 1e37 && is_finite(arg1) && arg1 >= 0.0 && arg1 <= 2.0 && is_finite(arg2) && arg2 >= 0.5 && arg2 <= 0.99;
+  post: is_finite(result) && result >= -1.0 && result <= 1.0 && (arg0 >= 0.0 ==> result >= 0.0) && (arg0 <= 0.0 ==> result <= 0.0);
+  intent: "CALL_HASH composition of gain scaling and soft clipping";
+}
