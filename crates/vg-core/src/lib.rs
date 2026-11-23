@@ -16,6 +16,7 @@ pub mod opcode;
 pub mod parser;
 pub mod printer;
 pub mod types;
+pub mod value;
 
 use std::collections::HashMap;
 
