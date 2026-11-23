@@ -1123,3 +1123,16 @@ fn g7_bench_100k() {
 
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn each_registry_has_its_own_log_key() {
+    let (a, b) = (temp_dir("logkey-a"), temp_dir("logkey-b"));
+    let ka = Mesh::open(&a).unwrap().log_verifying_key();
+    let kb = Mesh::open(&b).unwrap().log_verifying_key();
+    assert_ne!(ka, kb, "two registries must not share a checkpoint key");
+    assert_eq!(
+        Mesh::open(&a).unwrap().log_verifying_key(),
+        ka,
+        "reopening keeps the key"
+    );
+}

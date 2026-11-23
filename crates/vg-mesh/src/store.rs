@@ -20,7 +20,6 @@ use crate::types::{
 
 const DEFAULT_ORIGIN: &str = "vg-mesh.local/v1";
 const DEFAULT_KEY_NAME: &str = "vg-mesh-log";
-const DEFAULT_LOG_SEED: [u8; 32] = *b"VeriGraph-Mesh-Log-Default-Seed1";
 
 /// One entry in the dense in-memory query index (P7.2 / P7.3).
 #[derive(Clone, Debug)]
@@ -1083,14 +1082,29 @@ fn load_or_init_log_meta(db: &Connection) -> Result<(String, String, [u8; 32])> 
     let seed = match get("signing_seed")? {
         Some(v) => to_32(v)?,
         None => {
+            // Each registry gets its own log key, from the operating system's generator: a key
+            // shared by every registry would let anyone sign checkpoints for any of them. Ed25519
+            // signatures stay deterministic for a given key.
+            let seed = fresh_seed()?;
             db.execute(
                 "INSERT INTO log_meta (k, v) VALUES ('signing_seed', ?1)",
-                params![&DEFAULT_LOG_SEED[..]],
+                params![&seed[..]],
             )?;
-            DEFAULT_LOG_SEED
+            seed
         }
     };
     Ok((origin, key_name, seed))
+}
+
+/// 32 bytes from the operating system's random number generator.
+fn fresh_seed() -> Result<[u8; 32]> {
+    use std::io::Read;
+    let path = Path::new("/dev/urandom");
+    let mut seed = [0u8; 32];
+    fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut seed))
+        .map_err(|e| Error::Io(path.to_path_buf(), e))?;
+    Ok(seed)
 }
 
 type LogEntryRow = (u64, [u8; 32], Vec<u8>);
