@@ -1,4 +1,4 @@
-// expect: VG-T0112
+// expect: error VG-T0112 @bad op 0
 module t0112_rotl_amount_u8;
 
 NODE @bad {

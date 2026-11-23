@@ -33,16 +33,21 @@ fn types_bad_corpus_rejected_with_expected_codes() {
 
     for f in &files {
         let src = fs::read_to_string(f).unwrap();
+        // docs/16: `// expect: error <code> <node> <port>`, "-" where the checker names none;
+        // a check on the canonical node names its op as `op <index>`.
         let first_line = src.lines().next().unwrap_or("");
-        let expected_code = first_line
-            .strip_prefix("// expect:")
-            .map(str::trim)
+        let expect = first_line
+            .strip_prefix("// expect: error ")
             .unwrap_or_else(|| {
                 panic!(
-                    "{}: first line must be `// expect: VG-xxxx`, found {first_line:?}",
+                    "{}: first line must be `// expect: error <code> <node> <port>`, found {first_line:?}",
                     f.display()
                 )
             });
+        let mut words = expect.split_whitespace();
+        let expected_code = words.next().expect("a code");
+        let expected_node = words.next().expect("a node or -");
+        let expected_op = words.collect::<Vec<_>>().join(" ");
 
         // Every file in tests/corpus/errors/ must be syntactically valid VG-Sym.
         parser::parse(&src).unwrap_or_else(|e| {
@@ -57,8 +62,10 @@ fn types_bad_corpus_rejected_with_expected_codes() {
             f.display()
         ));
         assert!(
-            diags.iter().any(|d| d.code == expected_code),
-            "{}: expected diagnostic code {expected_code}, got: {diags:#?}",
+            diags.iter().any(|d| d.code == expected_code
+                && d.node.as_deref().unwrap_or("-") == expected_node
+                && d.op.as_deref().unwrap_or("-") == expected_op),
+            "{}: expected {expected_code} at {expected_node} {expected_op}, got: {diags:#?}",
             f.display()
         );
     }

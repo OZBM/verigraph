@@ -1,4 +1,4 @@
-// expect: VG-C0106
+// expect: error VG-C0106 @bad -
 module c0106_latency_in_cost;
 
 NODE @bad {

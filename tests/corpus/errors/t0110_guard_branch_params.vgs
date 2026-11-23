@@ -1,4 +1,4 @@
-// expect: VG-T0110
+// expect: error VG-T0110 @bad op 0
 module t0110_guard_branch_params;
 
 NODE @b1 {

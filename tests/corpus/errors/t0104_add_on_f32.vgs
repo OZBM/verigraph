@@ -1,4 +1,4 @@
-// expect: VG-T0104
+// expect: error VG-T0104 @bad op 0
 module t0104_add_on_f32;
 
 NODE @bad {

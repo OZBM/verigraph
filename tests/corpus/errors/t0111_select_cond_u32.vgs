@@ -1,4 +1,4 @@
-// expect: VG-T0111
+// expect: error VG-T0111 @bad op 0
 module t0111_select_cond_u32;
 
 NODE @bad {

@@ -1,4 +1,4 @@
-// expect: VG-T0115
+// expect: error VG-T0115 @bad %0
 module t0115_ok_no_annotation;
 
 NODE @bad {

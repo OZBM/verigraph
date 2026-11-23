@@ -1,4 +1,4 @@
-// expect: VG-T0107
+// expect: error VG-T0107 @bad op 0
 module t0107_kernel_slice_param;
 
 NODE @k {

@@ -1,0 +1,17 @@
+// expect: reject @f/%4/GET_OK.is_ok
+module b13_get_ok_is_ok;
+
+// GET_OK on a Result that is Err for x >= 10.
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0: Result<u8, u8> = OK(x);
+    %1: Result<u8, u8> = ERR(x);
+    %2 = LT.u(x, 10:u8);
+    %3 = SELECT(%2, %0, %1);
+    %4 = GET_OK(%3);
+    RETURN(%4);
+  }
+}

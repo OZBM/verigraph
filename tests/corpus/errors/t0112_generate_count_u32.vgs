@@ -1,4 +1,4 @@
-// expect: VG-T0112
+// expect: error VG-T0112 @bad op 0
 module t0112_generate_count_u32;
 
 NODE @k {

@@ -1,4 +1,4 @@
-// expect: VG-T0109
+// expect: error VG-T0109 @bad op 0
 module t0109_call_arg_type;
 
 NODE @callee {

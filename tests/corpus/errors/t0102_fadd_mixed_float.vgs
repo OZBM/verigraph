@@ -1,4 +1,4 @@
-// expect: VG-T0102
+// expect: error VG-T0102 @bad op 0
 module t0102_fadd_mixed_float;
 
 NODE @bad {

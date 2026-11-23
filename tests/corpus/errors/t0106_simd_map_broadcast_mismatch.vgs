@@ -1,4 +1,4 @@
-// expect: VG-T0106
+// expect: error VG-T0106 @bad op 0
 module t0106_simd_map_broadcast_mismatch;
 
 NODE @k {

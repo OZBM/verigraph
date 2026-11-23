@@ -1,4 +1,4 @@
-// expect: VG-E0102
+// expect: error VG-E0102 @bad -
 module e0102_eff_used_twice;
 
 NODE @bad {

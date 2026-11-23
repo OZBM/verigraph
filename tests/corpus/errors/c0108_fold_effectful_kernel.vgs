@@ -1,4 +1,4 @@
-// expect: VG-C0108
+// expect: error VG-C0108 @bad -
 module c0108_fold_effectful_kernel;
 
 NODE @step {

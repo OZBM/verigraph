@@ -1,0 +1,28 @@
+// expect: reject @f/%1/GUARD.else.pre.0
+module b20_guard_else_pre;
+
+NODE @dec {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { PRE: x >= 1; }
+  BODY { %0 = SUB.checked(x, 1:u8); RETURN(%0); }
+}
+
+NODE @id {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { RETURN(x); }
+}
+
+// The else branch runs when x < 200, including x = 0, which @dec refuses.
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = GE.u(x, 200:u8);
+    %1 = ASSERT_GUARD.branch(%0, @id, x, else=@dec);
+    RETURN(%1);
+  }
+}

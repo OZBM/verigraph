@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use vg_core::ir::{Hash, Node};
+use vg_core::ir::{Hash, Node, Operand};
 use vg_core::value::Value;
 use vg_interp::{Clause, NoEffectsHost, holds, run};
 use vg_smt::{Options, Verdict, verify};
@@ -22,14 +22,41 @@ fn opts() -> Options {
     }
 }
 
-/// The inputs satisfy PRE, and the node traps or breaks POST on them, with the real callees.
-fn reproduces(node: &Node, inputs: &[Value], callee: &dyn Fn(&Hash) -> Option<Node>) -> bool {
+/// The inputs satisfy PRE, and the node traps or breaks POST on them, with the real callees. For
+/// `POST.j.wd.w`, conjunct j is undefined on them instead; for `%i/FOLD.base`, the invariant is
+/// false on the fold's initial value (vg-interp checks no invariant as it runs).
+fn reproduces(
+    node: &Node,
+    id: &str,
+    inputs: &[Value],
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+) -> bool {
     if holds(node, Clause::Pre, inputs, &[], callee) != Ok(true) {
         return false;
     }
+    if let Some(i) = id.strip_suffix("/FOLD.base") {
+        let i: usize = i.rsplit("/%").next().unwrap().parse().unwrap();
+        let ops = &node.ops[i].operands;
+        let Operand::Invariant(v) = ops[ops.len() - 1] else {
+            return false;
+        };
+        let init = match ops[ops.len() - 2] {
+            Operand::Const(c) => vg_interp::bytes::decode_const(&node.consts[c as usize]).unwrap(),
+            Operand::Input(j) => inputs[j as usize].clone(),
+            _ => return false,
+        };
+        return vg_interp::holds_invariant(node, v, 0, &init, inputs, &[], callee) == Ok(false);
+    }
     match run(node, inputs, callee, &mut NoEffectsHost) {
         Err(_) => true,
-        Ok(r) => holds(node, Clause::Post, inputs, &r, callee) != Ok(true),
+        Ok(r) => match id.split("/POST.").nth(1).and_then(|t| t.split_once(".wd.")) {
+            Some((j, _)) => {
+                let mut one = node.clone();
+                one.contract.post = vec![node.contract.post[j.parse::<usize>().unwrap()].clone()];
+                holds(&one, Clause::Post, inputs, &r, callee).is_err()
+            }
+            None => holds(node, Clause::Post, inputs, &r, callee) == Ok(false),
+        },
     }
 }
 
@@ -71,7 +98,9 @@ fn check(path: &Path) -> Result<(), String> {
         .find(|o| o.id == id)
         .ok_or(format!("no obligation {id}"))?;
     match (&o.verdict, &o.inputs) {
-        (Verdict::Counterexample, Some(inputs)) if reproduces(&a.node, inputs, &callee) => Ok(()),
+        (Verdict::Counterexample, Some(inputs)) if reproduces(&a.node, id, inputs, &callee) => {
+            Ok(())
+        }
         (Verdict::Counterexample, Some(inputs)) => {
             Err(format!("{id}: {inputs:?} does not reproduce"))
         }
@@ -147,7 +176,11 @@ fn known_good_are_proven_by_two_solvers_in_release_mode() {
         };
         for a in &nodes {
             for o in verify(&a.node, &a.label, &callee, &release) {
-                if o.verdict != Verdict::Proven || o.evidence != Some("two-solvers") {
+                // docs/05 step 3: a pre-screen input that meets PRE shows NONVACUOUS directly.
+                let witnessed = o.id.ends_with("/NONVACUOUS") && o.evidence == Some("prescreen");
+                // A reused record is a two-solvers one in release mode (P3.5).
+                let two = matches!(o.evidence, Some("two-solvers" | "cached"));
+                if o.verdict != Verdict::Proven || !(witnessed || two) {
                     failures.push(format!(
                         "{}: {} is {:?} by {} ({:?}): {}",
                         f.display(),

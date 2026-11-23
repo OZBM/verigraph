@@ -1,0 +1,28 @@
+// expect: reject @f/%1/GUARD.then.pre.0
+module b19_guard_then_pre;
+
+NODE @half {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { PRE: x >= 100; }
+  BODY { %0 = SUB.checked(x, 100:u8); RETURN(%0); }
+}
+
+NODE @zero {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { RETURN(0:u8); }
+}
+
+// The guard tests x >= 50, but the then branch needs x >= 100.
+NODE @f {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = GE.u(x, 50:u8);
+    %1 = ASSERT_GUARD.branch(%0, @half, x, else=@zero);
+    RETURN(%1);
+  }
+}

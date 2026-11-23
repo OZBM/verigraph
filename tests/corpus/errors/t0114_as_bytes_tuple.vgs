@@ -1,4 +1,4 @@
-// expect: VG-T0114
+// expect: error VG-T0114 @bad op 0
 module t0114_as_bytes_tuple;
 
 NODE @bad {

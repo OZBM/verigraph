@@ -1,4 +1,4 @@
-// expect: VG-T0116
+// expect: error VG-T0116 - -
 module t0116_nested_refinement;
 
 NODE @bad {

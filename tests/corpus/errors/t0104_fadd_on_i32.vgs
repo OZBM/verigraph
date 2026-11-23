@@ -1,4 +1,4 @@
-// expect: VG-T0104
+// expect: error VG-T0104 @bad op 0
 module t0104_fadd_on_i32;
 
 NODE @bad {

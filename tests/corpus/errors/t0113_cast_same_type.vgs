@@ -1,4 +1,4 @@
-// expect: VG-T0113
+// expect: error VG-T0113 @bad op 0
 module t0113_cast_same_type;
 
 NODE @bad {

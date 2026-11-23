@@ -1,4 +1,4 @@
-// expect: VG-E0101
+// expect: error VG-E0101 @bad op 0
 module e0101_clock_in_pure;
 
 NODE @bad {

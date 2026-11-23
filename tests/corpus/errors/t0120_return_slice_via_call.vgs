@@ -1,4 +1,4 @@
-// expect: VG-T0120
+// expect: error VG-T0120 @bad -
 module t0120_return_slice_via_call;
 
 NODE @view_head {

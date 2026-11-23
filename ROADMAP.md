@@ -106,7 +106,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P2.3 Resource accounting: static COST terms per op
 - [x] P2.4 vg-interp: every MVP op and mode (docs/14), IEEE floats bit-exact with one NaN (docs/13), NaN-propagating FCLAMP, effect traces
 - [x] P2.5 Conformance suite: one case per opcode and mode; NaN, ±inf, −0.0 and subnormals; expected values from an independent oracle (docs/16)
-- [ ] P2.6 Negative suite: type errors and capability escalation
+- [x] P2.6 Negative suite: type errors and capability escalation
 
 ### P3 · Verification — W3 — Nov 4 → Nov 20 — G3
 - [ ] P3.1 SMT encoding of every MVP op (docs/14): bitvectors, floats, arrays, uninterpreted functions; formula integers at the widths of docs/05; `fold:` and `spec:` instances (ADR 0008)
@@ -114,7 +114,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [x] P3.3 Solver drivers for z3, cvc5 and bitwuzla: one long-lived process each over pipes, reset between obligations, timeouts, push and pop, routing
 - [ ] P3.4 Model decoding into VG values, small-model search, model-guided and concrete replay in vg-interp (ADR 0006); the concrete pre-screen of docs/05
 - [x] P3.5 Query cache keyed by query hash; proof records
-- [ ] P3.6 Known-good and known-bad suites; mutation-testing harness
+- [x] P3.6 Known-good and known-bad suites; mutation-testing harness
 - [x] P3.7 `vg verify`
 - [ ] P3.8 The soft-knee story: examples/soft_knee_draft.vgs is rejected with a reproducing counterexample; examples/audio_limiter.vgs verifies
 

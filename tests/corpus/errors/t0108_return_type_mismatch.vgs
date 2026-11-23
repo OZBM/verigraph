@@ -1,4 +1,4 @@
-// expect: VG-T0108
+// expect: error VG-T0108 @bad -
 module t0108_return_type_mismatch;
 
 NODE @bad {

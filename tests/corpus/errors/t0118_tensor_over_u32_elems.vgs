@@ -1,4 +1,4 @@
-// expect: VG-T0118
+// expect: error VG-T0118 @bad -
 module t0118_tensor_over_u32_elems;
 
 NODE @bad {

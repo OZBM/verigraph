@@ -1,4 +1,4 @@
-// expect: VG-T0105
+// expect: error VG-T0105 @bad op 0
 module t0105_fmul_bf16;
 
 NODE @bad {

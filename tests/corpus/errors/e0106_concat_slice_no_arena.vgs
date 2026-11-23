@@ -1,4 +1,4 @@
-// expect: VG-E0106
+// expect: error VG-E0106 @bad op 0
 module e0106_concat_slice_no_arena;
 
 NODE @bad {

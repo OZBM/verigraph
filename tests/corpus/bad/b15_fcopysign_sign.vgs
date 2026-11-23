@@ -1,0 +1,13 @@
+// expect: reject @f/%0/FCOPYSIGN.sign
+module b15_fcopysign_sign;
+
+// The sign source may be NaN, which has no sign.
+NODE @f {
+  SIGNATURE: (x: f32, y: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { PRE: is_finite(x); }
+  BODY {
+    %0 = FCOPYSIGN(x, y);
+    RETURN(%0);
+  }
+}

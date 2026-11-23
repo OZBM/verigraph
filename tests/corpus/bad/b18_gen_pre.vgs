@@ -1,0 +1,20 @@
+// expect: reject @g/%0/GEN.pre.0
+module b18_gen_pre;
+
+NODE @k {
+  SIGNATURE: (j: u64) -> (u64);
+  EFFECTS: [];
+  CONTRACT { PRE: j < 4; }
+  BODY { %0 = MUL.checked(j, j); RETURN(%0); }
+}
+
+// GENERATE calls @k for every j below 8, but @k accepts only j < 4.
+NODE @g {
+  SIGNATURE: (x: u8) -> (Array<u64, 8>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = GENERATE(@k, 8:u64);
+    RETURN(%0);
+  }
+}

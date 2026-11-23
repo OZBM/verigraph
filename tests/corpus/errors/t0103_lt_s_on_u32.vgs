@@ -1,4 +1,4 @@
-// expect: VG-T0103
+// expect: error VG-T0103 @bad op 0
 module t0103_lt_s_on_u32;
 
 NODE @bad {

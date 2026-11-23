@@ -1,4 +1,4 @@
-// expect: VG-E0103
+// expect: error VG-E0103 @bad -
 module e0103_missing_eff_result;
 
 NODE @bad {

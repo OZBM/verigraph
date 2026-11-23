@@ -1,4 +1,4 @@
-// expect: VG-E0104
+// expect: error VG-E0104 @bad -
 module e0104_file_out_without_bit;
 
 NODE @bad {

@@ -1,4 +1,4 @@
-// expect: VG-T0119
+// expect: error VG-T0119 @bad op 0
 module t0119_handle_in_select;
 
 NODE @bad {

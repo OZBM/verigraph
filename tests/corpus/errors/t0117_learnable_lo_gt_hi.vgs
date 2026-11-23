@@ -1,4 +1,4 @@
-// expect: VG-T0117
+// expect: error VG-T0117 @bad -
 module t0117_learnable_lo_gt_hi;
 
 NODE @bad {

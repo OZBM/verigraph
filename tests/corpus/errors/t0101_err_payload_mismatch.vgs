@@ -1,4 +1,4 @@
-// expect: VG-T0101
+// expect: error VG-T0101 @bad op 0
 module t0101_err_payload_mismatch;
 
 NODE @bad {

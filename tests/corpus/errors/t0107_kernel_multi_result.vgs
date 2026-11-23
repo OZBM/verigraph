@@ -1,4 +1,4 @@
-// expect: VG-T0107
+// expect: error VG-T0107 @bad %0
 module t0107_kernel_multi_result;
 
 NODE @k {

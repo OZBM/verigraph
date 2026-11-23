@@ -1,4 +1,4 @@
-// expect: VG-T0119
+// expect: error VG-T0119 @bad -
 module t0119_eff_in_tuple;
 
 NODE @bad {

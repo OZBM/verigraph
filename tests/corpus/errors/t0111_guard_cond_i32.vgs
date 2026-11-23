@@ -1,4 +1,4 @@
-// expect: VG-T0111
+// expect: error VG-T0111 @bad op 0
 module t0111_guard_cond_i32;
 
 NODE @b1 {
