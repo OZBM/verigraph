@@ -26,6 +26,8 @@ const USAGE: &str = "usage:
   vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
   vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
                                                 verify, then compile (default target: aarch64-apple-darwin)
+  vg lift FILE FUNCTION [--lang c|rust] [--root DIR]
+                                                lift a C or Rust function with Alive2 and fuzzing (JSON)
   vg mesh publish FILE.vgs [--root DIR]         publish the module's nodes to DIR/.vg/mesh (ingestion gate)
   vg mesh query QUERY.json [--root DIR]         candidates for a docs/09 MeshContractQuery
   vg mesh resolve FILE.vgs [--root DIR]         bind each @MESH_QUERY, pin it in vg.lock, fetch its nodes
@@ -73,6 +75,7 @@ struct Opts {
     unverified: bool,
     detail: u8,
     addr: String,
+    lang: Option<String>,
 }
 
 fn opts(args: &[String]) -> Result<Opts, Fail> {
@@ -86,6 +89,7 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
         unverified: false,
         detail: 1,
         addr: "127.0.0.1:7878".into(),
+        lang: None,
     };
     let value = |it: &mut std::slice::Iter<String>, what: &str| {
         it.next()
@@ -119,6 +123,7 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
                 }
             }
             "--addr" => o.addr = value(&mut it, "--addr")?,
+            "--lang" | "--language" => o.lang = Some(value(&mut it, "--lang")?),
             s if s.starts_with("--") => return Err(Fail::Usage(format!("unknown option {s}"))),
             s => o.files.push(s.to_string()),
         }
@@ -321,6 +326,18 @@ fn run(args: &[String]) -> Result<(), Fail> {
                 }
                 _ => return Err(Fail::Usage(format!("wrong arguments for {cmd}"))),
             };
+            println!("{}", serde_json::to_string_pretty(&out).expect("JSON"));
+            if out["ok"] == true {
+                Ok(())
+            } else {
+                Err(Fail::Error(String::new()))
+            }
+        }
+        "lift" => {
+            let [file, function] = o.files.as_slice() else {
+                return Err(Fail::Usage("lift takes FILE and FUNCTION".into()));
+            };
+            let out = tools::lift(Path::new(file), function, o.lang.as_deref(), &o.root);
             println!("{}", serde_json::to_string_pretty(&out).expect("JSON"));
             if out["ok"] == true {
                 Ok(())

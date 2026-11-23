@@ -1,6 +1,6 @@
 //! `vg mcp`: the docs/15 tools over MCP stdio (rmcp): vg_check, vg_verify, vg_run, vg_build,
-//! vg_explain, vg_mesh_query and vg_mesh_publish, against the project in the working directory.
-//! vg_lift arrives with P8.
+//! vg_explain, vg_mesh_query, vg_mesh_publish and vg_lift, against the project in the working
+//! directory.
 
 use std::sync::Arc;
 
@@ -97,6 +97,16 @@ fn tools_list() -> Vec<Tool> {
             }),
             &["root", "targets"],
         ),
+        tool(
+            "vg_lift",
+            "Lift a C or Rust function through OmniLift with Alive2 bounded refinement and 1e6-input differential fuzzing (docs/08, docs/15).",
+            json!({
+                "path": { "type": "string", "description": "path to the C or Rust source file" },
+                "function": { "type": "string", "description": "name of the function to lift" },
+                "language": { "type": "string", "enum": ["c", "rust"], "description": "c or rust" },
+            }),
+            &["path", "function", "language"],
+        ),
     ]
 }
 
@@ -115,6 +125,21 @@ fn source(args: &JsonObject) -> Result<String, String> {
 pub fn dispatch(name: &str, args: &JsonObject) -> J {
     if name == "vg_mesh_query" {
         return crate::mesh::query(&J::Object(args.clone()), std::path::Path::new("."));
+    }
+    if name == "vg_lift" {
+        let Some(path) = args.get("path").and_then(J::as_str) else {
+            return json!({ "ok": false, "error": "missing path" });
+        };
+        let Some(function) = args.get("function").and_then(J::as_str) else {
+            return json!({ "ok": false, "error": "missing function" });
+        };
+        let lang = args.get("language").and_then(J::as_str);
+        return tools::lift(
+            std::path::Path::new(path),
+            function,
+            lang,
+            std::path::Path::new("."),
+        );
     }
     let src = match source(args) {
         Ok(s) => s,

@@ -50,7 +50,8 @@ fn mcp_lists_and_calls_tools() {
             "vg_mesh_query",
             "vg_mesh_publish",
             "vg_run",
-            "vg_build"
+            "vg_build",
+            "vg_lift"
         ]
     );
     let check = call(json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",

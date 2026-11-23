@@ -464,3 +464,97 @@ pub fn build(
     }
     json!({ "ok": true, "verified": proven, "artifacts": artifacts })
 }
+
+/// vg_lift: lift a C or Rust function through OmniLift (P8.7, docs/08, docs/15).
+pub fn lift(path: &Path, function: &str, language: Option<&str>, root: &Path) -> J {
+    let lang = match language {
+        Some("c" | "C") => vg_omnilift::ingest::Language::C,
+        Some("rust" | "rs" | "Rust") => vg_omnilift::ingest::Language::Rust,
+        Some(other) => {
+            return json!({
+                "ok": false,
+                "error": format!("unsupported language {other}; expected \"c\" or \"rust\""),
+            });
+        }
+        None => match path.extension().and_then(|e| e.to_str()) {
+            Some("c" | "h") => vg_omnilift::ingest::Language::C,
+            Some("rs") => vg_omnilift::ingest::Language::Rust,
+            _ => {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "cannot infer language for {}; pass --lang c or --lang rust",
+                        path.display()
+                    ),
+                });
+            }
+        },
+    };
+    let lifted = match vg_omnilift::lift::lift_source(path, function, lang, &[]) {
+        Ok(l) => l,
+        Err(d) => return failed(&d),
+    };
+    if (root != Path::new(".") || root.join(".vg").is_dir())
+        && let Ok(store) = vg_store::Store::open(root)
+    {
+        let lock_path = root.join("vg.lock");
+        let mut lock = vg_store::Lock::read(&lock_path).unwrap_or_default();
+        for a in &lifted.nodes {
+            let _ = store.put(&a.bytes);
+            lock.resolved.insert(
+                a.label.clone(),
+                vg_store::Entry {
+                    node: a.hashes.node,
+                    spec: a.node.spec.then_some(a.hashes.node),
+                    source: "lift".into(),
+                },
+            );
+        }
+        let _ = lock.write(&lock_path);
+    }
+    let root_params = lifted
+        .nodes
+        .last()
+        .map(|a| a.node.params.as_slice())
+        .unwrap_or(&[]);
+    let ub_found: Vec<J> = lifted
+        .ub_found
+        .iter()
+        .map(|u| {
+            let input: Vec<J> = u
+                .input
+                .iter()
+                .enumerate()
+                .map(|(i, v)| match root_params.get(i) {
+                    Some(t) => json::out(v, t),
+                    None => match v {
+                        Value::Int(n) => i64::try_from(*n)
+                            .map(|x| json!(x))
+                            .unwrap_or_else(|_| json!(n.to_string())),
+                        Value::Bool(b) => json!(b),
+                        other => json!(format!("{other:?}")),
+                    },
+                })
+                .collect();
+            json!({ "kind": u.kind, "input": input })
+        })
+        .collect();
+    json!({
+        "ok": true,
+        "node_hash": hex(&lifted.node_hash),
+        "root_label": format!("@{}", lifted.root_label),
+        "vgsym": lifted.vgsym,
+        "report": {
+            "bounded_check": lifted.bounded_check,
+            "unroll": lifted.unroll,
+            "fuzz_cases": lifted.fuzz_cases,
+            "ub_found": ub_found,
+        },
+        "provenance": {
+            "source": format!("{}::{}", lifted.provenance.path, lifted.provenance.function),
+            "language": lifted.provenance.language.as_str(),
+            "compiler": lifted.provenance.compiler,
+            "flags": lifted.provenance.compiler_args.join(" "),
+        },
+    })
+}
