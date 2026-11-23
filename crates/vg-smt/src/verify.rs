@@ -11,18 +11,20 @@ use vg_core::ir::{Hash, Node, Operand, Term};
 use vg_core::opcode;
 use vg_core::types::Type;
 
+use crate::cache::{self, Record};
 use crate::formula::{
     CostResources, DomainMode, FVal, FormulaEnv, QueryBuilder, assume_conjuncts, coll_len_bv64,
     collect_wd_obligations, encode_assume, encode_neg_goal, encode_wd_obligation, eval_op_core,
     symval_to_fval, zext,
 };
-use crate::model::{DecodedModel, decode_inputs};
+use crate::model::{DecodedModel, decode_with_small_model};
+use crate::replay::{Prescreen, classify, prescreen};
 use crate::solver::{CheckResult, Session, SmtQuery, Solver, SolverKind, has_fp};
 use crate::sort::{
     SymVal, bv_lit_i128, const_to_symval, declare_symval, scalar_const_smt, symval_atoms,
     symval_select,
 };
-use crate::{Options, Outcome, ReplayVerdict, Verdict, classify_sat_model};
+use crate::{Options, Outcome, Verdict};
 
 /// One proof goal: its context with the negated goal already asserted.
 struct Ob {
@@ -40,6 +42,10 @@ struct Ob {
 struct Solvers<'a> {
     opts: &'a Options,
     live: BTreeMap<SolverKind, Session>,
+    /// Each solver's `--version` line, asked once (None when it does not answer).
+    versions: BTreeMap<SolverKind, Option<String>>,
+    /// The node's hash, for proof records.
+    node: String,
 }
 
 /// One routed answer. On SAT the model is in session `kind`.
@@ -54,11 +60,85 @@ struct Answer {
 }
 
 impl<'a> Solvers<'a> {
-    fn new(opts: &'a Options) -> Self {
+    fn new(opts: &'a Options, node: &Node) -> Self {
         Self {
             opts,
             live: BTreeMap::new(),
+            versions: BTreeMap::new(),
+            node: vg_core::canon::hashes(node)
+                .map(|h| vg_core::ir::hex(&h.node))
+                .unwrap_or_default(),
         }
+    }
+
+    fn version(&mut self, kind: SolverKind) -> Option<String> {
+        if !self.versions.contains_key(&kind) {
+            let v = self.path(kind).and_then(|p| {
+                let out = std::process::Command::new(p)
+                    .arg("--version")
+                    .output()
+                    .ok()?;
+                let text = String::from_utf8_lossy(&out.stdout).into_owned();
+                text.lines()
+                    .find(|l| !l.trim().is_empty())
+                    .map(|l| l.trim().to_string())
+            });
+            self.versions.insert(kind, v);
+        }
+        self.versions[&kind].clone()
+    }
+
+    /// The versions of the solvers a record names, as the record writes them.
+    fn versions_of(&mut self, solver: &str) -> Option<String> {
+        let kinds = [SolverKind::Z3, SolverKind::Cvc5, SolverKind::Bitwuzla];
+        let names: Option<Vec<SolverKind>> = solver
+            .split('+')
+            .map(|n| kinds.into_iter().find(|k| k.name() == n))
+            .collect();
+        let vs: Option<Vec<String>> = names?.into_iter().map(|k| self.version(k)).collect();
+        Some(vs?.join("; "))
+    }
+
+    /// A proof record that still holds: the same solvers at the same versions, and in release
+    /// mode one with two solvers (docs/05: "reused only when its solver name and version match").
+    fn cached(&mut self, key: &Hash, proving: &CheckResult) -> Option<Record> {
+        let r = cache::load(self.opts.cache.as_deref()?, key)?;
+        let verdict = if *proving == CheckResult::Sat {
+            "sat"
+        } else {
+            "unsat"
+        };
+        let fits = r.verdict == verdict
+            && (!self.opts.release || r.evidence == "two-solvers")
+            && self.versions_of(&r.solver).as_deref() == Some(r.version.as_str());
+        fits.then_some(r)
+    }
+
+    fn record(&mut self, key: &Hash, o: &Outcome, proving: &CheckResult) {
+        let (Some(dir), Some(evidence)) = (self.opts.cache.clone(), o.evidence) else {
+            return;
+        };
+        if o.verdict != Verdict::Proven || !matches!(evidence, "re-solved" | "two-solvers") {
+            return;
+        }
+        let Some(version) = self.versions_of(&o.solver) else {
+            return;
+        };
+        let verdict = if *proving == CheckResult::Sat {
+            "sat"
+        } else {
+            "unsat"
+        };
+        let r = Record {
+            id: o.id.clone(),
+            node: self.node.clone(),
+            solver: o.solver.clone(),
+            version,
+            verdict: verdict.into(),
+            time_ms: o.time_ms,
+            evidence: evidence.into(),
+        };
+        cache::store(&dir, key, &r);
     }
 
     fn path(&self, kind: SolverKind) -> Option<&std::path::Path> {
@@ -923,11 +1003,12 @@ pub fn verify(
         }
     }
 
-    let mut solvers = Solvers::new(opts);
+    let mut solvers = Solvers::new(opts, node);
     let input_syms: Vec<SymVal> = inputs.iter().map(|(_, s)| s.clone()).collect();
+    let screened = prescreen(node, label, callee);
     let mut out: Vec<Outcome> = obs
         .into_iter()
-        .map(|ob| solve(ob, node, callee, &input_syms, &mut solvers))
+        .map(|ob| solve(ob, node, callee, &input_syms, &screened, &mut solvers))
         .collect();
     out.extend(cost_obligations(
         node,
@@ -1055,6 +1136,8 @@ fn cost_obligations(
         inputs: None,
         message,
         evidence: None,
+        hash: None,
+        time_ms: 0,
     };
     let summary = match vg_types::check_node(node, callee) {
         Ok(s) => s,
@@ -1102,7 +1185,7 @@ fn cost_obligations(
         heap_bytes: int((bv_lit_i128(0, 2), 2)),
     };
     let input_syms: Vec<SymVal> = inputs.iter().map(|(_, s)| s.clone()).collect();
-    let mut solvers = Solvers::new(opts);
+    let mut solvers = Solvers::new(opts, node);
     let mut out = Vec::new();
     for (j, t) in node.contract.cost.iter().enumerate() {
         let mut cq = q.clone();
@@ -1121,6 +1204,7 @@ fn cost_obligations(
             node,
             callee,
             &input_syms,
+            &Prescreen::default(),
             &mut solvers,
         );
         // The cost model is not run by vg-interp, so a model is checked against nothing more: it
@@ -1151,7 +1235,60 @@ fn solve(
     node: &Node,
     callee: &dyn Fn(&Hash) -> Option<Node>,
     input_syms: &[SymVal],
+    screened: &Prescreen,
     solvers: &mut Solvers,
+) -> Outcome {
+    let start = std::time::Instant::now();
+    let proving = if ob.nonvacuous {
+        CheckResult::Sat
+    } else {
+        CheckResult::Unsat
+    };
+    // The whole query first: its hash names the obligation (docs/02) and keys the cache.
+    let mut q = ob.full.clone().unwrap_or_else(|| ob.qb.clone());
+    if q.unresolved_error.is_none() {
+        q.finalize_instantiations(callee);
+    }
+    let full = match &q.unresolved_error {
+        Some(e) => Err(format!("not encoded: {e}")),
+        None => Ok(q.into_pruned_query()),
+    };
+    let key = full.as_ref().ok().map(cache::obligation_hash);
+    let mut o = if let Some(p) = prescreened(&ob, screened) {
+        p
+    } else if let Some(r) = key.as_ref().and_then(|k| solvers.cached(k, &proving)) {
+        Outcome {
+            id: ob.id.clone(),
+            verdict: Verdict::Proven,
+            code: None,
+            solver: r.solver,
+            inputs: None,
+            message: format!("proof record from {}", r.version),
+            evidence: Some("cached"),
+            hash: None,
+            time_ms: 0,
+        }
+    } else {
+        let mut o = solve_uncached(ob, node, callee, input_syms, solvers, full, &proving);
+        o.time_ms = start.elapsed().as_millis() as u64;
+        if let Some(k) = &key {
+            solvers.record(k, &o, &proving);
+        }
+        o
+    };
+    o.hash = key;
+    o.time_ms = start.elapsed().as_millis() as u64;
+    o
+}
+
+fn solve_uncached(
+    ob: Ob,
+    node: &Node,
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+    input_syms: &[SymVal],
+    solvers: &mut Solvers,
+    full: Result<SmtQuery, String>,
+    proving: &CheckResult,
 ) -> Outcome {
     let mut o = Outcome {
         id: ob.id,
@@ -1161,11 +1298,12 @@ fn solve(
         inputs: None,
         message: String::new(),
         evidence: None,
+        hash: None,
+        time_ms: 0,
     };
     // First a smaller query: the obligation's own context restricted as `qb` is, with kernels
     // known by their POST alone. Only UNSAT is taken from it, since dropping assumptions is sound;
     // anything else is decided by the whole query. NONVACUOUS wants SAT, so it skips this.
-    let mut q = ob.full.unwrap_or_else(|| ob.qb.clone());
     if !ob.nonvacuous {
         let mut small = ob.qb;
         small.post_only_kernels = true;
@@ -1179,50 +1317,34 @@ fn solve(
             }
         }
     }
-    if let Some(e) = &q.unresolved_error {
-        o.message = format!("not encoded: {e}");
-        return o;
-    }
-    q.finalize_instantiations(callee);
-    if let Some(e) = &q.unresolved_error {
-        o.message = format!("not encoded: {e}");
-        return o;
-    }
-    let proving = if ob.nonvacuous {
-        CheckResult::Sat
-    } else {
-        CheckResult::Unsat
+    let pq = match full {
+        Ok(pq) => pq,
+        Err(m) => {
+            o.message = m;
+            return o;
+        }
     };
-    let a = solvers.check(&q.into_pruned_query(), &proving);
+    let a = solvers.check(&pq, proving);
     let kind = a.kind;
     match a.result {
         CheckResult::Unsat if ob.nonvacuous => {
-            o = answered(o, a, &proving);
+            o = answered(o, a, proving);
             o.verdict = Verdict::Vacuous;
             o.code = Some("VG-V0003");
             o.message = "no input satisfies PRE and the LEARNABLE box".into();
         }
         CheckResult::Sat if ob.nonvacuous => {
-            o = answered(o, a, &proving);
+            o = answered(o, a, proving);
             o.message = "satisfiable".into();
         }
         CheckResult::Sat => {
-            o = answered(o, a, &proving);
-            match decode_inputs(solvers.session(kind), node, input_syms) {
+            o = answered(o, a, proving);
+            match decode_with_small_model(solvers.session(kind), &pq, node, input_syms) {
                 DecodedModel::Values(v) => {
-                    o.verdict = match classify_sat_model(node, &o.id, &v, callee) {
-                        ReplayVerdict::ConcreteCounterexample => Verdict::Counterexample,
-                        ReplayVerdict::ContractGap => Verdict::ContractGap,
-                        ReplayVerdict::PartialAssumptionViolation => Verdict::Unknown,
-                        ReplayVerdict::VerifierBug => Verdict::Error,
-                    };
-                    o.code = Some(match o.verdict {
-                        Verdict::Counterexample => "VG-V0001",
-                        Verdict::ContractGap => "VG-V0002",
-                        Verdict::Unknown => "VG-V0006",
-                        _ => "VG-V0008",
-                    });
-                    o.message = "refuted by the solver's model".into();
+                    let (verdict, code, message) = classify(node, &o.id, &v, callee);
+                    o.verdict = verdict;
+                    o.code = Some(code);
+                    o.message = message;
                     o.inputs = Some(v);
                 }
                 DecodedModel::TooLarge(m) => {
@@ -1239,9 +1361,36 @@ fn solve(
                 }
             }
         }
-        _ => o = answered(o, a, &proving),
+        _ => o = answered(o, a, proving),
     }
     o
+}
+
+/// The answer the pre-screen gives without a solver: a refutation on real inputs, or for
+/// NONVACUOUS an input that satisfies PRE (docs/05 steps 2 and 3).
+fn prescreened(ob: &Ob, screened: &Prescreen) -> Option<Outcome> {
+    let mut o = Outcome {
+        id: ob.id.clone(),
+        verdict: Verdict::Proven,
+        code: None,
+        solver: "none".into(),
+        inputs: None,
+        message: String::new(),
+        evidence: Some("prescreen"),
+        hash: None,
+        time_ms: 0,
+    };
+    if ob.nonvacuous {
+        screened.pre_met.as_ref()?;
+        o.message = "a pre-screen input satisfies PRE".into();
+        return Some(o);
+    }
+    let f = screened.findings.get(&ob.id)?;
+    o.verdict = Verdict::Counterexample;
+    o.code = Some("VG-V0001");
+    o.message = f.message.clone();
+    o.inputs = Some(f.inputs.clone());
+    Some(o)
 }
 
 /// `o` with the record of answer `a` and its verdict: `proving` proves, the contrary answer is
@@ -1290,6 +1439,28 @@ NODE @f {
   }
 }";
 
+    /// PRE that no pre-screen input meets (x = 8919 is neither a boundary nor a literal), so only
+    /// a solver shows it satisfiable.
+    const HIDDEN_PRE_SRC: &str = "module t;
+NODE @g {
+  SIGNATURE: (x: u32, y: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x == y + 1000 && y == 7919;
+    POST: result == x;
+  }
+  BODY {
+    RETURN(x);
+  }
+}";
+
+    /// The NONVACUOUS check that a concrete pre-screen input discharged (docs/05 step 3).
+    fn witnessed(o: &Outcome) -> bool {
+        o.id.ends_with("/NONVACUOUS")
+            && (o.verdict, o.solver.as_str(), o.evidence)
+                == (Verdict::Proven, "none", Some("prescreen"))
+    }
+
     fn outcomes(src: &str, opts: &Options) -> Vec<Outcome> {
         let asm = vg_core::asm_local(src).unwrap();
         crate::verify(&asm[0].node, &asm[0].label, &|_: &Hash| None, opts)
@@ -1327,7 +1498,7 @@ NODE @f {
             bitwuzla: None,
             ..Options::default()
         };
-        for o in outcomes(U8_SRC, &opts) {
+        for o in outcomes(U8_SRC, &opts).iter().filter(|o| !witnessed(o)) {
             assert_eq!(o.verdict, Verdict::Proven, "{o:?}");
             assert_eq!((o.solver.as_str(), o.evidence), ("z3", Some("re-solved")));
         }
@@ -1335,7 +1506,10 @@ NODE @f {
 
     #[test]
     fn release_mode_without_a_second_solver_proves_nothing() {
-        for o in outcomes(U8_SRC, &release_with(None)) {
+        for o in outcomes(U8_SRC, &release_with(None))
+            .iter()
+            .filter(|o| !witnessed(o))
+        {
             assert_eq!(o.verdict, Verdict::Unknown, "{o:?}");
             assert_eq!(o.code, Some("VG-V0005"));
             assert!(
@@ -1351,12 +1525,10 @@ NODE @f {
     #[test]
     fn release_mode_reports_a_disagreement_as_v0009() {
         let out = outcomes(U8_SRC, &release_with(Some(fake_solver("sat"))));
-        // The NONVACUOUS check wants SAT, so the fake agrees with z3 there; elsewhere it does not.
+        // The pre-screen meets PRE, so no solver sees NONVACUOUS; elsewhere the fake contradicts.
         let mut disagreed = 0;
         for o in &out {
-            if o.id.ends_with("NONVACUOUS") {
-                assert_eq!(o.verdict, Verdict::Proven, "{o:?}");
-                assert_eq!(o.evidence, Some("two-solvers"));
+            if witnessed(o) {
                 continue;
             }
             assert_eq!(
@@ -1371,8 +1543,9 @@ NODE @f {
             disagreed += 1;
         }
         assert!(disagreed >= 2, "{out:?}");
-        // And the other way round: a NONVACUOUS model that the second solver calls impossible.
-        let out = outcomes(U8_SRC, &release_with(Some(fake_solver("unsat"))));
+        // And the other way round: a NONVACUOUS model that the second solver calls impossible,
+        // on a PRE the pre-screen cannot meet.
+        let out = outcomes(HIDDEN_PRE_SRC, &release_with(Some(fake_solver("unsat"))));
         let nv = out.iter().find(|o| o.id.ends_with("NONVACUOUS")).unwrap();
         assert_eq!(
             (nv.verdict, nv.code),
@@ -1384,7 +1557,8 @@ NODE @f {
     #[cfg(unix)]
     #[test]
     fn release_mode_leaves_an_unconfirmed_proof_unknown() {
-        for o in outcomes(U8_SRC, &release_with(Some(fake_solver("unknown")))) {
+        let out = outcomes(U8_SRC, &release_with(Some(fake_solver("unknown"))));
+        for o in out.iter().filter(|o| !witnessed(o)) {
             assert_eq!(
                 (o.verdict, o.code),
                 (Verdict::Unknown, Some("VG-V0005")),
@@ -1395,6 +1569,57 @@ NODE @f {
                 "{o:?}"
             );
         }
+    }
+
+    /// docs/05 P3.5: a second run reuses every proof, with the same verdicts; a record from
+    /// another solver version, or a one-solver record in release mode, is solved again.
+    #[test]
+    fn proof_records_are_reused_only_when_they_still_hold() {
+        let dir = std::env::temp_dir().join(format!("vg-proofs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let edit = Options {
+            cvc5: None,
+            bitwuzla: None,
+            cache: Some(dir.clone()),
+            ..Options::default()
+        };
+        let first = outcomes(U8_SRC, &edit);
+        let second = outcomes(U8_SRC, &edit);
+        let solved: Vec<&Outcome> = first.iter().filter(|o| !witnessed(o)).collect();
+        assert!(!solved.is_empty());
+        for (a, b) in first.iter().zip(&second) {
+            assert_eq!((&a.id, a.verdict, a.hash), (&b.id, b.verdict, b.hash));
+            assert!(a.hash.is_some(), "{a:?}");
+            if !witnessed(a) {
+                assert_eq!(
+                    (a.evidence, b.evidence),
+                    (Some("re-solved"), Some("cached"))
+                );
+                assert_eq!(b.solver, "z3");
+            }
+        }
+        // Another z3 version: every record is stale.
+        for f in std::fs::read_dir(&dir).unwrap().flatten() {
+            let text = std::fs::read_to_string(f.path()).unwrap();
+            std::fs::write(f.path(), text.replace("Z3 version", "Z3 version 0.0 not")).unwrap();
+        }
+        for o in outcomes(U8_SRC, &edit).iter().filter(|o| !witnessed(o)) {
+            assert_eq!(o.evidence, Some("re-solved"), "{o:?}");
+        }
+        // Release mode never takes a one-solver record.
+        for o in outcomes(
+            U8_SRC,
+            &Options {
+                release: true,
+                ..edit.clone()
+            },
+        )
+        .iter()
+        .filter(|o| !witnessed(o))
+        {
+            assert_ne!(o.evidence, Some("cached"), "{o:?}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// With the pinned solvers installed, release mode proves with two of them: z3 and cvc5 for
@@ -1431,7 +1656,7 @@ NODE @f {{
             (U8_SRC.to_string(), "z3+cvc5"),
             (float("f32", "1.0:f32"), "bitwuzla+z3"),
         ] {
-            for o in outcomes(&src, &opts) {
+            for o in outcomes(&src, &opts).iter().filter(|o| !witnessed(o)) {
                 assert_eq!(o.verdict, Verdict::Proven, "{o:?}");
                 assert_eq!(
                     (o.solver.as_str(), o.evidence),
@@ -1439,7 +1664,8 @@ NODE @f {{
                 );
             }
         }
-        for o in outcomes(&float("bf16", "1.0:bf16"), &opts) {
+        let bf16 = outcomes(&float("bf16", "1.0:bf16"), &opts);
+        for o in bf16.iter().filter(|o| !witnessed(o)) {
             assert_eq!(o.verdict, Verdict::Unknown, "{o:?}");
             assert!(o.message.contains("only z3"), "{o:?}");
         }

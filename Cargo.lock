@@ -1119,6 +1119,8 @@ version = "0.0.0"
 name = "vg-smt"
 version = "0.0.0"
 dependencies = [
+ "blake3",
+ "serde_json",
  "vg-core",
  "vg-interp",
  "vg-types",

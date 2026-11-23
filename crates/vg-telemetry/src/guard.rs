@@ -163,6 +163,8 @@ pub fn guard_report(
         inputs: Some(inputs.to_vec()),
         message: format!("runtime guard {guard_id} failed on {target}"),
         evidence: None,
+        hash: None,
+        time_ms: 0,
     };
 
     let mut rep = report(node, label, names, &synthetic_outcome, callee)

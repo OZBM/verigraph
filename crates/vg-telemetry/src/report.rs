@@ -173,7 +173,9 @@ pub fn report(
     let node_name = format!("@{}", label.trim_start_matches('@'));
     let kind = parse_obligation_id(&outcome.id);
 
+    // The verifier's hash, the one its result and proof record carry (docs/15: reports carry it).
     let obligation_hash = match &kind {
+        _ if outcome.hash.is_some() => hex(outcome.hash.as_ref().expect("checked")),
         Some(k) => {
             let ctx = SmtObligationContext::build(node, k, callee, false);
             hex(&ctx.obligation_hash(node, &outcome.id, callee))

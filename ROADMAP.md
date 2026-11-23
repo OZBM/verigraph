@@ -113,7 +113,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P3.2 Obligations from the combinator proof rules (docs/05), including the fresh-element rule, the non-vacuity check and well-definedness (ADR 0010), named as in docs/15
 - [x] P3.3 Solver drivers for z3, cvc5 and bitwuzla: one long-lived process each over pipes, reset between obligations, timeouts, push and pop, routing
 - [ ] P3.4 Model decoding into VG values, small-model search, model-guided and concrete replay in vg-interp (ADR 0006); the concrete pre-screen of docs/05
-- [ ] P3.5 Query cache keyed by query hash; proof records
+- [x] P3.5 Query cache keyed by query hash; proof records
 - [ ] P3.6 Known-good and known-bad suites; mutation-testing harness
 - [x] P3.7 `vg verify`
 - [ ] P3.8 The soft-knee story: examples/soft_knee_draft.vgs is rejected with a reproducing counterexample; examples/audio_limiter.vgs verifies

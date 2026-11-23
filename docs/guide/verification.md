@@ -16,6 +16,19 @@ solver must answer `unsat` too, and if it answers `sat` instead the verdict is `
 and the build stops. cvc5 takes only 32- and 64-bit floats and Bitwuzla no `bf16`, so a release
 proof about `bf16`, which only z3 takes, stays `unknown`.
 
+Before any solver runs, a **pre-screen** runs the node in vg-interp on a fixed set of inputs: boundary
+values (0, ±1, MIN, MAX, −0.0, subnormals, ±∞, NaN, the literals PRE compares against, slice lengths 0
+to 3 and 16), then 256 random combinations seeded from the node's hash, so every machine tries the same
+inputs. An input that meets PRE and then traps or breaks a POST conjunct is a counterexample at once
+(`"evidence": "prescreen"`), and the first input that meets PRE shows the contract is not vacuous. A
+pass proves nothing; the solvers still decide every other obligation. Nodes with effects, and inputs
+whose static op count is over 20,000, are not pre-screened.
+
+Each proof is kept as a record in `<root>/.vg/proofs`, named by the obligation's hash, so an
+unchanged obligation is not solved again (`"evidence": "cached"`). A record is used only while the
+solvers it names report the same version, and in release mode only when two solvers made it. The
+records are trusted like the build directory: delete `.vg/proofs` to prove everything again.
+
 Nodes are verified one at a time. A call is reasoned about through the callee's contract only, never
 its body, so a node's proof stays valid when a callee's body changes and its contract does not. Inside
 a node, each op's obligations see only the facts of the ops before it.
@@ -43,13 +56,14 @@ you wrote (see [Troubleshooting](troubleshooting.md)).
 | Verdict | Code | Meaning | What to do |
 | --- | --- | --- | --- |
 | `proven` | | The solver proved the goal. | Nothing. |
-| `counterexample` | VG-V0001 | An input satisfies PRE and breaks the goal. With `"reproduced": "concrete"`, vg-interp ran the node on it and saw the failure. | Fix the body, or add the missing assumption to PRE. |
+| `counterexample` | VG-V0001 | An input satisfies PRE and breaks the goal, and vg-interp reproduced the failure with the real callees (`"reproduced": "concrete"`). | Fix the body, or add the missing assumption to PRE. |
 | `contract_gap` | VG-V0002 | The goal fails with callee results that the callee's contract allows, but the real callee behaves. | Strengthen the callee's POST, or this node's PRE. Not the body. |
 | `vacuous` | VG-V0003 | No input satisfies PRE, so every other goal holds trivially. | Weaken PRE. |
 | `unknown` | VG-V0004 | The solver timed out. | Raise `--timeout`, split the conjunct, add an invariant conjunct, or restate the goal. |
 | `unknown` | VG-V0005 | The solver answered `unknown`. | As for a timeout. |
-| `unknown` | VG-V0006, VG-V0007 | The model could not be used: an assumption was only partly instantiated, or the model is too large to replay. | Simplify the contract. |
-| `error` | VG-V0008 | A verifier error. | Report it, with the module. |
+| `unknown` | VG-V0006 | The solver's model breaks PRE where the query only instantiates it in part (a `forall`, `spec:`, `fold:` or a formula division): the solver found no input that really meets PRE. | Split the obligation, add an INVARIANT conjunct, or guard the op. |
+| `unknown` | VG-V0007 | The model cannot be replayed: it is too large, or the node has effects. | Simplify the contract. |
+| `error` | VG-V0008 | A verifier error: for instance, a model that does not reproduce in a node with nothing abstracted, where the query encodes the node exactly. | Report it, with the module. |
 | `error` | VG-V0009 | Release mode: the second solver contradicts the first. | Report it, with the module. |
 | `unknown` | VG-V0005 | Release mode: the second solver did not confirm the proof, or no second solver takes the query. | Install cvc5 and Bitwuzla, raise `--timeout`, or avoid `bf16` in the goal. |
 
@@ -76,8 +90,10 @@ paste them into `vg run` to watch the failure:
 vg run safe_div.vgs @safe_div '{"a": 0, "b": 0}'
 ```
 
-`"reproduced": "no"` on a counterexample means the replay could not run, which happens for effectful
-nodes: treat it as a strong hint, not a demonstration.
+Every `counterexample` is reproduced: the verifier replays each model in vg-interp before it reports
+one, and a model that does not reproduce becomes a `contract_gap`, an `unknown` or an `error`
+instead. When an input slice is involved, the verifier first looks for a model whose slices have at
+most 4, then 16, then 256 elements, so counterexamples stay small.
 
 ## Contract gaps
 
@@ -182,7 +198,10 @@ NODE @add2 {
 
 ## Limits of version 0
 
-- COST obligations are reported as `unknown` (VG-V0005, "not encoded yet").
-- The small-model search and the proof cache are not there yet, so every run proves everything
-  again.
+- COST obligations are proven for `ops` and `arena_bytes`, but a callee's `ops` cost is not modelled,
+  so a COST bound that depends on one stays `unknown` (VG-V0005).
+- Model-guided replay is partial: a model is replayed with the real callees only, so in a node that
+  calls something, a model that does not reproduce is reported as a `contract_gap` even when an
+  encoding bug is the cause. In a node with nothing abstracted it is reported as VG-V0008.
+- The pre-screen does not yet check FOLD_BOUNDED invariants step by step; the solver checks them.
 - Obligation IDs name ops by canonical index rather than by the port written in the source.

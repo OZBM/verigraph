@@ -310,8 +310,9 @@ fn run(args: &[String]) -> Result<(), Fail> {
             let out = match (cmd.as_str(), rest.as_slice()) {
                 ("check", []) => tools::check(&src, &env),
                 ("verify", []) => {
-                    let smt = tools::mode_options(o.mode.as_deref(), o.timeout_ms)
+                    let mut smt = tools::mode_options(o.mode.as_deref(), o.timeout_ms)
                         .map_err(Fail::Usage)?;
+                    smt.cache = Some(o.root.join(".vg").join("proofs"));
                     tools::verify(&src, &env, &smt, o.detail)
                 }
                 ("explain", [ob]) => tools::explain(&src, &env, ob, o.timeout_ms.unwrap_or(10_000)),

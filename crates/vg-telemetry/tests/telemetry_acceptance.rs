@@ -49,6 +49,8 @@ fn soft_knee_draft_acceptance() {
         inputs: Some(vec![Value::Float(x_bits), Value::Float(knee_bits)]),
         message: "refuted".to_string(),
         evidence: None,
+        hash: None,
+        time_ms: 0,
     };
     let rep = report(&soft.node, &soft.label, &names, &outcome, &callee)
         .expect("FailureReport for POST.0");
@@ -189,6 +191,8 @@ NODE @big_read {
         ]),
         message: "refuted".to_string(),
         evidence: None,
+        hash: None,
+        time_ms: 0,
     };
     let rep = report(&n.node, &n.label, &names, &outcome, &callee).expect("report");
     assert_eq!(rep.reproduced, Reproduced::Concrete);

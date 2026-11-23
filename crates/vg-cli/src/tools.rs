@@ -158,28 +158,6 @@ fn verdict_name(v: &vg_smt::Verdict) -> &'static str {
     }
 }
 
-/// Concrete replay of a counterexample with the real callees (ADR 0006): Some(true) when the inputs
-/// satisfy PRE and the node traps or breaks its POST, Some(false) when it runs correctly (a contract
-/// gap), None when it cannot be replayed here (effects) or the inputs break PRE (a verifier bug).
-fn replay(a: &Assembled, inputs: &[Value], m: &Loaded) -> Option<bool> {
-    if !a.node.effects.is_pure() {
-        return None;
-    }
-    let callee = m.callee();
-    let pre = vg_interp::holds(&a.node, vg_interp::Clause::Pre, inputs, &[], &callee).ok()?;
-    if !pre {
-        return None;
-    }
-    let mut host = vg_interp::NoEffectsHost;
-    Some(match vg_interp::run(&a.node, inputs, &callee, &mut host) {
-        Err(_) => true,
-        Ok(results) => {
-            vg_interp::holds(&a.node, vg_interp::Clause::Post, inputs, &results, &callee)
-                != Ok(true)
-        }
-    })
-}
-
 fn named_inputs(a: &Assembled, d: &NodeDef, inputs: &[Value]) -> J {
     let names = d
         .params
@@ -195,25 +173,15 @@ fn named_inputs(a: &Assembled, d: &NodeDef, inputs: &[Value]) -> J {
     J::Object(o)
 }
 
-/// One obligation's outcome after concrete replay (ADR 0006): a counterexample that does not
-/// reproduce with the real callees becomes a contract gap.
-fn classify(o: &vg_smt::Outcome, a: &Assembled, m: &Loaded) -> (vg_smt::Outcome, &'static str) {
-    let mut o = o.clone();
-    let Some(inputs) = o.inputs.clone() else {
-        return (o, "no");
+/// One obligation's outcome and whether vg-interp reproduced it: vg-smt replays every model
+/// (ADR 0006) and reports a counterexample only when the real callees reproduce it.
+fn classify(o: &vg_smt::Outcome) -> (vg_smt::Outcome, &'static str) {
+    let reproduced = if o.verdict == vg_smt::Verdict::Counterexample {
+        "concrete"
+    } else {
+        "no"
     };
-    let reproduced = match replay(a, &inputs, m) {
-        Some(true) => "concrete",
-        Some(false) => {
-            if o.verdict == vg_smt::Verdict::Counterexample {
-                o.verdict = vg_smt::Verdict::ContractGap;
-                o.code = Some("VG-V0002");
-            }
-            "no"
-        }
-        None => "no",
-    };
-    (o, reproduced)
+    (o.clone(), reproduced)
 }
 
 /// The docs/15 FailureReport of a failed obligation, from vg-telemetry, or the inputs alone when
@@ -255,7 +223,7 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail
         };
         let mut verified = true;
         for o in vg_smt::verify(&a.node, &a.label, &callee, opts) {
-            let (o, reproduced) = classify(&o, a, m);
+            let (o, reproduced) = classify(&o);
             let verdict = verdict_name(&o.verdict);
             let mut r =
                 json!({ "id": o.id, "verdict": verdict, "solver": o.solver, "message": o.message });
@@ -265,6 +233,10 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail
             if let Some(e) = o.evidence {
                 r["evidence"] = json!(e);
             }
+            if let Some(h) = &o.hash {
+                r["hash"] = json!(vg_core::ir::hex(h));
+            }
+            r["time_ms"] = json!(o.time_ms);
             if verdict != "proven" {
                 failed.insert(o.id.clone(), (*a, d, o, reproduced));
             }
@@ -313,7 +285,7 @@ pub fn explain(src: &str, env: &Env, obligation: &str, timeout_ms: u64) -> J {
     let Some(o) = outcomes.iter().find(|o| o.id == obligation) else {
         return json!({ "ok": false, "error": format!("{label} has no obligation {obligation}") });
     };
-    let (o, reproduced) = classify(o, a, &m);
+    let (o, reproduced) = classify(o);
     if o.verdict == vg_smt::Verdict::Proven {
         return json!({ "ok": true, "verdict": "proven", "prose": format!("{obligation} is proven.") });
     }

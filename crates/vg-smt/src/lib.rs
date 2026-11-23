@@ -1,7 +1,9 @@
 //! Verification conditions, SMT-LIB2 emission, solver drivers, counterexamples, proof cache.
 
+mod cache;
 pub mod formula;
 pub mod model;
+mod replay;
 pub mod sexpr;
 pub mod solver;
 pub mod sort;
@@ -22,6 +24,8 @@ pub struct Options {
     pub timeout_ms: u64,
     /// Release mode: an obligation is proven only when two solvers agree (`two-solvers`).
     pub release: bool,
+    /// Where proof records live (docs/05, P3.5); None solves every obligation afresh.
+    pub cache: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -32,6 +36,7 @@ impl Default for Options {
             bitwuzla: find_solver("bitwuzla"),
             timeout_ms: 10_000,
             release: false,
+            cache: None,
         }
     }
 }
@@ -54,26 +59,12 @@ pub struct Outcome {
     pub solver: String,
     pub inputs: Option<Vec<Value>>,
     pub message: String,
-    /// docs/15: `re-solved` for one solver's answer, `two-solvers` when a second agreed.
+    /// docs/15: `prescreen`, `re-solved` for one solver's answer, `two-solvers` when a second
+    /// agreed, or `cached` for a proof record reused.
     pub evidence: Option<&'static str>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReplayVerdict {
-    ConcreteCounterexample,
-    ContractGap,
-    PartialAssumptionViolation,
-    VerifierBug,
-}
-
-/// ADR 0006 replay hook: W0 replaces this stub with vg-interp model-guided and concrete replay.
-pub fn classify_sat_model(
-    _node: &Node,
-    _obligation_id: &str,
-    _inputs: &[Value],
-    _callee: &dyn Fn(&Hash) -> Option<Node>,
-) -> ReplayVerdict {
-    ReplayVerdict::ConcreteCounterexample
+    /// The obligation hash of docs/02, the cache key; None when the obligation is not encoded.
+    pub hash: Option<Hash>,
+    pub time_ms: u64,
 }
 
 /// Finds solver `name` in `/opt/homebrew/bin`, `/usr/local/bin`, or on `PATH`.

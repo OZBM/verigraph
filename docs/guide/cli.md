@@ -51,13 +51,14 @@ Proves every obligation of every node. z3 takes most queries and Bitwuzla, when 
 queries with floats. `--mode` sets the time limit per query: `edit` 2000 ms, `ci` 60000 ms, and
 `release` 60000 ms with a second solver that must give the same answer, so each proof there has
 the evidence `two-solvers`. Without `--mode` the limit is 10000 ms; `--timeout` overrides it.
+Proofs are recorded in `<root>/.vg/proofs` (`--root`, default `.`) and reused while they hold.
 [Verification](verification.md) explains the obligations and verdicts.
 
 | Field | Content |
 | --- | --- |
 | `ok` | `true` when every obligation of every node is proven |
 | `nodes` | `label`, `verified` |
-| `results` | one per obligation, sorted by ID: `id`, `verdict`, `code` (when not proven), `solver` (such as `z3`, or `z3+cvc5` when two agreed), `evidence` (`re-solved` or `two-solvers`, when a solver answered), `message`, and `report` for a refutation |
+| `results` | one per obligation, sorted by ID: `id`, `hash` (the obligation hash of docs/02, which names its proof record), `time_ms`, `verdict`, `code` (when not proven), `solver` (such as `z3`, or `z3+cvc5` when two agreed; `none` for the pre-screen), `evidence` (`prescreen`, `re-solved`, `two-solvers` or `cached`), `message`, and `report` for a refutation |
 | `report` | `node`, `obligation`, `inputs` (by parameter name), `reproduced` (`concrete` or `no`) |
 | `diagnostics` | present instead of `results` when the module does not load |
 

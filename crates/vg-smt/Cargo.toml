@@ -10,3 +10,5 @@ publish.workspace = true
 vg-core = { path = "../vg-core" }
 vg-types = { path = "../vg-types" }
 vg-interp = { path = "../vg-interp" }
+blake3 = "1"
+serde_json = "1"

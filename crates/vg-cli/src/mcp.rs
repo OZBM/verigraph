@@ -171,7 +171,10 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
             let t = args.get("timeout_ms").and_then(J::as_u64);
             let detail = args.get("detail").and_then(J::as_u64).unwrap_or(1).min(2) as u8;
             match tools::mode_options(mode, t) {
-                Ok(smt) => tools::verify(&src, &env, &smt, detail),
+                Ok(mut smt) => {
+                    smt.cache = Some(std::path::PathBuf::from(".vg/proofs"));
+                    tools::verify(&src, &env, &smt, detail)
+                }
                 Err(e) => json!({ "ok": false, "error": e }),
             }
         }
