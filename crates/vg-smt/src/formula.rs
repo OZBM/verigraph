@@ -1207,7 +1207,7 @@ fn match_watch_to_range_vars(
 }
 
 impl SavedEnv {
-    fn as_env<'a>(&self, callee: &'a dyn Fn(&Hash) -> Option<Node>) -> FormulaEnv<'a> {
+    fn as_env<'a>(&'a self, callee: &'a dyn Fn(&Hash) -> Option<Node>) -> FormulaEnv<'a> {
         FormulaEnv {
             node: &self.node,
             callee,
@@ -1600,7 +1600,7 @@ fn eval_index_access(
             qb.record_index(coll, vec![idx_bv64.clone()], idx_bv64.clone());
             let selected = symval_select(coll, &idx_bv64, &mut qb.next_coll_id);
             qb.register_coll_id(&selected);
-            if *elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
+            if **elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
                 let oob = qb.fresh_symval("idx_oob", elem_ty);
                 let guarded = symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
                 qb.register_coll_id(&guarded);
@@ -1625,7 +1625,7 @@ fn eval_index_access(
             qb.record_index(coll, vec![idx_bv64.clone()], idx_bv64.clone());
             let selected = symval_select(coll, &idx_bv64, &mut qb.next_coll_id);
             qb.register_coll_id(&selected);
-            if *elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
+            if **elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
                 let oob = qb.fresh_symval("idx_oob", elem_ty);
                 let guarded = symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
                 qb.register_coll_id(&guarded);
@@ -1662,7 +1662,7 @@ fn eval_index_access(
             qb.record_index(coll, dim_bv64s, flat.clone());
             let selected = symval_select(coll, &flat, &mut qb.next_coll_id);
             qb.register_coll_id(&selected);
-            if *elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
+            if **elem_ty == Type::Bool || elem_ty.is_int() || elem_ty.is_float() {
                 let oob = qb.fresh_symval("idx_oob", elem_ty);
                 let guarded = symval_ite(&in_bounds, elem_ty, &selected, &oob, &mut qb.next_coll_id);
                 qb.register_coll_id(&guarded);
@@ -3125,45 +3125,6 @@ fn match_idx_pattern(
         }
         _ => None,
     }
-}
-
-/// A well-definedness proof obligation extracted from a contract formula (ADR 0010).
-#[derive(Clone, Debug)]
-pub struct WdGoal {
-    pub path_hyps: Vec<Term>,
-    pub bound_ranges: Vec<(Term, Term)>,
-    pub condition: Term,
-    pub reason: String,
-}
-
-/// Collects all well-definedness obligations in `term` in pre-order (ADR 0010).
-pub fn collect_wd(term: &Term, node: &Node, callee: &dyn Fn(&Hash) -> Option<Node>) -> Vec<WdGoal> {
-    let mut out = Vec::new();
-    let mut hyps = Vec::new();
-    let mut ranges = Vec::new();
-    collect_wd_rec(term, node, callee, &mut hyps, &mut ranges, &mut out);
-    out
-}
-
-fn collect_wd_rec(
-    t: &Term,
-    node: &Node,
-    callee: &dyn Fn(&Hash) -> Option<Node>,
-    hyps: &mut Vec<Term>,
-    ranges: &mut Vec<(Term, Term)>,
-    out: &mut Vec<WdGoal>,
-) {
-    let bx = Box::new;
-    let zero_term = || Term::Const(find_or_synthetic_zero());
-    let _ = zero_term;
-    // Note: construct integer/comparison checks directly or via `WdCondition`; wait:
-    // synthetic constants cannot modify `node.consts`, so we store `WdGoal` using `WdCheck` or
-    // handle synthetic zero cleanly in `eval_wd_goal`! Even cleaner: use a dedicated `WdCond` enum!
-    let _ = (t, node, callee, hyps, ranges, out);
-}
-
-fn find_or_synthetic_zero() -> u32 {
-    0
 }
 
 /// Typed condition for ADR 0010 well-definedness checks (avoids mutating `node.consts`).
@@ -5198,9 +5159,10 @@ mod tests {
         assert_eq!(int_literal_width(1), 2);
         assert_eq!(int_literal_width(-1), 2);
         assert_eq!(int_literal_width(127), 8);
-        assert_eq!(int_literal_width(-128), 8);
+        // docs/05: bits(|v|) + 1, so -128 needs 9 bits and i64::MIN needs 65 (wider is sound).
+        assert_eq!(int_literal_width(-128), 9);
         assert_eq!(int_literal_width(128), 9);
-        assert_eq!(int_literal_width(i64::MIN.into()), 64);
+        assert_eq!(int_literal_width(i64::MIN.into()), 65);
         assert_eq!(int_literal_width(u64::MAX.into()), 65);
     }
 
