@@ -693,7 +693,7 @@ NODE @cs {{
                         for &hi in &bounds {
                             let o = run(&ecl, &cat(&[enc(x), enc(lo), enc(hi)]));
                             let ctx = format!("FCLAMP x={x:e} lo={lo:e} hi={hi:e}");
-                            if lo.is_nan() || hi.is_nan() || !(lo <= hi) {
+                            if lo.is_nan() || hi.is_nan() || lo > hi {
                                 assert_eq!(o.code, 4, "{ctx} must trap");
                                 assert!(o.stderr.contains("FCLAMP.bounds"), "{ctx}: {}", o.stderr);
                             } else {
@@ -855,7 +855,7 @@ NODE @f32_f64 { SIGNATURE: (x: f32) -> (f64); EFFECTS: []; CONTRACT { } BODY { %
         1e-46,
         -1e-46,
         1.000_000_059_604_644_8,
-        1.000_000_059_604_644_9,
+        1.000_000_059_604_645,
         3.402_823_567_797_336_6e38,
         f64::NAN,
         -0.0,
@@ -1282,7 +1282,7 @@ fn gen_value(ty: &Type, rng: &mut Rng, zero: bool, out: &mut Vec<u8>) -> bool {
         Type::Bool => out.push(if zero { 0 } else { (rng.next() & 1) as u8 }),
         Type::UInt(w) | Type::SInt(w) => {
             let mut v = if zero { 0 } else { rng.next() };
-            if rng.next() % 2 == 0 {
+            if rng.next().is_multiple_of(2) {
                 v %= 16;
             }
             let n = usize::from(*w / 8);

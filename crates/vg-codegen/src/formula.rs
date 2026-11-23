@@ -1209,7 +1209,7 @@ fn eval_builtin(
                     "expected Result",
                 ));
             };
-            let lty = llvm_type(&ty, m.target)?;
+            let lty = llvm_type(ty, m.target)?;
             if b == Builtin::IsOk {
                 let tp = f.reg();
                 f.emit(format!(

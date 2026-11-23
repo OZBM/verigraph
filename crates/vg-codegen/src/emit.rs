@@ -1225,7 +1225,7 @@ fn emit_int_arith(
 
     let b = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
     match op.opcode {
-        0x0010 | 0x0011 | 0x0012 => {
+        0x0010..=0x0012 => {
             let (base, intr_base, ob_name) = match op.opcode {
                 0x0010 => ("add", "add", "ADD.no_overflow"),
                 0x0011 => ("sub", "sub", "SUB.no_overflow"),
@@ -1348,7 +1348,7 @@ fn emit_int_arith(
             let q = f.reg();
             f.emit(format!("{q} = {instr} {lty} {}, {safe_b}", a.ssa));
             let edge_val = if !is_div {
-                format!("0")
+                "0".to_string()
             } else if op.mode == 1 {
                 format!("{min_v}")
             } else {
@@ -1502,7 +1502,7 @@ fn emit_float_op(
     let ob = |k: &str| format!("@{prefix}/%op{op_idx}/{k}");
     let a = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
     match op.opcode {
-        0x0040 | 0x0041 | 0x0042 | 0x0043 => {
+        0x0040..=0x0043 => {
             let b = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
             let instr = match op.opcode {
                 0x0040 => "fadd",
