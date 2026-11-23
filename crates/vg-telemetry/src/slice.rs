@@ -226,7 +226,7 @@ fn find_passing_inputs(
     callee: &dyn Fn(&Hash) -> Option<Node>,
 ) -> Option<Vec<Value>> {
     let ctx = SmtObligationContext::build(node, kind, callee, false);
-    if let Some(vals) = ctx.find_passing_inputs(node, kind, inputs_fail, callee, 1500) {
+    if let Some(vals) = ctx.find_passing_inputs(node, kind, inputs_fail, callee, 60_000) {
         return Some(vals);
     }
     seeded_passing_search(node, kind, inputs_fail, callee)

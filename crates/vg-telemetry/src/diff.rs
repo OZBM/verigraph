@@ -841,7 +841,12 @@ impl SmtObligationContext {
         }
 
         let z3_path = vg_smt::find_z3();
-        let mut z3 = Z3Session::new(&z3_path, timeout_ms);
+        // A wall-clock limit made the slice depend on the machine: CI's runner most likely ran out
+        // of time (1.5 s; the query takes 0.66 s here), and the seeded fallback gives exactly the
+        // 6-op slice CI reported for the soft knee. z3's resource limit stops at the same point
+        // everywhere; 20M units is about 4 s on an M-series Mac, and the suites' passing-input
+        // queries need at most 4.8M. The clock stays only as a guard against a hang.
+        let mut z3 = Z3Session::new(&z3_path, timeout_ms).with_rlimit(20_000_000);
         let input_syms: Vec<SymVal> = self.inputs.iter().map(|(_, s)| s.clone()).collect();
 
         // Try pinning all scalar inputs except one `m` to their counterexample values first.
