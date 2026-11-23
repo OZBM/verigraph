@@ -112,6 +112,11 @@ fn alpha_families_hash_identically() {
 #[test]
 fn distinct_families_hash_differently() {
     let fams = families("distinct");
+    assert!(
+        fams.len() >= 16,
+        "only {} distinct families; the gate needs 16 (G1 review B8)",
+        fams.len()
+    );
     let mut pairs = 0;
     for (name, files) in &fams {
         assert!(

@@ -38,9 +38,11 @@ $(tail -n 15 "$work/$name.log")
 summary() { [ -f "target/gate-g1/$1" ] && cat "target/gate-g1/$1" || echo "no evidence: target/gate-g1/$1 was not written"; }
 
 head=$(git rev-parse HEAD 2>/dev/null || echo "not a git repository")
-inputs="crates fuzz tests tools examples scripts Cargo.toml Cargo.lock Makefile rust-toolchain.toml"
+inputs="crates fuzz tests tools examples scripts Cargo.toml Cargo.lock Makefile rust-toolchain.toml .cargo"
+# --ignored: a file hidden by .gitignore or .git/info/exclude still changes what the tests read
+# (G1 review B7); only the fuzzers' own build and output folders are left out.
 # shellcheck disable=SC2086
-dirty=$(git status --porcelain -- $inputs 2>&1)
+dirty=$(git status --porcelain --ignored -- $inputs ':!fuzz/target' ':!fuzz/artifacts' ':!fuzz/corpus' ':!fuzz/coverage' 2>&1)
 tree=met
 if [ -n "$dirty" ]; then
   tree="not met"
@@ -50,13 +52,28 @@ if [ -n "$dirty" ]; then
 $dirty
 \`\`\`"
 fi
-for cfg in .cargo/config .cargo/config.toml; do
-  if [ -f "$cfg" ] && grep -Eq '^[[:space:]]*(clippy|fmt|test)[[:space:]]*=' "$cfg"; then
+# A cargo config can replace a command or wrap the test binaries (G1 review B6): refuse any alias,
+# runner, build or env setting in a config cargo would read, from this directory up to / and in
+# CARGO_HOME, and the environment variables that do the same.
+dir=$(pwd)
+cfgs="${CARGO_HOME:-$HOME/.cargo}/config ${CARGO_HOME:-$HOME/.cargo}/config.toml"
+while :; do
+  cfgs="$cfgs $dir/.cargo/config $dir/.cargo/config.toml"
+  [ "$dir" = / ] && break
+  dir=$(dirname "$dir")
+done
+for cfg in $cfgs; do
+  if [ -f "$cfg" ] && grep -Eq '^[[:space:]]*(\[(alias|build|env|target)|runner[[:space:]]*=|(clippy|fmt|test)[[:space:]]*=)' "$cfg"; then
     tree="not met"
     evidence="$evidence
-- \`$cfg\` defines a cargo alias for clippy, fmt or test, which could replace the real command."
+- \`$cfg\` sets a cargo alias, runner, build or env key, which could change what the gate runs."
   fi
 done
+if env | grep -Eq '^CARGO_(TARGET_[A-Z0-9_]+_RUNNER|BUILD_[A-Z_]+|ALIAS_[A-Z_]+)='; then
+  tree="not met"
+  evidence="$evidence
+- A CARGO_TARGET_*_RUNNER, CARGO_BUILD_* or CARGO_ALIAS_* variable is set, which could change what the gate runs."
+fi
 
 # The workspace is green: fmt, clippy, every test. The tests write the law evidence to target/gate-g1.
 green=met
@@ -73,7 +90,9 @@ for f in print.txt asm.txt golden.txt generated.txt unravel.txt; do [ -f "target
 c2=met
 families=$(sed -n 's/^\([0-9]*\) alpha families.*/\1/p' target/gate-g1/alpha.txt 2>/dev/null)
 [ "${families:-0}" -ge 50 ] || c2="not met"
-[ -f target/gate-g1/distinct.txt ] || c2="not met"
+# At least 16 distinct families must hash apart (G1 review B8).
+distinct=$(sed -n 's/^\([0-9]*\) distinct families.*/\1/p' target/gate-g1/distinct.txt 2>/dev/null)
+[ "${distinct:-0}" -ge 16 ] || c2="not met"
 [ "$green" = met ] || c2="not met"
 
 # Criterion 3: vg-core's parser agrees with tools/vgsym.lark on every file and lexical case.
