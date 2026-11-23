@@ -1,0 +1,35 @@
+module mesh_impl_add1;
+
+@MESH_QUERY @spec_add1 {
+  signature: (u32) -> (u32);
+  effects: [];
+  post: result == spec:spec_add1(arg0);
+  intent: "Increment unsigned 32-bit integer by one";
+}
+
+NODE @impl_add1 [intent: "Fast single-op u32 increment matching spec_add1"] {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 1000;
+    POST: result == spec:spec_add1(x);
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @impl_add1_alt [intent: "Alternative slower u32 increment matching spec_add1"] {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 1000;
+    POST: result == spec:spec_add1(x);
+  }
+  BODY {
+    %0 = ADD.checked(x, 2:u32);
+    %1 = SUB.checked(%0, 1:u32);
+    RETURN(%1);
+  }
+}
