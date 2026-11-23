@@ -1,0 +1,30 @@
+// expect: verify
+// run: @fold_max_u32 {"xs": [3, 99, 12, 45, 7, 88]} => [99]
+// run: @fold_max_u32 {"xs": [0, 0, 0, 0, 0, 0]} => [0]
+module fold_max_u32;
+
+NODE @max_step {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == max(acc, x) && result >= acc && result >= x;
+  }
+  BODY {
+    %0 = GT.u(x, acc);
+    %1 = SELECT(%0, x, acc);
+    RETURN(%1);
+  }
+}
+
+NODE @fold_max_u32 [intent: "Maximum of 6 u32 elements using FOLD_BOUNDED"] {
+  SIGNATURE: (xs: Array<u32, 6>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == fold:max_step(0:u32, xs, 6) && forall(i in 0..6) { result >= xs[i] };
+    INVARIANT @max_inv(k, acc): acc == fold:max_step(0:u32, xs, k) && forall(i in 0..k) { acc >= xs[i] };
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@max_step, xs, init=0:u32, invariant=@max_inv);
+    RETURN(%0);
+  }
+}

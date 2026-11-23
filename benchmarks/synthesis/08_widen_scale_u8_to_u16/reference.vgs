@@ -1,0 +1,20 @@
+// expect: verify
+// run: @widen_scale_u8_to_u16 {"x": 200, "scale": 3, "offset": 10} => [610]
+// run: @widen_scale_u8_to_u16 {"x": 255, "scale": 255, "offset": 255} => [65280]
+module widen_scale_u8_to_u16;
+
+NODE @widen_scale_u8_to_u16 [intent: "Widen u8 inputs to u16 and compute x * scale + offset"] {
+  SIGNATURE: (x: u8, scale: u8, offset: u8) -> (u16);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == x * scale + offset && result >= offset;
+  }
+  BODY {
+    %0 = CAST.u16(x);
+    %1 = CAST.u16(scale);
+    %2 = CAST.u16(offset);
+    %3 = MUL.checked(%0, %1);
+    %4 = ADD.checked(%3, %2);
+    RETURN(%4);
+  }
+}

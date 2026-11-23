@@ -1,0 +1,12 @@
+// Grader reference contract for @map_scale_slice.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module map_scale_slice_contract;
+
+@MESH_QUERY @map_scale_slice {
+  signature: (Slice<u16>) -> (Slice<u16>);
+  effects: [ARENA];
+  pre: forall(i in 0..len(arg0)) { arg0[i] <= 32767 };
+  post: len(result) == len(arg0) && forall(i in 0..len(arg0)) { result[i] == 2 * arg0[i] };
+  intent: "Arena-allocating SIMD_MAP doubling Slice<u16>";
+}

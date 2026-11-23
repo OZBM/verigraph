@@ -1,0 +1,1 @@
+Add a broadcast constant delta to every element of an 8-element array of 32-bit unsigned integers using SIMD_MAP. Assume every element plus delta stays within 32-bit unsigned bounds so checked addition in the kernel succeeds. Guarantee every output element equals xs[i] + delta.

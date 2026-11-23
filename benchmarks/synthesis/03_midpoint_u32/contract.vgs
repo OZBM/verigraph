@@ -1,0 +1,11 @@
+// Grader reference contract for @midpoint_u32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module midpoint_u32_contract;
+
+@MESH_QUERY @midpoint_u32 {
+  signature: (u32, u32) -> (u32);
+  effects: [];
+  post: result == (arg0 + arg1) / 2 && result >= min(arg0, arg1) && result <= max(arg0, arg1);
+  intent: "Overflow-free u32 midpoint (AND, XOR, SHR.checked, ADD.checked)";
+}

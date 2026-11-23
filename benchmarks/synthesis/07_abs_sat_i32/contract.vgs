@@ -1,0 +1,11 @@
+// Grader reference contract for @abs_sat_i32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module abs_sat_i32_contract;
+
+@MESH_QUERY @abs_sat_i32 {
+  signature: (i32) -> (i32);
+  effects: [];
+  post: result >= 0 && (arg0 >= 0 ==> result == arg0) && (arg0 < 0 && arg0 > -2147483648 ==> result == -arg0) && (arg0 == -2147483648 ==> result == 2147483647);
+  intent: "Saturating i32 absolute value (NEG.sat, LT.s, SELECT)";
+}

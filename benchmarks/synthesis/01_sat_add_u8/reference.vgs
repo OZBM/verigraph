@@ -1,0 +1,16 @@
+// expect: verify
+// run: @sat_add_u8 {"a": 100, "b": 50} => [150]
+// run: @sat_add_u8 {"a": 200, "b": 100} => [255]
+module sat_add_u8;
+
+NODE @sat_add_u8 [intent: "Add two unsigned bytes, saturating at 255"] {
+  SIGNATURE: (a: u8, b: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= a && result >= b && (a + b <= 255 ==> result == a + b) && (a + b > 255 ==> result == 255);
+  }
+  BODY {
+    %0 = ADD.sat(a, b);
+    RETURN(%0);
+  }
+}

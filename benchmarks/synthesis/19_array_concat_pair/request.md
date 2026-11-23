@@ -1,0 +1,1 @@
+Concatenate two 4-element arrays of 16-bit unsigned integers a and b into an 8-element array. Because both inputs have static length 4, the result is a fixed-size array requiring no arena allocation. Guarantee elements 0..4 match a and elements 4..8 match b.

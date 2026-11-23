@@ -1,0 +1,12 @@
+// Grader reference contract for @abs_diff_f64.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module abs_diff_f64_contract;
+
+@MESH_QUERY @abs_diff_f64 {
+  signature: (f64, f64) -> (f64);
+  effects: [];
+  pre: is_finite(arg0) && is_finite(arg1) && abs(arg0) <= 1e100 && abs(arg1) <= 1e100;
+  post: is_finite(result) && result >= 0.0 && (arg0 == arg1 ==> result == 0.0);
+  intent: "Double-precision finite absolute difference (FSUB, FABS, FMIN, FMAX)";
+}

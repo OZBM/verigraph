@@ -1,0 +1,19 @@
+// expect: verify
+// run: @clamp_finite_f32 {"x": "nan", "lo": "-1.0", "hi": "1.0"} => ["-1.0"]
+// run: @clamp_finite_f32 {"x": "inf", "lo": "-1.0", "hi": "1.0"} => ["1.0"]
+module clamp_finite_f32;
+
+NODE @clamp_finite_f32 [intent: "Clamp any f32 (NaN mapped to lo) into finite [lo, hi]"] {
+  SIGNATURE: (x: f32, lo: f32, hi: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(lo) && is_finite(hi) && lo <= hi;
+    POST: is_finite(result) && result >= lo && result <= hi && (is_nan(x) ==> result == lo) && (!is_nan(x) && x < lo ==> result == lo) && (!is_nan(x) && x > hi ==> result == hi) && (!is_nan(x) && x >= lo && x <= hi ==> result == x);
+  }
+  BODY {
+    %0 = EQ(x, x);
+    %1 = SELECT(%0, x, lo);
+    %2 = FCLAMP(%1, lo, hi);
+    RETURN(%2);
+  }
+}

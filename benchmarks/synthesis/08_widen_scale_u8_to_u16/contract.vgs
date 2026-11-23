@@ -1,0 +1,11 @@
+// Grader reference contract for @widen_scale_u8_to_u16.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module widen_scale_u8_to_u16_contract;
+
+@MESH_QUERY @widen_scale_u8_to_u16 {
+  signature: (u8, u8, u8) -> (u16);
+  effects: [];
+  post: result == arg0 * arg1 + arg2 && result >= arg2;
+  intent: "Widening CAST.u16 with checked multiply-add";
+}

@@ -1,0 +1,1 @@
+Double every 16-bit unsigned integer in a slice using SIMD_MAP, assuming each element is at most 32767 so doubling never overflows. Because mapping over a dynamic slice allocates a new slice, declare the ARENA effect. Guarantee the returned slice has the same length as xs and each element equals 2 * xs[i].

@@ -1,0 +1,24 @@
+// Grader reference contract for @fold_max_u32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module fold_max_u32_contract;
+
+NODE @max_step {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == max(acc, x) && result >= acc && result >= x;
+  }
+  BODY {
+    %0 = GT.u(x, acc);
+    %1 = SELECT(%0, x, acc);
+    RETURN(%1);
+  }
+}
+
+@MESH_QUERY @fold_max_u32 {
+  signature: (Array<u32, 6>) -> (u32);
+  effects: [];
+  post: result == fold:max_step(0:u32, arg0, 6) && forall(i in 0..6) { result >= arg0[i] };
+  intent: "FOLD_BOUNDED maximum element over Array<u32, 6> with INVARIANT";
+}

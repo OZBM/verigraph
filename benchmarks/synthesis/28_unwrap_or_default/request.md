@@ -1,0 +1,1 @@
+Unwrap a Result<u32, u32>, returning its Ok payload when it succeeded or a caller-provided default value when it is Err. Because GET_OK has a proof obligation that its argument is Ok, place it in a guarded branch dispatched via ASSERT_GUARD.branch. Pin both Ok and Err branches in the postcondition.

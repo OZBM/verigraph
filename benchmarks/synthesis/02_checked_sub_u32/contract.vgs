@@ -1,0 +1,12 @@
+// Grader reference contract for @checked_sub_u32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module checked_sub_u32_contract;
+
+@MESH_QUERY @checked_sub_u32 {
+  signature: (u32, u32) -> (u32);
+  effects: [];
+  pre: arg0 >= arg1;
+  post: result + arg1 == arg0 && result <= arg0;
+  intent: "Checked u32 subtraction with precondition (SUB.checked)";
+}

@@ -1,0 +1,17 @@
+// expect: verify
+// run: @checked_sub_u32 {"a": 100, "b": 35} => [65]
+// run: @checked_sub_u32 {"a": 4294967295, "b": 4294967295} => [0]
+module checked_sub_u32;
+
+NODE @checked_sub_u32 [intent: "Checked subtraction of two u32 values with a >= b"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a >= b;
+    POST: result + b == a && result <= a;
+  }
+  BODY {
+    %0 = SUB.checked(a, b);
+    RETURN(%0);
+  }
+}

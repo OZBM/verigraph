@@ -1,0 +1,1 @@
+Linearly interpolate between two finite single-precision floats a and b with parameter t in [0, 1]. Assume a and b have magnitudes at most 1e10 so intermediate differences do not overflow. Ensure the result is always finite, lies between min(a, b) and max(a, b), and equals a when t is 0 and b when t is 1.

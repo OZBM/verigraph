@@ -1,0 +1,1 @@
+Add two 16-bit unsigned integers with explicit modulo 65536 wrap-around semantics. The result must always equal the mathematical sum modulo 65536, and equal the exact sum when no overflow occurs. Keep the function pure and defined for all inputs.

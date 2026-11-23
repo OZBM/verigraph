@@ -1,0 +1,20 @@
+// expect: verify
+// run: @sanitize_f32 {"x": "nan", "fallback": "0.0"} => ["0.0"]
+// run: @sanitize_f32 {"x": "-0.0", "fallback": "1.0"} => ["-0.0"]
+module sanitize_f32;
+
+NODE @sanitize_f32 [intent: "Replace NaN or infinity with a finite fallback, preserving -0.0"] {
+  SIGNATURE: (x: f32, fallback: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(fallback);
+    POST: is_finite(result) && (is_finite(x) ==> same(result, x)) && (!is_finite(x) ==> same(result, fallback));
+  }
+  BODY {
+    %0 = FABS(x);
+    %1 = FSUB(%0, %0);
+    %2 = EQ(%1, 0.0:f32);
+    %3 = SELECT(%2, x, fallback);
+    RETURN(%3);
+  }
+}

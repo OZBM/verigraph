@@ -1,0 +1,31 @@
+// expect: verify
+// run: @fold_sum_bounded {"xs": [1, 2, 3, 4, 5, 6, 7, 8]} => [36]
+// run: @fold_sum_bounded {"xs": [100000, 100000, 100000, 100000, 100000, 100000, 100000, 100000]} => [800000]
+module fold_sum_bounded;
+
+NODE @sum_step {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc <= 700000 && x <= 100000;
+    POST: result == acc + x;
+  }
+  BODY {
+    %0 = ADD.checked(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @fold_sum_bounded [intent: "Sum 8 u32 values <= 100000 using FOLD_BOUNDED"] {
+  SIGNATURE: (xs: Array<u32, 8>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..8) { xs[i] <= 100000 };
+    POST: result == fold:sum_step(0:u32, xs, 8) && result <= 800000;
+    INVARIANT @sum_inv(k, acc): acc == fold:sum_step(0:u32, xs, k) && acc <= 100000 * k;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@sum_step, xs, init=0:u32, invariant=@sum_inv);
+    RETURN(%0);
+  }
+}

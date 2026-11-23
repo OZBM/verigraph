@@ -1,0 +1,41 @@
+// expect: verify
+// run: @unwrap_or_default {"r": {"ok": 42}, "default": 7} => [42]
+// run: @unwrap_or_default {"r": {"err": 99}, "default": 7} => [7]
+module unwrap_or_default;
+
+NODE @take_ok {
+  SIGNATURE: (r: Result<u32, u32>, default: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_ok(r);
+    POST: result == ok(r);
+  }
+  BODY {
+    %0 = GET_OK(r);
+    RETURN(%0);
+  }
+}
+
+NODE @take_default {
+  SIGNATURE: (r: Result<u32, u32>, default: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == default;
+  }
+  BODY {
+    RETURN(default);
+  }
+}
+
+NODE @unwrap_or_default [intent: "Extract Ok value from Result<u32, u32> or return default"] {
+  SIGNATURE: (r: Result<u32, u32>, default: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: (is_ok(r) ==> result == ok(r)) && (!is_ok(r) ==> result == default);
+  }
+  BODY {
+    %0 = IS_OK(r);
+    %1 = ASSERT_GUARD.branch(%0, @take_ok, r, default, else=@take_default);
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,20 @@
+// expect: verify
+// run: @abs_diff_f64 {"a": "1.5", "b": "4.0"} => ["2.5"]
+// run: @abs_diff_f64 {"a": "-3.0", "b": "-3.0"} => ["0.0"]
+module abs_diff_f64;
+
+NODE @abs_diff_f64 [intent: "Non-negative finite absolute difference of two bounded f64 values"] {
+  SIGNATURE: (a: f64, b: f64) -> (f64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(a) && is_finite(b) && abs(a) <= 1e100 && abs(b) <= 1e100;
+    POST: is_finite(result) && result >= 0.0 && (a == b ==> result == 0.0);
+  }
+  BODY {
+    %0 = FMAX(a, b);
+    %1 = FMIN(a, b);
+    %2 = FSUB(%0, %1);
+    %3 = FABS(%2);
+    RETURN(%3);
+  }
+}

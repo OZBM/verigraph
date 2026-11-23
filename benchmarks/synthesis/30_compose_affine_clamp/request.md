@@ -1,0 +1,1 @@
+Compose two pure nodes via CALL_HASH: first compute a * x + b over 32-bit unsigned integers using checked arithmetic (requiring a * x + b <= 4294967295), then clamp the result into [lo, hi] where lo <= hi. Guarantee the output stays inside [lo, hi] and matches the clamped exact value of a * x + b.

@@ -1,0 +1,12 @@
+// Grader reference contract for @array_swap_u32.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module array_swap_u32_contract;
+
+@MESH_QUERY @array_swap_u32 {
+  signature: (Array<u32, 4>, u64, u64) -> (Array<u32, 4>);
+  effects: [];
+  pre: arg1 < 4 && arg2 < 4;
+  post: result[arg1] == arg0[arg2] && result[arg2] == arg0[arg1] && forall(k in 0..4) { (k != arg1 && k != arg2) ==> result[k] == arg0[k] };
+  intent: "Array element swap preserving all other indices (INDEX, UPDATE)";
+}

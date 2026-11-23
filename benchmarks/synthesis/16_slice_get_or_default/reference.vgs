@@ -1,0 +1,42 @@
+// expect: verify
+// run: @slice_get_or_default {"xs": [5, 10, 15], "i": "1", "fallback": 99} => [10]
+// run: @slice_get_or_default {"xs": [], "i": "0", "fallback": 99} => [99]
+module slice_get_or_default;
+
+NODE @get_at {
+  SIGNATURE: (xs: Slice<u32>, i: u64, fallback: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < len(xs);
+    POST: result == xs[i];
+  }
+  BODY {
+    %0 = INDEX(xs, i);
+    RETURN(%0);
+  }
+}
+
+NODE @use_fallback {
+  SIGNATURE: (xs: Slice<u32>, i: u64, fallback: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == fallback;
+  }
+  BODY {
+    RETURN(fallback);
+  }
+}
+
+NODE @slice_get_or_default [intent: "Return xs[i] if in bounds, else fallback"] {
+  SIGNATURE: (xs: Slice<u32>, i: u64, fallback: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: (i < len(xs) ==> result == xs[i]) && (i >= len(xs) ==> result == fallback);
+  }
+  BODY {
+    %0 = LEN(xs);
+    %1 = LT.u(i, %0);
+    %2 = ASSERT_GUARD.branch(%1, @get_at, xs, i, fallback, else=@use_fallback);
+    RETURN(%2);
+  }
+}

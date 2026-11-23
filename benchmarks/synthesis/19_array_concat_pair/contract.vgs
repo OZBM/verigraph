@@ -1,0 +1,11 @@
+// Grader reference contract for @array_concat_pair.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module array_concat_pair_contract;
+
+@MESH_QUERY @array_concat_pair {
+  signature: (Array<u16, 4>, Array<u16, 4>) -> (Array<u16, 8>);
+  effects: [];
+  post: forall(i in 0..4) { result[i] == arg0[i] } && forall(j in 0..4) { result[j + 4] == arg1[j] };
+  intent: "Fixed-size Array CONCAT preserving elements";
+}

@@ -1,0 +1,1 @@
+Given a single-precision float x and a finite fallback value, return x unchanged (including -0.0 bit identity) whenever x is finite. If x is NaN or positive or negative infinity, return the fallback value instead. Guarantee the output is always finite.

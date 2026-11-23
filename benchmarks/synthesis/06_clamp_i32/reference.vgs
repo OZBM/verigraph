@@ -1,0 +1,20 @@
+// expect: verify
+// run: @clamp_i32 {"x": -10, "lo": 0, "hi": 100} => [0]
+// run: @clamp_i32 {"x": 42, "lo": 0, "hi": 100} => [42]
+module clamp_i32;
+
+NODE @clamp_i32 [intent: "Clamp signed i32 x into [lo, hi]"] {
+  SIGNATURE: (x: i32, lo: i32, hi: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lo <= hi;
+    POST: result >= lo && result <= hi && (x < lo ==> result == lo) && (x > hi ==> result == hi) && (x >= lo && x <= hi ==> result == x);
+  }
+  BODY {
+    %0 = LT.s(x, lo);
+    %1 = SELECT(%0, lo, x);
+    %2 = GT.s(%1, hi);
+    %3 = SELECT(%2, hi, %1);
+    RETURN(%3);
+  }
+}

@@ -1,0 +1,1 @@
+Read an element from a fixed 8-element array of 32-bit unsigned integers at index i. If i is greater than or equal to 8, clamp the index to 7 so the lookup never goes out of bounds. Guarantee the output matches xs[i] when i < 8 and xs[7] otherwise.

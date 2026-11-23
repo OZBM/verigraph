@@ -1,0 +1,1 @@
+Swap the elements at indices i and j in a 4-element array of 32-bit unsigned integers, assuming both indices are below 4. The returned array must place the original element j at position i, the original element i at position j, and keep every other position unchanged (including when i == j).

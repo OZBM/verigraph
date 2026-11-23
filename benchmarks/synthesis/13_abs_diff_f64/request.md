@@ -1,0 +1,1 @@
+Compute the absolute difference between two double-precision floating-point values a and b whose magnitudes are at most 1e100. Subtract the smaller from the larger so the result is never negative or NaN, and return 0.0 when both inputs are equal. Guarantee the output is finite and non-negative.

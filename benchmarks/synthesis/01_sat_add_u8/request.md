@@ -1,0 +1,1 @@
+Add two 8-bit unsigned integers using saturating arithmetic so the sum never wraps around. If the mathematical sum exceeds 255, clamp the result to 255; otherwise return the exact sum. The function must be pure and total over all 8-bit unsigned inputs.

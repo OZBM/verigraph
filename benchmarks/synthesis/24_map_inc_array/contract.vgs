@@ -1,0 +1,12 @@
+// Grader reference contract for @map_inc_array.
+// The grader proves the candidate refines it through a wrapper CALL_HASH:
+// PRE_ref => PRE_cand and PRE_ref /\ POST_cand => POST_ref.
+module map_inc_array_contract;
+
+@MESH_QUERY @map_inc_array {
+  signature: (Array<u32, 8>, u32) -> (Array<u32, 8>);
+  effects: [];
+  pre: forall(i in 0..8) { arg0[i] + arg1 <= 4294967295 };
+  post: forall(i in 0..8) { result[i] == arg0[i] + arg1 };
+  intent: "SIMD_MAP over Array<u32, 8> with broadcast argument";
+}

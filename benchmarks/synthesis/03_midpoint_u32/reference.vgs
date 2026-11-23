@@ -1,0 +1,19 @@
+// expect: verify
+// run: @midpoint_u32 {"a": 10, "b": 20} => [15]
+// run: @midpoint_u32 {"a": 4294967295, "b": 4294967293} => [4294967294]
+module midpoint_u32;
+
+NODE @midpoint_u32 [intent: "Floor of the mean of two u32 values without overflow"] {
+  SIGNATURE: (a: u32, b: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == (a + b) / 2 && result >= min(a, b) && result <= max(a, b);
+  }
+  BODY {
+    %0 = AND(a, b);
+    %1 = XOR(a, b);
+    %2 = SHR.checked(%1, 1:u32);
+    %3 = ADD.checked(%0, %2);
+    RETURN(%3);
+  }
+}

@@ -1,0 +1,16 @@
+// expect: verify
+// run: @wrap_add_u16 {"a": 65535, "b": 1} => [0]
+// run: @wrap_add_u16 {"a": 50000, "b": 20000} => [4464]
+module wrap_add_u16;
+
+NODE @wrap_add_u16 [intent: "Modular addition of two u16 values modulo 65536"] {
+  SIGNATURE: (a: u16, b: u16) -> (u16);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == (a + b) % 65536 && (a + b < 65536 ==> result == a + b);
+  }
+  BODY {
+    %0 = ADD.wrap(a, b);
+    RETURN(%0);
+  }
+}
