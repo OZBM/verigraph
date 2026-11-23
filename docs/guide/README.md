@@ -25,6 +25,8 @@ This guide covers version 0 of the toolchain, the first usable one. The chapters
 8. [Diagnostics](diagnostics.md): every code `vg` reports, what it means and how to fix it.
 9. [Troubleshooting and limits](troubleshooting.md): common problems, and what version 0 does not do
    yet.
+10. [Example: a verified fractal renderer](examples.md): a Mandelbrot renderer whose loop bound,
+    palette reads, colour conversions and opaque pixels are all proven, built for three targets.
 
 The [quick start](../quickstart.md) is a one-page summary of chapters 2 and 5.
 

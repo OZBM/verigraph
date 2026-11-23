@@ -20,8 +20,8 @@ const USAGE: &str = "usage:
   vg disasm (HASH | FILE.vgir) [--root DIR]     print VG-Sym for a node and everything it calls
   vg hash FILE...                               print node, body and contract hashes (.vgs or .vgir)
   vg check FILE.vgs                             parse, canonicalize, type- and effect-check (JSON)
-  vg verify FILE.vgs [--timeout MS] [--detail 0|1|2]
-                                                prove every obligation with z3 (JSON)
+  vg verify FILE.vgs [--mode edit|ci|release] [--timeout MS] [--detail 0|1|2]
+                                                prove every obligation; release needs two solvers (JSON)
   vg explain FILE.vgs OBLIGATION [--timeout MS] the failure report of one obligation, and its prose
   vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
   vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
