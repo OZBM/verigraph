@@ -1,0 +1,12 @@
+// expect: VG-T0104
+module t0104_add_on_f32;
+
+NODE @bad {
+  SIGNATURE: (a: f32, b: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(a, b);
+    RETURN(%0);
+  }
+}

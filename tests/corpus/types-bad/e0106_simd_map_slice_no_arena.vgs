@@ -1,0 +1,22 @@
+// expect: VG-E0106
+module e0106_simd_map_slice_no_arena;
+
+NODE @k {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (xs: Slice<u32>) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SIMD_MAP(@k, xs);
+    RETURN(%0);
+  }
+}

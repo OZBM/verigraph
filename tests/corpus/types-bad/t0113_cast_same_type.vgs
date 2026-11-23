@@ -1,0 +1,12 @@
+// expect: VG-T0113
+module t0113_cast_same_type;
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CAST.u32(x);
+    RETURN(%0);
+  }
+}

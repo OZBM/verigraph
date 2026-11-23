@@ -1,0 +1,21 @@
+// expect: VG-T0107
+module t0107_kernel_multi_result;
+
+NODE @k {
+  SIGNATURE: (x: u32) -> (u32, u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(x, x);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (xs: Array<u32, 4>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SIMD_MAP(@k, xs);
+    RETURN(%0);
+  }
+}

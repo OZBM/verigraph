@@ -1,0 +1,21 @@
+// expect: VG-T0106
+module t0106_generate_idx_type;
+
+NODE @k {
+  SIGNATURE: (idx: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(idx);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: () -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = GENERATE(@k, 4:u64);
+    RETURN(%0);
+  }
+}

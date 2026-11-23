@@ -1,0 +1,12 @@
+// expect: VG-T0101
+module t0101_and_bool;
+
+NODE @bad {
+  SIGNATURE: (a: Bool, b: Bool) -> (Bool);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = AND(a, b);
+    RETURN(%0);
+  }
+}

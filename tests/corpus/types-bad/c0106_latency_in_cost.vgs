@@ -1,0 +1,13 @@
+// expect: VG-C0106
+module c0106_latency_in_cost;
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    COST: latency_p99_us <= 10;
+  }
+  BODY {
+    RETURN(x);
+  }
+}

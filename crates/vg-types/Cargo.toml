@@ -8,3 +8,6 @@ publish.workspace = true
 
 [dependencies]
 vg-core = { path = "../vg-core" }
+
+[dev-dependencies]
+vg-core = { path = "../vg-core", features = ["gen"] }

@@ -1,0 +1,12 @@
+// expect: VG-T0119
+module t0119_handle_in_tuple;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, Tuple<Clock, u32>);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0 = TUPLE(c, 1:u32);
+    RETURN(e, %0);
+  }
+}

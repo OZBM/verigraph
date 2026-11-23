@@ -1,0 +1,23 @@
+// expect: VG-T0120
+module t0120_return_slice_via_call;
+
+NODE @view_head {
+  SIGNATURE: (a: Array<u32, 4>) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SLICE(a, 0:u64, 2:u64);
+    RETURN(%0);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (xs: Array<u32, 4>) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = UPDATE(xs, 0:u64, 42:u32);
+    %1 = CALL_HASH(@view_head, %0);
+    RETURN(%1);
+  }
+}

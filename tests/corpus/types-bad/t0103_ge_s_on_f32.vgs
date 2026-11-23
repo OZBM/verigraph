@@ -1,0 +1,12 @@
+// expect: VG-T0103
+module t0103_ge_s_on_f32;
+
+NODE @bad {
+  SIGNATURE: (a: f32, b: f32) -> (Bool);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = GE.s(a, b);
+    RETURN(%0);
+  }
+}

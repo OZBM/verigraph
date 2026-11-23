@@ -1,0 +1,13 @@
+// expect: VG-T0119
+module t0119_handle_in_select;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, cond: Bool, c1: Clock, c2: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0 = SELECT(cond, c1, c2);
+    %1, %2 = CLOCK_READ(e, %0);
+    RETURN(%1, %2);
+  }
+}

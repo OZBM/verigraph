@@ -1,0 +1,30 @@
+// expect: VG-T0111
+module t0111_guard_cond_i32;
+
+NODE @b1 {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(x);
+  }
+}
+
+NODE @b2 {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(x);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (c: i32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ASSERT_GUARD(c, @b1, x, else=@b2);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,12 @@
+// expect: VG-T0114
+module t0114_as_bytes_tuple;
+
+NODE @bad {
+  SIGNATURE: (t: Tuple<u32, u32>) -> (Slice<u8>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = AS_BYTES(t);
+    RETURN(%0);
+  }
+}

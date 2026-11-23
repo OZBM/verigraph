@@ -1,0 +1,13 @@
+// expect: VG-T0120
+module t0120_return_slice_of_local_array;
+
+NODE @bad {
+  SIGNATURE: (xs: Array<u32, 4>) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = UPDATE(xs, 0:u64, 99:u32);
+    %1 = SLICE(%0, 0:u64, 2:u64);
+    RETURN(%1);
+  }
+}

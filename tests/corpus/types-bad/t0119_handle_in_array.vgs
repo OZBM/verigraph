@@ -1,0 +1,11 @@
+// expect: VG-T0119
+module t0119_handle_in_array;
+
+NODE @bad {
+  SIGNATURE: (xs: Array<FileIn, 2>) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(0:u8);
+  }
+}

@@ -1,0 +1,12 @@
+// expect: VG-E0106
+module e0106_concat_slice_no_arena;
+
+NODE @bad {
+  SIGNATURE: (a: Slice<u32>, b: Slice<u32>) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CONCAT(a, b);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,12 @@
+// expect: VG-T0104
+module t0104_fadd_on_i32;
+
+NODE @bad {
+  SIGNATURE: (a: i32, b: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FADD(a, b);
+    RETURN(%0);
+  }
+}

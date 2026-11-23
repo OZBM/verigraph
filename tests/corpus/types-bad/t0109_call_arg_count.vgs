@@ -1,0 +1,22 @@
+// expect: VG-T0109
+module t0109_call_arg_count;
+
+NODE @callee {
+  SIGNATURE: (x: u32, y: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, y);
+    RETURN(%0);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CALL_HASH(@callee, x);
+    RETURN(%0);
+  }
+}

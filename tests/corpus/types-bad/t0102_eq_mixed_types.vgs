@@ -1,0 +1,12 @@
+// expect: VG-T0102
+module t0102_eq_mixed_types;
+
+NODE @bad {
+  SIGNATURE: (a: u32, b: i32) -> (Bool);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = EQ(a, b);
+    RETURN(%0);
+  }
+}

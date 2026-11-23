@@ -1,0 +1,12 @@
+// expect: VG-T0115
+module t0115_ok_no_annotation;
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (Result<u32, u8>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = OK(x);
+    RETURN(%0);
+  }
+}

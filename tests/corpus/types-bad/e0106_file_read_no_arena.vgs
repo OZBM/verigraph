@@ -1,0 +1,12 @@
+// expect: VG-E0106
+module e0106_file_read_no_arena;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, fin: FileIn) -> (Eff, Result<Slice<u8>, u32>);
+  EFFECTS: [FILE_READ];
+  CONTRACT { }
+  BODY {
+    %0, %1 = FILE_READ(e, fin, 64:u64);
+    RETURN(%0, %1);
+  }
+}

@@ -1,0 +1,12 @@
+// expect: VG-T0112
+module t0112_slice_bound_u32;
+
+NODE @bad {
+  SIGNATURE: (xs: Slice<u32>, lo: u32, hi: u64) -> (Slice<u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SLICE(xs, lo, hi);
+    RETURN(%0);
+  }
+}

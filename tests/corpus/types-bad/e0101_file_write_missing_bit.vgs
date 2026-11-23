@@ -1,0 +1,12 @@
+// expect: VG-E0101
+module e0101_file_write_missing_bit;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, fout: FileOut, msg: Slice<u8>) -> (Eff, Result<u64, u32>);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0, %1 = FILE_WRITE(e, fout, msg);
+    RETURN(%0, %1);
+  }
+}

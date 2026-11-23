@@ -1,0 +1,12 @@
+// expect: VG-T0116
+module t0116_nested_refinement;
+
+NODE @bad {
+  SIGNATURE: (xs: Array<{v: u8 | v < 10}, 4>) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = INDEX(xs, 0:u64);
+    RETURN(%0);
+  }
+}

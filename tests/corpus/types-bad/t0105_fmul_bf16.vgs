@@ -1,0 +1,12 @@
+// expect: VG-T0105
+module t0105_fmul_bf16;
+
+NODE @bad {
+  SIGNATURE: (a: bf16, b: bf16) -> (bf16);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = FMUL(a, b);
+    RETURN(%0);
+  }
+}

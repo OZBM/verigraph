@@ -1,0 +1,14 @@
+// expect: VG-T0120
+module t0120_return_slice_in_result;
+
+NODE @bad {
+  SIGNATURE: (x: u32) -> (Result<Slice<u8>, u32>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    %1 = AS_BYTES(%0);
+    %2: Result<Slice<u8>, u32> = OK(%1);
+    RETURN(%2);
+  }
+}

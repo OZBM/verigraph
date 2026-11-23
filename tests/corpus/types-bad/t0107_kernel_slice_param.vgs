@@ -1,0 +1,22 @@
+// expect: VG-T0107
+module t0107_kernel_slice_param;
+
+NODE @k {
+  SIGNATURE: (xs: Slice<u8>) -> (u64);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = LEN(xs);
+    RETURN(%0);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (arr: Array<Slice<u8>, 2>) -> (Array<u64, 2>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = SIMD_MAP(@k, arr);
+    RETURN(%0);
+  }
+}

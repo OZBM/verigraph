@@ -1,0 +1,12 @@
+// expect: VG-E0103
+module e0103_missing_eff_result;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, x: u64) -> (Tuple<Eff, u64>);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0 = TUPLE(e, x);
+    RETURN(%0);
+  }
+}

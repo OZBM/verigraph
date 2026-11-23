@@ -1,0 +1,12 @@
+// expect: VG-T0101
+module t0101_file_write_non_bytes;
+
+NODE @bad {
+  SIGNATURE: (e: Eff, fout: FileOut, xs: Slice<u32>) -> (Eff, Result<u64, u32>);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT { }
+  BODY {
+    %0, %1 = FILE_WRITE(e, fout, xs);
+    RETURN(%0, %1);
+  }
+}

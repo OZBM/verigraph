@@ -1,0 +1,12 @@
+// expect: VG-T0102
+module t0102_concat_elem_mismatch;
+
+NODE @bad {
+  SIGNATURE: (a: Array<u32, 2>, b: Array<u8, 2>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CONCAT(a, b);
+    RETURN(%0);
+  }
+}

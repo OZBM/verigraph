@@ -1,0 +1,12 @@
+// expect: VG-T0103
+module t0103_lt_f_on_i32;
+
+NODE @bad {
+  SIGNATURE: (a: i32, b: i32) -> (Bool);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = LT.f(a, b);
+    RETURN(%0);
+  }
+}

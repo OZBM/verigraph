@@ -1,0 +1,12 @@
+// expect: VG-T0112
+module t0112_rotl_amount_u8;
+
+NODE @bad {
+  SIGNATURE: (x: u32, s: u8) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = ROTL(x, s);
+    RETURN(%0);
+  }
+}

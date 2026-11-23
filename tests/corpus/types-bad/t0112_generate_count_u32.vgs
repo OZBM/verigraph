@@ -1,0 +1,22 @@
+// expect: VG-T0112
+module t0112_generate_count_u32;
+
+NODE @k {
+  SIGNATURE: (idx: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CAST.u32(idx);
+    RETURN(%0);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (n: u32) -> (Slice<u32>);
+  EFFECTS: [ARENA];
+  CONTRACT { }
+  BODY {
+    %0 = GENERATE(@k, n);
+    RETURN(%0);
+  }
+}

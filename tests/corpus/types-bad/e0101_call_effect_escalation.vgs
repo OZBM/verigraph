@@ -1,0 +1,22 @@
+// expect: VG-E0101
+module e0101_call_effect_escalation;
+
+NODE @tick {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [CLOCK];
+  CONTRACT { }
+  BODY {
+    %0, %1 = CLOCK_READ(e, c);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @bad {
+  SIGNATURE: (e: Eff, c: Clock) -> (Eff, u64);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT { }
+  BODY {
+    %0, %1 = CALL_HASH(@tick, e, c);
+    RETURN(%0, %1);
+  }
+}
