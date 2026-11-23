@@ -133,6 +133,8 @@ pub fn validate(n: &Node) -> R<()> {
     for o in &n.outputs {
         value(o, n.ops.len())?;
     }
+    check_widths(n)?;
+    check_eff_linear(n)?;
     for l in &n.learnable {
         let fits = |c: u32| n.consts.get(c as usize).is_some_and(|c| c.ty == l.ty);
         if !l.ty.is_float()
@@ -159,6 +161,90 @@ pub fn validate(n: &Node) -> R<()> {
                 return Err(s0203("formula nested too deep"));
             }
             check_term(n, t, binders, binders == 2)?;
+        }
+    }
+    Ok(())
+}
+
+/// The widths the format writes in one byte or one u16 (docs/02, static limits): a Tuple has at
+/// most 255 members, a Tensor at most 254 dimensions, an op or a node at most 255 results, a formula
+/// term at most 65,535 arguments and a clause at most 65,535 conjuncts. Wider values would be
+/// truncated, and two different nodes would share bytes and hashes (G1 review B1-B3).
+fn check_widths(n: &Node) -> R<()> {
+    fn type_ok(t: &Type) -> bool {
+        match t {
+            Type::Tuple(ms) => ms.len() <= 255 && ms.iter().all(type_ok),
+            Type::Tensor(e, dims) => dims.len() <= 254 && type_ok(e),
+            Type::Array(e, _) | Type::Slice(e) => type_ok(e),
+            Type::Result(a, b) => type_ok(a) && type_ok(b),
+            _ => true,
+        }
+    }
+    fn term_ok(t: &Term) -> bool {
+        let wide = match t {
+            Term::Forall(rs, _) => 2 * rs.len() + 1 > 65_535,
+            Term::Index(_, xs) => xs.len() + 1 > 65_535,
+            Term::Builtin(_, xs) | Term::Spec(_, xs) | Term::Fold(_, xs) | Term::Apply(_, xs) => {
+                xs.len() > 65_535
+            }
+            _ => false,
+        };
+        !wide && children(t).into_iter().all(term_ok)
+    }
+    let types = n
+        .params
+        .iter()
+        .chain(&n.results)
+        .chain(n.learnable.iter().map(|l| &l.ty))
+        .chain(n.consts.iter().map(|c| &c.ty))
+        .chain(n.ops.iter().flat_map(|op| &op.results));
+    let c = &n.contract;
+    let clauses = [&c.pre, &c.post, &c.cost, &c.budget, &c.decreases]
+        .into_iter()
+        .chain(&c.invariants);
+    let ok = types.into_iter().all(type_ok)
+        && n.results.len() <= 255
+        && n.ops.iter().all(|op| op.results.len() <= 255)
+        && clauses
+            .clone()
+            .all(|v| v.len() <= 65_535 && v.iter().all(term_ok));
+    if ok {
+        Ok(())
+    } else {
+        Err(Diagnostic::error(
+            "VG-T0118",
+            Span::default(),
+            "a type, result list or formula is wider than docs/02's static limits",
+        ))
+    }
+}
+
+/// Each Eff value is used exactly once (VG-E0102), for nodes from any source: lowering checks it with
+/// a span, and this check covers decoded and API-built nodes (G1 review B5). It also keeps step 5
+/// from merging two effect ops, which would need one Eff value used twice.
+fn check_eff_linear(n: &Node) -> R<()> {
+    let mut uses: HashMap<Operand, u32> = HashMap::new();
+    for o in n.ops.iter().flat_map(|op| &op.operands).chain(&n.outputs) {
+        *uses.entry(*o).or_default() += 1;
+    }
+    let inputs = (0..n.input_count() as u32)
+        .filter(|&i| n.input_type(i) == Some(&Type::Eff))
+        .map(Operand::Input);
+    let results = n.ops.iter().enumerate().flat_map(|(i, op)| {
+        op.results
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| **t == Type::Eff)
+            .map(move |(s, _)| Operand::Op(i as u32, s as u8))
+    });
+    for v in inputs.chain(results) {
+        let k = uses.get(&v).copied().unwrap_or(0);
+        if k != 1 {
+            return Err(Diagnostic::error(
+                "VG-E0102",
+                Span::default(),
+                format!("Eff value {v:?} is used {k} times; each Eff is used exactly once"),
+            ));
         }
     }
     Ok(())
@@ -559,10 +645,13 @@ pub fn canonicalize(n: &Node) -> R<Canonical> {
         sorted,
         inv_ports,
     } = merkle(n)?;
-    // Step 5: merge equal ops.
+    // Step 5: merge equal pure ops; effect ops are never merged (docs/13).
     let mut first: HashMap<Hash, u32> = HashMap::new();
     let rep: Vec<u32> = (0..count)
         .map(|i| {
+            if opcode::by_code(n.ops[i].opcode).is_some_and(|o| o.is_effect()) {
+                return i as u32;
+            }
             *first
                 .entry(h.op_hash[i].expect("hashed"))
                 .or_insert(i as u32)
