@@ -1,5 +1,9 @@
-//! The `vg` command (P1.10): `vg asm`, `vg disasm`, `vg hash`. `vg mcp` and the rest arrive with
-//! their phases.
+//! The `vg` command: `vg asm`, `vg disasm`, `vg hash` (P1.10); `vg check`, `vg verify`, `vg run`,
+//! `vg build` and `vg mcp`, whose results are the docs/15 JSON of the MCP tools of the same names.
+
+mod json;
+mod mcp;
+mod tools;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -12,7 +16,13 @@ use vg_store::{Entry, Lock, Store};
 const USAGE: &str = "usage:
   vg asm FILE.vgs [--root DIR] [--keep-debug]   assemble into DIR/.vg/objects and pin labels in DIR/vg.lock
   vg disasm (HASH | FILE.vgir) [--root DIR]     print VG-Sym for a node and everything it calls
-  vg hash FILE...                               print node, body and contract hashes (.vgs or .vgir)";
+  vg hash FILE...                               print node, body and contract hashes (.vgs or .vgir)
+  vg check FILE.vgs                             parse, canonicalize, type- and effect-check (JSON)
+  vg verify FILE.vgs [--timeout MS]             prove every obligation with z3 (JSON)
+  vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
+  vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
+                                                verify, then compile (default target: aarch64-apple-darwin)
+  vg mcp                                        serve vg_check, vg_verify, vg_run, vg_build over MCP stdio";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -23,7 +33,9 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
         Err(Fail::Error(m)) => {
-            eprintln!("{m}");
+            if !m.is_empty() {
+                eprintln!("{m}");
+            }
             ExitCode::from(1)
         }
     }
@@ -47,6 +59,10 @@ struct Opts {
     files: Vec<String>,
     root: PathBuf,
     keep_debug: bool,
+    timeout_ms: u64,
+    targets: Vec<String>,
+    out: PathBuf,
+    unverified: bool,
 }
 
 fn opts(args: &[String]) -> Result<Opts, Fail> {
@@ -54,6 +70,15 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
         files: vec![],
         root: PathBuf::from("."),
         keep_debug: false,
+        timeout_ms: 10_000,
+        targets: vec![],
+        out: PathBuf::from("target/vg"),
+        unverified: false,
+    };
+    let value = |it: &mut std::slice::Iter<String>, what: &str| {
+        it.next()
+            .cloned()
+            .ok_or_else(|| Fail::Usage(format!("{what} needs a value")))
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -65,6 +90,14 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
                     .into()
             }
             "--keep-debug" => o.keep_debug = true,
+            "--timeout" => {
+                o.timeout_ms = value(&mut it, "--timeout")?
+                    .parse()
+                    .map_err(|_| Fail::Usage("--timeout takes milliseconds".into()))?
+            }
+            "--target" => o.targets.push(value(&mut it, "--target")?),
+            "-o" => o.out = value(&mut it, "-o")?.into(),
+            "--unverified" => o.unverified = true,
             s if s.starts_with("--") => return Err(Fail::Usage(format!("unknown option {s}"))),
             s => o.files.push(s.to_string()),
         }
@@ -191,6 +224,49 @@ fn run(args: &[String]) -> Result<(), Fail> {
             }
             failed.map_or(Ok(()), Err)
         }
+        "check" | "verify" | "run" | "build" => {
+            let Some((file, rest)) = o.files.split_first() else {
+                return Err(Fail::Usage(format!("{cmd} takes a .vgs file")));
+            };
+            let path = Path::new(file);
+            let src = String::from_utf8(read(path)?)
+                .map_err(|_| error(format!("{}: not UTF-8", path.display())))?;
+            let lock = Lock::read(&o.root.join("vg.lock")).map_err(error)?;
+            let mesh = |label: &str| {
+                lock.resolved
+                    .get(label)
+                    .filter(|e| e.source != "local")
+                    .map(|e| (e.node, e.spec))
+            };
+            let out = match (cmd.as_str(), rest) {
+                ("check", []) => tools::check(&src, &mesh),
+                ("verify", []) => tools::verify(&src, &mesh, o.timeout_ms),
+                ("run", [node, inputs]) => {
+                    let j: serde_json::Value = serde_json::from_str(inputs)
+                        .map_err(|e| Fail::Usage(format!("inputs are not JSON: {e}")))?;
+                    let map = j
+                        .as_object()
+                        .ok_or_else(|| Fail::Usage("inputs are a JSON object".into()))?;
+                    tools::run(&src, &mesh, node, map)
+                }
+                ("build", [node]) => {
+                    let targets = if o.targets.is_empty() {
+                        vec!["aarch64-apple-darwin".to_string()]
+                    } else {
+                        o.targets.clone()
+                    };
+                    tools::build(&src, &mesh, node, &targets, &o.out, o.unverified)
+                }
+                _ => return Err(Fail::Usage(format!("wrong arguments for {cmd}"))),
+            };
+            println!("{}", serde_json::to_string_pretty(&out).expect("JSON"));
+            if out["ok"] == true {
+                Ok(())
+            } else {
+                Err(Fail::Error(String::new()))
+            }
+        }
+        "mcp" => mcp::serve().map_err(error),
         c => Err(Fail::Usage(format!("unknown command {c}"))),
     }
 }
