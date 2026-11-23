@@ -101,11 +101,11 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [x] P1.11 Program generator behind vg-core's `gen` feature, for property and differential tests (docs/16)
 
 ### P2 · Types and interpreter — W2 — Nov 2 → Nov 13 — G2
-- [ ] P2.1 Type checker for every MVP type and op (docs/04, docs/14), with the diagnostic codes of docs/15
-- [ ] P2.2 Effect checker: masks, transitivity at CALL_HASH, handle reachability
+- [x] P2.1 Type checker for every MVP type and op (docs/04, docs/14), with the diagnostic codes of docs/15
+- [x] P2.2 Effect checker: masks, transitivity at CALL_HASH, handle reachability
 - [ ] P2.3 Resource accounting: static COST terms per op
-- [ ] P2.4 vg-interp: every MVP op and mode (docs/14), IEEE floats bit-exact with one NaN (docs/13), NaN-propagating FCLAMP, effect traces
-- [ ] P2.5 Conformance suite: one case per opcode and mode; NaN, ±inf, −0.0 and subnormals; expected values from an independent oracle (docs/16)
+- [x] P2.4 vg-interp: every MVP op and mode (docs/14), IEEE floats bit-exact with one NaN (docs/13), NaN-propagating FCLAMP, effect traces
+- [x] P2.5 Conformance suite: one case per opcode and mode; NaN, ±inf, −0.0 and subnormals; expected values from an independent oracle (docs/16)
 - [ ] P2.6 Negative suite: type errors and capability escalation
 
 ### P3 · Verification — W3 — Nov 4 → Nov 20 — G3
@@ -115,7 +115,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P3.4 Model decoding into VG values, small-model search, model-guided and concrete replay in vg-interp (ADR 0006); the concrete pre-screen of docs/05
 - [ ] P3.5 Query cache keyed by query hash; proof records
 - [ ] P3.6 Known-good and known-bad suites; mutation-testing harness
-- [ ] P3.7 `vg verify`
+- [x] P3.7 `vg verify`
 - [ ] P3.8 The soft-knee story: examples/soft_knee_draft.vgs is rejected with a reproducing counterexample; examples/audio_limiter.vgs verifies
 
 ### P4 · Codegen and runtime — W4 — Nov 9 → Nov 27 — G4

@@ -14,6 +14,11 @@ VeriGraph is an AI-native programming system. Programs are typed, content-addres
 
 Your part: about 15–30 minutes a day reading PROGRESS.md, reviewing gate reports and answering the agents' questions. Agents never mark a gate passed themselves.
 
+## Use the toolchain
+
+The v0 toolchain checks, runs, verifies and builds VG-Sym programs, and serves them to AI agents over
+MCP: see docs/quickstart.md.
+
 ## Map
 
 | Path | What it holds |
