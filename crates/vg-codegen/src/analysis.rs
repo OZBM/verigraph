@@ -161,17 +161,25 @@ pub fn analyze_graph(
             let op = &node.ops[i];
             match op.opcode {
                 OP_SLICE | OP_AS_BYTES => {
-                    if let Some(Operand::Op(src_i, src_s)) = op.operands.first().copied() {
-                        let src_i = src_i as usize;
-                        let src_s = src_s as usize;
-                        let src_ty = &node.ops[src_i].results[src_s];
-                        if matches!(src_ty, Type::Slice(_)) {
-                            if escaping_vals.insert((src_i, src_s)) {
-                                work.push((src_i, src_s));
+                    if let Some(src_op) = op.operands.first().copied() {
+                        if let Operand::Op(src_i, src_s) = src_op {
+                            let src_i = src_i as usize;
+                            let src_s = src_s as usize;
+                            let src_ty = &node.ops[src_i].results[src_s];
+                            if matches!(src_ty, Type::Slice(_)) {
+                                if escaping_vals.insert((src_i, src_s)) {
+                                    work.push((src_i, src_s));
+                                }
+                            } else {
+                                // Backing storage of SLICE/AS_BYTES is a non-Slice computed in this frame.
+                                scratch_ops[src_i][src_s] = true;
                             }
-                        } else {
-                            // Backing storage of SLICE/AS_BYTES is a non-Slice computed in this frame.
-                            scratch_ops[src_i][src_s] = true;
+                        } else if op.opcode == OP_AS_BYTES
+                            && let Some(src_ty) = node.operand_type(src_op)
+                            && crate::layout::is_scalar_abi(src_ty)
+                        {
+                            // Scalar AS_BYTES spills to a local buffer; put that spill in scratch when escaping.
+                            scratch_ops[i][0] = true;
                         }
                     }
                 }
@@ -234,7 +242,16 @@ pub fn analyze_graph(
                 if crate::layout::is_erased(ty) {
                     continue;
                 }
-                let sz = size_of(ty, target)?;
+                let sz = if op.opcode == OP_AS_BYTES && scratch_ops[i][s] {
+                    op.operands
+                        .first()
+                        .and_then(|o| node.operand_type(*o))
+                        .map(|t| size_of(t, target))
+                        .transpose()?
+                        .unwrap_or(8)
+                } else {
+                    size_of(ty, target)?
+                };
                 if !crate::layout::is_scalar_abi(ty)
                     && !matches!(ty, Type::Slice(_))
                     && sz > STACK_INTERMEDIATE_THRESHOLD

@@ -177,6 +177,7 @@ name = "vg-codegen"
 version = "0.0.0"
 dependencies = [
  "vg-core",
+ "vg-rt",
  "vg-smt",
  "vg-types",
 ]
