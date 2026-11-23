@@ -8,5 +8,6 @@ publish.workspace = true
 
 [dependencies]
 vg-core = { path = "../vg-core" }
+vg-rt = { path = "../vg-rt" }
 vg-types = { path = "../vg-types" }
 vg-smt = { path = "../vg-smt" }
