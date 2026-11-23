@@ -17,8 +17,6 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-24.04
-          - name: linux-x86_64
-            os: ubuntu-24.04
             triple: x86_64-unknown-linux-gnu
             z3: z3-5.4.1-x64-glibc-2.39.zip
             z3_sha256: b548bac48ef2452b4e09ea2945cf4b011d5f43fcf39e4799df268ee7e0769d85
@@ -44,7 +42,8 @@ jobs:
           "$bin/z3" --version
           echo "$bin" >> "$GITHUB_PATH"
       - name: Confirm the host architecture
-        run: rustc -vV | grep -Fx "host: ${{ matrix.triple }}"
+        run: |
+          rustc -vV | grep -Fx "host: ${{ matrix.triple }}"
       - name: Confirm that clang has the wasm32 target
         if: runner.os == 'macOS'
         run: |
