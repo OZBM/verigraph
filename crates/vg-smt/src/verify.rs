@@ -194,10 +194,75 @@ fn with_defs_of(qb: &QueryBuilder, scratch: &QueryBuilder) -> QueryBuilder {
     let mut q = qb.clone();
     q.decls.extend(scratch.decls.clone());
     q.fun_decls.extend(scratch.fun_decls.clone());
-    q.pure_defs = scratch.pure_defs.clone();
+    q.pure_defs.extend(scratch.pure_defs.iter().cloned());
+    q.dep_axioms.extend(scratch.dep_axioms.iter().cloned());
     q.next_fresh = scratch.next_fresh;
     q.next_coll_id = scratch.next_coll_id;
     q
+}
+
+fn is_compound_smt(expr: &str) -> bool {
+    expr.starts_with('(') && !expr.starts_with("(_ ") && !expr.starts_with("((_ to_fp ")
+}
+
+/// Names compound scalar SMT expressions in `pure_defs` so sequential ops share a DAG instead of
+/// unfolding into an exponential tree. Collections and SMT literals are preserved directly.
+fn name_compound_symval(sv: SymVal, prefix: &str, qb: &mut QueryBuilder) -> SymVal {
+    match sv {
+        SymVal::Int { expr, ty } if is_compound_smt(&expr) => {
+            let bits = match ty {
+                Type::UInt(w) | Type::SInt(w) => w,
+                _ => 64,
+            };
+            let sym = qb.fresh_sym(prefix, &format!("(_ BitVec {bits})"));
+            qb.add_pure_def(BTreeSet::from([sym.clone()]), format!("(= {sym} {expr})"));
+            SymVal::Int { expr: sym, ty }
+        }
+        SymVal::Bool(expr) if is_compound_smt(&expr) => {
+            let sym = qb.fresh_sym(prefix, "Bool");
+            qb.add_pure_def(BTreeSet::from([sym.clone()]), format!("(= {sym} {expr})"));
+            SymVal::Bool(sym)
+        }
+        SymVal::Float { expr, ty } if is_compound_smt(&expr) => {
+            if let Some((eb, sb)) = crate::sort::fp_format(&ty) {
+                let sym = qb.fresh_sym(prefix, &format!("(_ FloatingPoint {eb} {sb})"));
+                qb.add_pure_def(BTreeSet::from([sym.clone()]), format!("(= {sym} {expr})"));
+                SymVal::Float { expr: sym, ty }
+            } else {
+                SymVal::Float { expr, ty }
+            }
+        }
+        SymVal::Tuple { elems } => SymVal::Tuple {
+            elems: elems
+                .into_iter()
+                .enumerate()
+                .map(|(j, (t, v))| (t, name_compound_symval(v, &format!("{prefix}_t{j}"), qb)))
+                .collect(),
+        },
+        SymVal::Result {
+            is_ok,
+            ok_ty,
+            ok,
+            err_ty,
+            err,
+        } => {
+            let is_ok = if is_compound_smt(&is_ok) {
+                let sym = qb.fresh_sym(&format!("{prefix}_isok"), "Bool");
+                qb.add_pure_def(BTreeSet::from([sym.clone()]), format!("(= {sym} {is_ok})"));
+                sym
+            } else {
+                is_ok
+            };
+            SymVal::Result {
+                is_ok,
+                ok_ty,
+                ok: Box::new(name_compound_symval(*ok, &format!("{prefix}_ok"), qb)),
+                err_ty,
+                err: Box::new(name_compound_symval(*err, &format!("{prefix}_err"), qb)),
+            }
+        }
+        other => other,
+    }
 }
 
 fn env<'a>(
@@ -378,9 +443,14 @@ pub fn verify(
             .map(|o| operand(node, *o, &inputs, &vals, &mut consts, &mut qb))
             .collect();
 
-        // The op's own domains: evaluate it on a scratch copy and keep only what it recorded.
-        let mut scratch = qb.clone();
-        scratch.domains.clear();
+        // The op's own domains: evaluate it on a lightweight scratch builder and keep only its domains/defs.
+        let mut scratch = QueryBuilder {
+            next_fresh: qb.next_fresh,
+            next_coll_id: qb.next_coll_id,
+            coll_intern: qb.coll_intern.clone(),
+            post_only_kernels: qb.post_only_kernels,
+            ..QueryBuilder::default()
+        };
         eval_op_core(
             node,
             op,
@@ -643,9 +713,15 @@ pub fn verify(
             ),
         };
         qb.domains.clear();
-        for (s, sv) in results.iter().enumerate() {
-            ports.insert((i as u32, s as u8), (op.results[s].clone(), sv.clone()));
-        }
+        let results: Vec<SymVal> = results
+            .into_iter()
+            .enumerate()
+            .map(|(s, sv)| {
+                let named = name_compound_symval(sv, &format!("op{i}_{s}"), &mut qb);
+                ports.insert((i as u32, s as u8), (op.results[s].clone(), named.clone()));
+                named
+            })
+            .collect();
         vals.push(results);
         op_facts.push((
             at_start.0..qb.assertions.len(),
