@@ -1,6 +1,6 @@
 examples/audio_limiter.vgs	1	497	2c194e0e211a898c
 examples/quickstart.vgs	1	558	8c00a51991383405
-examples/sha256.vgs	1	5802	2499ee1fcebb94fc
+examples/sha256.vgs	1	5802	084ae217f73ec6d7
 examples/soft_knee_draft.vgs	1	220	ea99fc298f90ea49
 tests/corpus/alpha/a01_add_sub_checked/01.vgs	1	121	245e72b0d26e1d0c
 tests/corpus/alpha/a01_add_sub_checked/02.vgs	1	128	191988fdc89d7f16

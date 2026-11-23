@@ -7523,6 +7523,15 @@ impl Prefix {
                     if let Ok(c) =
                         literal_const(&ast::Literal::Num(snum.clone(), s), Span::default())
                     {
+                        let const_u64 = if c.ty == Type::UInt(64) && c.bytes.len() == 8 {
+                            Some(u64::from_le_bytes(c.bytes[..8].try_into().unwrap()))
+                        } else if c.ty == Type::UInt(32) && c.bytes.len() == 4 {
+                            Some(u64::from(u32::from_le_bytes(
+                                c.bytes[..4].try_into().unwrap(),
+                            )))
+                        } else {
+                            None
+                        };
                         let val = ValMeta {
                             ty: c.ty,
                             origin_local_frame: false,
@@ -7530,7 +7539,7 @@ impl Prefix {
                             owns_fresh_arena_slice: false,
                             from_params: vec![false; n_params],
                             valid_handle: None,
-                            const_u64: None,
+                            const_u64,
                             is_literal: true,
                         };
                         if self.val_fits_stmt_slot(call, None, &val).is_ok() {
