@@ -1,7 +1,8 @@
 # Quick start (v0)
 
 What works today, on macOS ARM64 with z3 installed (`brew install z3`). Every command prints the JSON
-result of the MCP tool of the same name (docs/15) and exits 1 when `ok` is false.
+result of the MCP tool of the same name (docs/15) and exits 1 when `ok` is false. The
+[user guide](guide/README.md) covers all of this in depth.
 
 ```bash
 cargo build --release -p vg-cli
@@ -51,8 +52,9 @@ vg verify examples/soft_knee_draft.vgs
 
 ## Use it from an AI agent
 
-`vg mcp` serves `vg_check`, `vg_verify`, `vg_run` and `vg_build` over MCP stdio. For Claude Code,
-add this to `.mcp.json` at the root of a project that has VeriGraph sources:
+`vg mcp` serves `vg_check`, `vg_verify`, `vg_run` and `vg_build` over MCP stdio. For Antigravity IDE,
+run `editors/antigravity/install.sh` (docs/guide/antigravity.md). For Claude Code, add this to
+`.mcp.json` at the root of a project that has VeriGraph sources:
 
 ```json
 { "mcpServers": { "verigraph": { "command": "/path/to/verigraph/target/release/vg", "args": ["mcp"] } } }

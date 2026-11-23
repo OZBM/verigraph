@@ -17,7 +17,9 @@ Your part: about 15–30 minutes a day reading PROGRESS.md, reviewing gate repor
 ## Use the toolchain
 
 The v0 toolchain checks, runs, verifies and builds VG-Sym programs, and serves them to AI agents over
-MCP: see docs/quickstart.md.
+MCP: see docs/quickstart.md, and docs/guide/ for the complete user guide. `editors/antigravity/install.sh`
+integrates it into Antigravity IDE: an editor extension for `.vgs` files, and an agent plugin with the
+MCP server and the synthesis skill.
 
 ## Map
 
@@ -34,12 +36,14 @@ MCP: see docs/quickstart.md.
 | docs/14-opcode-reference.md | Every MVP op: number, typing, meaning, obligation, SMT encoding, LLVM lowering |
 | docs/15-agent-interface.md | What agents read: error codes, obligation IDs, JSON values, MCP tool schemas, failure reports, plain-language contracts |
 | docs/16-conformance-and-gates.md | Test file formats, the laws property tests check, benchmarks, and what each gate script runs |
+| docs/guide/ | The user guide: installation, tutorial, language, verification, command line, MCP, Antigravity IDE, diagnostics, troubleshooting |
 | docs/adr/ | Decisions that changed the spec; 0002–0010 await the owner's approval |
 | docs/research/ | The research protocol, 14 research tracks with their prompts, and the October 2026 literature survey |
 | docs/source/original-spec.md | The source document, kept for history; docs/ wins where they disagree |
 | skills/verigraph-synthesis/SKILL.md | The skill AIs use to write VeriGraph programs once the toolchain exists |
 | examples/ | The audio-limiter example, its plain-language request, and the buggy first draft the verifier must reject |
 | tools/ | An executable reference grammar for VG-Sym (Lark) and a script that parses every example |
+| editors/antigravity/ | The Antigravity IDE integration: the editor extension, the agent plugin and their installer |
 
 ## Labels
 
