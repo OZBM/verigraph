@@ -1,0 +1,16 @@
+// expect: reject @subslice/%1/SLICE.in_bounds
+// slice-max: 5
+module s36_slice_inverted_bounds;
+
+NODE @subslice {
+  SIGNATURE: (xs: Slice<u8>, lo: u64, hi: u64) -> (Slice<u8>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lo <= hi && hi <= len(xs) && len(xs) <= 32;
+  }
+  BODY {
+    %0 = ADD.wrap(lo, 1:u64); // BUG: lo + 1 > hi when lo == hi
+    %1 = SLICE(xs, %0, hi);
+    RETURN(%1);
+  }
+}

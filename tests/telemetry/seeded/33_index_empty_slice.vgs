@@ -1,0 +1,15 @@
+// expect: reject @head_slice/%0/INDEX.in_bounds
+// slice-max: 5
+module s33_index_empty_slice;
+
+NODE @head_slice {
+  SIGNATURE: (xs: Slice<u32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    // BUG: missing PRE: len(xs) > 0
+  }
+  BODY {
+    %0 = INDEX(xs, 0:u64);
+    RETURN(%0);
+  }
+}

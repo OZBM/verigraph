@@ -1,0 +1,16 @@
+// expect: reject @shift_left/%1/SHL.amount
+// slice-max: 5
+module s11_shl_amount_oob;
+
+NODE @shift_left {
+  SIGNATURE: (x: u32, s: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: s <= 31;
+  }
+  BODY {
+    %0 = ADD.checked(s, 1:u32); // BUG: 32 when s == 31
+    %1 = SHL.checked(x, %0);
+    RETURN(%1);
+  }
+}

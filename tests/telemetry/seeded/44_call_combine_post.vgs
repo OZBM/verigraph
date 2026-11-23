@@ -1,0 +1,30 @@
+// expect: reject @double_step/POST.0
+// slice-max: 5
+module s44_call_combine_post;
+
+NODE @inc {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 100;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u32);
+    RETURN(%0);
+  }
+}
+
+NODE @double_step {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 50;
+    POST: result == x + 2;
+  }
+  BODY {
+    %0 = CALL_HASH(@inc, x);
+    %1 = ADD.checked(%0, 2:u32); // BUG: adds 2 instead of 1 (total x + 3)
+    RETURN(%1);
+  }
+}

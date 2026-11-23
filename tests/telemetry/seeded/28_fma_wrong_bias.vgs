@@ -1,0 +1,16 @@
+// expect: reject @affine_f32/POST.1
+// slice-max: 5
+module s28_fma_wrong_bias;
+
+NODE @affine_f32 {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0.0 && x <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FMA(x, 0.5:f32, 0.75:f32); // BUG: at x=1.0 -> 1.25 > 1.0
+    RETURN(%0);
+  }
+}

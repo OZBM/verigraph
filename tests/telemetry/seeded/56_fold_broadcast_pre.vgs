@@ -1,0 +1,29 @@
+// expect: reject @sum_bcast/%0/FOLD.pre.0
+// slice-max: 5
+module s56_fold_broadcast_pre;
+
+NODE @step_b {
+  SIGNATURE: (acc: u32, x: u32, cap: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc + x <= cap && cap <= 1000;
+    POST: result == acc + x;
+  }
+  BODY {
+    %0 = ADD.checked(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @sum_bcast {
+  SIGNATURE: (xs: Array<u32, 4>, cap: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { xs[i] <= 100 } && cap == 200;
+    INVARIANT @inv(k, acc): acc <= k * 100; // BUG: at k=2, acc + x can be 300 > cap=200
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@step_b, xs, cap, init=0:u32, invariant=@inv);
+    RETURN(%0);
+  }
+}

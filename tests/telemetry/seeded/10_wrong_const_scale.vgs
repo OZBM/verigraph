@@ -1,0 +1,17 @@
+// expect: reject @scale_check/POST.0
+// slice-max: 5
+module s10_wrong_const_scale;
+
+NODE @scale_check {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 100;
+    POST: result == x * 4 + 1;
+  }
+  BODY {
+    %0 = MUL.checked(x, 4:u32);
+    %1 = ADD.checked(%0, 2:u32); // BUG: +2 instead of +1
+    RETURN(%1);
+  }
+}

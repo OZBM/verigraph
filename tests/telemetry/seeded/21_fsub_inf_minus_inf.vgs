@@ -1,0 +1,18 @@
+// expect: reject @delta_sq/POST.0
+// slice-max: 5
+module s21_fsub_inf_minus_inf;
+
+NODE @delta_sq {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && x >= 0.0;
+    POST: !is_nan(result);
+  }
+  BODY {
+    %0 = FMUL(x, x);        // +inf for x >= 1e20
+    %1 = FADD(%0, 1.0:f32); // +inf
+    %2 = FSUB(%1, %0);      // BUG: +inf - +inf = NaN
+    RETURN(%2);
+  }
+}

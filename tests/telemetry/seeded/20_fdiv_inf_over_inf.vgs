@@ -1,0 +1,18 @@
+// expect: reject @soft_norm/POST.0
+// slice-max: 5
+module s20_fdiv_inf_over_inf;
+
+NODE @soft_norm {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0.0 && is_finite(x);
+    POST: result >= 0.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FMUL(x, 4.0:f32); // overflows to +inf for x >= 1e38
+    %1 = FADD(1.0:f32, %0);
+    %2 = FDIV(%0, %1);      // BUG: inf / inf = NaN
+    RETURN(%2);
+  }
+}

@@ -1,0 +1,15 @@
+// expect: reject @read_arr/%0/INDEX.in_bounds
+// slice-max: 5
+module s31_index_off_by_one;
+
+NODE @read_arr {
+  SIGNATURE: (xs: Array<u32, 8>, i: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i <= 8; // BUG: allows i == 8
+  }
+  BODY {
+    %0 = INDEX(xs, i);
+    RETURN(%0);
+  }
+}

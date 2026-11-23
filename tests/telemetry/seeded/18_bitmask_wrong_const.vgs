@@ -1,0 +1,16 @@
+// expect: reject @low_nibble/POST.0
+// slice-max: 5
+module s18_bitmask_wrong_const;
+
+NODE @low_nibble {
+  SIGNATURE: (x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 15;
+  }
+  BODY {
+    %0 = AND(x, 31:u32); // BUG: mask 31 instead of 15
+    %1 = OR(%0, 0:u32);
+    RETURN(%1);
+  }
+}

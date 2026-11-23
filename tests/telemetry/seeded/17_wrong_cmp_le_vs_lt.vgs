@@ -1,0 +1,18 @@
+// expect: reject @bounded_abs/POST.0
+// slice-max: 5
+module s17_wrong_cmp_le_vs_lt;
+
+NODE @bounded_abs {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= -10 && x <= 10;
+    POST: result >= 0 && result <= 10;
+  }
+  BODY {
+    %0 = GT.s(x, 0:i32);
+    %1 = NEG.checked(x);
+    %2 = SELECT(%0, %1, x); // BUG: inverted condition selects -x when x > 0
+    RETURN(%2);
+  }
+}

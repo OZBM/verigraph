@@ -1,0 +1,16 @@
+// expect: reject @unbound_clamp/%1/FCLAMP.bounds
+// slice-max: 5
+module s24_fclamp_nan_bound;
+
+NODE @unbound_clamp {
+  SIGNATURE: (x: f32, lo: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && lo <= 1.0; // BUG: lo can be -inf, so lo - lo produces NaN
+  }
+  BODY {
+    %0 = FSUB(lo, lo); // BUG: -inf - (-inf) = NaN when lo == -inf
+    %1 = FCLAMP(x, %0, 1.0:f32);
+    RETURN(%1);
+  }
+}

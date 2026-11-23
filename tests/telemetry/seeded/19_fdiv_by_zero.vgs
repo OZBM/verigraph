@@ -1,0 +1,17 @@
+// expect: reject @ratio_f32/POST.0
+// slice-max: 5
+module s19_fdiv_by_zero;
+
+NODE @ratio_f32 {
+  SIGNATURE: (a: f32, b: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(a) && b >= 0.0 && b <= 10.0; // BUG: allows b == 0.0 -> 0/0 = NaN
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FDIV(a, b);
+    %1 = FCLAMP(%0, -10.0:f32, 10.0:f32);
+    RETURN(%1);
+  }
+}

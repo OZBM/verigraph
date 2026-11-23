@@ -1,0 +1,16 @@
+// expect: reject @scale_f64/POST.0
+// slice-max: 5
+module s29_f64_gain_overflow;
+
+NODE @scale_f64 {
+  SIGNATURE: (x: f64, g: f64) -> (f64);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x) && g >= 1.0 && g <= 10.0;
+    POST: is_finite(result);
+  }
+  BODY {
+    %0 = FMUL(x, g); // BUG: overflows to +-inf for huge finite x
+    RETURN(%0);
+  }
+}

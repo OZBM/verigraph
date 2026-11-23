@@ -1,0 +1,17 @@
+// expect: reject @floor_val/POST.0
+// slice-max: 5
+module s27_fmax_wrong_floor;
+
+NODE @floor_val {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: is_finite(x);
+    POST: result >= 0.0;
+  }
+  BODY {
+    %0 = FMAX(x, -1.0:f32); // BUG: floor is -1.0 instead of 0.0
+    %1 = FMIN(%0, 10.0:f32);
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,17 @@
+// expect: reject @inc_monotone/POST.0
+// slice-max: 5
+module s07_wrong_wrap_mode;
+
+NODE @inc_monotone {
+  SIGNATURE: (x: u8, d: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d >= 1 && d <= 10;
+    POST: result > x;
+  }
+  BODY {
+    %0 = ADD.wrap(x, d); // BUG: wraps around when x + d >= 256
+    %1 = MUL.wrap(%0, 1:u8);
+    RETURN(%1);
+  }
+}

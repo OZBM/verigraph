@@ -1,0 +1,19 @@
+// expect: reject @cap_gain/POST.0
+// slice-max: 5
+module s26_fmin_nan_prop;
+
+NODE @cap_gain {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0.0 && is_finite(x);
+    POST: result <= 1.0;
+  }
+  BODY {
+    %0 = FMUL(x, 2.0:f32);
+    %1 = FDIV(1.0:f32, %0);
+    %2 = FDIV(%0, %0);      // BUG: 0/0 = NaN or inf/inf = NaN
+    %3 = FMIN(%2, 1.0:f32);
+    RETURN(%3);
+  }
+}

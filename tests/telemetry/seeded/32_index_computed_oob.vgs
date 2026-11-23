@@ -1,0 +1,16 @@
+// expect: reject @read_next/%1/INDEX.in_bounds
+// slice-max: 5
+module s32_index_computed_oob;
+
+NODE @read_next {
+  SIGNATURE: (xs: Array<i32, 4>, i: u64) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 4;
+  }
+  BODY {
+    %0 = ADD.checked(i, 1:u64); // BUG: 4 when i == 3
+    %1 = INDEX(xs, %0);
+    RETURN(%1);
+  }
+}

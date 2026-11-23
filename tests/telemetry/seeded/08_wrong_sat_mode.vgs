@@ -1,0 +1,17 @@
+// expect: reject @sat_sum/POST.0
+// slice-max: 5
+module s08_wrong_sat_mode;
+
+NODE @sat_sum {
+  SIGNATURE: (a: u8, b: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: a <= 200 && b <= 200;
+    POST: result == a + b;
+  }
+  BODY {
+    %0 = ADD.sat(a, b); // BUG: saturates at 255 instead of exact sum when a + b > 255
+    %1 = ADD.checked(%0, 0:u8);
+    RETURN(%1);
+  }
+}

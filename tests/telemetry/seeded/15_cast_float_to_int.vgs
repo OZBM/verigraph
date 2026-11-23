@@ -1,0 +1,16 @@
+// expect: reject @round_to_u8/%1/CAST.in_range
+// slice-max: 5
+module s15_cast_float_to_int;
+
+NODE @round_to_u8 {
+  SIGNATURE: (x: f32) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0.0 && x <= 255.0;
+  }
+  BODY {
+    %0 = FADD(x, 1.0:f32); // BUG: 256.0 overflows u8
+    %1 = CAST.u8(%0);
+    RETURN(%1);
+  }
+}

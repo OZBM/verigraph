@@ -1,0 +1,16 @@
+// expect: reject @scale_u16/%1/MUL.no_overflow
+// slice-max: 5
+module s03_mul_overflow;
+
+NODE @scale_u16 {
+  SIGNATURE: (x: u16, k: u16) -> (u16);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x <= 300 && k <= 250;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u16);
+    %1 = MUL.checked(%0, k); // BUG: 301 * 250 = 75250 > 65535
+    RETURN(%1);
+  }
+}

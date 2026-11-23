@@ -1,0 +1,29 @@
+// expect: reject @sum_step/%0/FOLD.step
+// slice-max: 5
+module s53_fold_step_tight_inv;
+
+NODE @step {
+  SIGNATURE: (acc: u32, x: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc <= 400 && x <= 100;
+    POST: result == acc + x;
+  }
+  BODY {
+    %0 = ADD.checked(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @sum_step {
+  SIGNATURE: (xs: Array<u32, 4>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..4) { xs[i] <= 100 };
+    INVARIANT @inv(k, acc): acc <= k * 50; // BUG: x can be up to 100, not 50
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@step, xs, init=0:u32, invariant=@inv);
+    RETURN(%0);
+  }
+}

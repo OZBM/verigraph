@@ -1,0 +1,15 @@
+// expect: reject @unwrap_err/%0/GET_ERR.is_err
+// slice-max: 5
+module s40_get_err_on_ok;
+
+NODE @unwrap_err {
+  SIGNATURE: (r: Result<u32, u8>) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    // BUG: missing PRE: !is_ok(r)
+  }
+  BODY {
+    %0 = GET_ERR(r);
+    RETURN(%0);
+  }
+}

@@ -1,0 +1,16 @@
+// expect: reject @write_arr/%1/UPDATE.in_bounds
+// slice-max: 5
+module s34_update_oob;
+
+NODE @write_arr {
+  SIGNATURE: (xs: Array<u32, 4>, i: u64, v: u32) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 4;
+  }
+  BODY {
+    %0 = ADD.checked(i, 1:u64); // BUG: 4 when i == 3
+    %1 = UPDATE(xs, %0, v);
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,16 @@
+// expect: reject @shift_right/%1/SHR.amount
+// slice-max: 5
+module s12_shr_amount_oob;
+
+NODE @shift_right {
+  SIGNATURE: (x: u16, s: u32) -> (u16);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: s <= 16; // BUG: should be s < 16
+  }
+  BODY {
+    %0 = AND(s, 31:u32);
+    %1 = SHR.checked(x, %0);
+    RETURN(%1);
+  }
+}

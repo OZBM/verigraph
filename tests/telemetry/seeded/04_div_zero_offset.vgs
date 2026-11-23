@@ -1,0 +1,16 @@
+// expect: reject @norm_div/%1/DIV.nonzero
+// slice-max: 5
+module s04_div_zero_offset;
+
+NODE @norm_div {
+  SIGNATURE: (num: i32, den: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: den >= 1 && den <= 100 && num >= 0 && num <= 1000;
+  }
+  BODY {
+    %0 = SUB.checked(den, 1:i32); // BUG: becomes 0 when den == 1
+    %1 = DIV.checked(num, %0);
+    RETURN(%1);
+  }
+}

@@ -1,0 +1,35 @@
+// expect: reject @guarded_clamp/POST.0
+// slice-max: 5
+module s60_guard_wrong_else_post;
+
+NODE @id_ok {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0;
+    POST: result == x && result >= 0;
+  }
+  BODY { RETURN(x); }
+}
+
+NODE @bad_else {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result == x; // BUG: returns negative x instead of 0
+  }
+  BODY { RETURN(x); }
+}
+
+NODE @guarded_clamp {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0;
+  }
+  BODY {
+    %0 = GE.s(x, 0:i32);
+    %1 = ASSERT_GUARD.branch(%0, @id_ok, x, else=@bad_else);
+    RETURN(%1);
+  }
+}

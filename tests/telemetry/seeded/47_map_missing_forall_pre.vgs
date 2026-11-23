@@ -1,0 +1,28 @@
+// expect: reject @map_inc/%0/MAP.pre.0
+// slice-max: 5
+module s47_map_missing_forall_pre;
+
+NODE @k_inc {
+  SIGNATURE: (x: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x < 250;
+    POST: result == x + 1;
+  }
+  BODY {
+    %0 = ADD.checked(x, 1:u8);
+    RETURN(%0);
+  }
+}
+
+NODE @map_inc {
+  SIGNATURE: (xs: Array<u8, 4>) -> (Array<u8, 4>);
+  EFFECTS: [];
+  CONTRACT {
+    // BUG: missing forall PRE on xs
+  }
+  BODY {
+    %0 = SIMD_MAP(@k_inc, xs);
+    RETURN(%0);
+  }
+}

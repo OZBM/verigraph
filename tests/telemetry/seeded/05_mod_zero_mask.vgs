@@ -1,0 +1,16 @@
+// expect: reject @bucket_mod/%1/MOD.nonzero
+// slice-max: 5
+module s05_mod_zero_mask;
+
+NODE @bucket_mod {
+  SIGNATURE: (x: u32, m: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: m >= 1 && m <= 16;
+  }
+  BODY {
+    %0 = AND(m, 7:u32); // BUG: 0 when m == 8 or 16
+    %1 = MOD.checked(x, %0);
+    RETURN(%1);
+  }
+}
