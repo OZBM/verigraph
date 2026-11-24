@@ -21,8 +21,7 @@
 .prompt-quote {
   margin: 1.2rem 0 1.6rem;
   padding: 1rem 1.2rem;
-  border: 1px solid var(--line-2);
-  border-left: 3px solid var(--violet);
+  border: 1px solid color-mix(in srgb, var(--violet) 45%, var(--line-2));
   border-radius: 10px;
   background: var(--panel);
   color: var(--ink);
