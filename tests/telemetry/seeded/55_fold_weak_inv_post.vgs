@@ -1,4 +1,6 @@
-// expect: reject @sum_post/POST.0
+// expect: contract_gap @sum_post/POST.0
+// Every element is at most 10, so the result is at most 40 on every input: only the invariant is
+// too weak to prove it, which is a contract gap, not a runtime bug (ADR 0006).
 // slice-max: 5
 module s55_fold_weak_inv_post;
 

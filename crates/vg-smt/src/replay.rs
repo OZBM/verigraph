@@ -68,7 +68,7 @@ pub(crate) fn classify(
             );
         }
     }
-    if let Some(m) = fold_base_fails(node, id, inputs, callee) {
+    if let Some(m) = fold_invariant_reproduces(node, id, inputs, callee) {
         return (Verdict::Counterexample, "VG-V0001", m);
     }
     let reproduced = match run(node, inputs, callee, &mut NoEffectsHost) {
@@ -115,32 +115,69 @@ fn post_wd_conjunct(id: &str) -> Option<usize> {
     rest.split_once(".wd.")?.0.parse().ok()
 }
 
-/// For `@n/%i/FOLD.base`: the INVARIANT is false at step 0 on the fold's real initial value,
-/// when that value is a constant or an input (vg-interp does not check invariants as it runs).
-fn fold_base_fails(
+/// The first step k at which op i's FOLD_BOUNDED invariant is false on the real run, checked
+/// before each step and after the last, when the fold's collection, extra arguments and initial
+/// value are inputs or constants (vg-interp does not check invariants as it runs). None when it
+/// holds throughout or cannot be evaluated here.
+fn fold_invariant_fails_at(
+    node: &Node,
+    i: usize,
+    inputs: &[Value],
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+) -> Option<usize> {
+    let op = node.ops.get(i)?;
+    if op.opcode != vg_core::opcode::FOLD_BOUNDED {
+        return None;
+    }
+    let ops = &op.operands;
+    let n = ops.len();
+    let (Operand::Callee(f), Operand::Invariant(v)) = (ops[0], ops[n - 1]) else {
+        return None;
+    };
+    let kernel = callee(node.calls.get(f as usize)?)?;
+    let value = |o: &Operand| match *o {
+        Operand::Const(c) => decode_const(node.consts.get(c as usize)?).ok(),
+        Operand::Input(j) => inputs.get(j as usize).cloned(),
+        _ => None,
+    };
+    let Value::Seq(xs) = value(&ops[1])? else {
+        return None;
+    };
+    let extra: Vec<Value> = ops[2..n - 2].iter().map(value).collect::<Option<_>>()?;
+    let mut acc = value(&ops[n - 2])?;
+    for k in 0..=xs.len() {
+        if holds_invariant(node, v, k as i128, &acc, inputs, &[], callee) == Ok(false) {
+            return Some(k);
+        }
+        if k < xs.len() {
+            let mut args = vec![acc, xs[k].clone()];
+            args.extend(extra.iter().cloned());
+            acc = run(&kernel, &args, callee, &mut NoEffectsHost)
+                .ok()?
+                .into_iter()
+                .next()?;
+        }
+    }
+    None
+}
+
+/// For `@n/%i/FOLD.base` and `@n/%i/FOLD.step`: the invariant fails on the real run where that
+/// obligation says it holds, at step 0 for the base and at a later step for the step.
+fn fold_invariant_reproduces(
     node: &Node,
     id: &str,
     inputs: &[Value],
     callee: &dyn Fn(&Hash) -> Option<Node>,
 ) -> Option<String> {
-    let i: usize = id
-        .strip_suffix("/FOLD.base")?
-        .rsplit('/')
-        .next()?
-        .strip_prefix('%')?
-        .parse()
-        .ok()?;
-    let ops = &node.ops.get(i)?.operands;
-    let (Operand::Invariant(v), init) = (*ops.last()?, ops.get(ops.len().checked_sub(2)?)?) else {
-        return None;
-    };
-    let init = match *init {
-        Operand::Const(c) => decode_const(node.consts.get(c as usize)?).ok()?,
-        Operand::Input(j) => inputs.get(j as usize)?.clone(),
+    let (rest, base) = match (id.strip_suffix("/FOLD.base"), id.strip_suffix("/FOLD.step")) {
+        (Some(r), _) => (r, true),
+        (_, Some(r)) => (r, false),
         _ => return None,
     };
-    (holds_invariant(node, v, 0, &init, inputs, &[], callee) == Ok(false))
-        .then(|| "reproduced in vg-interp: the INVARIANT is false before the first step".into())
+    let i: usize = rest.rsplit('/').next()?.strip_prefix('%')?.parse().ok()?;
+    let k = fold_invariant_fails_at(node, i, inputs, callee)?;
+    (base == (k == 0))
+        .then(|| format!("reproduced in vg-interp: the INVARIANT is false at step {k}"))
 }
 
 fn has_effect_types(node: &Node) -> bool {
@@ -194,8 +231,8 @@ pub(crate) struct Prescreen {
 /// tries the same inputs. Each input that meets PRE runs in vg-interp; a trap refutes the op's
 /// obligation of that kind, and a false POST conjunct refutes it. Skips nodes with effects.
 ///
-/// shortcut: FOLD_BOUNDED invariants are not checked step by step here (the solver checks them);
-/// add it when vg-interp exposes a fold's accumulators.
+/// A FOLD_BOUNDED invariant is checked at each step where the fold reads inputs and constants
+/// only; a fold over computed values is left to the solver.
 pub(crate) fn prescreen(
     node: &Node,
     label: &str,
@@ -240,6 +277,40 @@ pub(crate) fn prescreen(
             tries.push(t);
         }
     }
+    // Every parameter at once at the values PRE's literals suggest, so bounds that only bite
+    // together (an array at its limit and a cap at its value) are tried; at most 256 inputs.
+    let plain: Vec<Vec<Value>> = (0..n as u32)
+        .map(|i| candidates(node.input_type(i).expect("input in range"), &[]))
+        .collect();
+    let lit_cands: Vec<Vec<Value>> = (0..n)
+        .map(|i| {
+            let mut l: Vec<Value> = cands[i]
+                .iter()
+                .filter(|v| i < node.params.len() && !plain[i].contains(v))
+                .cloned()
+                .collect();
+            if l.is_empty() {
+                l.push(base[i].clone());
+            }
+            l
+        })
+        .collect();
+    let mut at = vec![0usize; n];
+    'combos: for _ in 0..RANDOM_INPUTS {
+        tries.push((0..n).map(|i| lit_cands[i][at[i]].clone()).collect());
+        let mut p = 0;
+        loop {
+            if p == n {
+                break 'combos;
+            }
+            at[p] += 1;
+            if at[p] < lit_cands[p].len() {
+                break;
+            }
+            at[p] = 0;
+            p += 1;
+        }
+    }
     let mut rng = SplitMix(u64::from_le_bytes(
         blake3::derive_key("VeriGraph 2026 prescreen v1", &hashes.node)[..8]
             .try_into()
@@ -271,6 +342,17 @@ pub(crate) fn prescreen(
         if out.pre_met.is_none() {
             out.pre_met = Some(inputs.clone());
         }
+        for i in 0..node.ops.len() {
+            if let Some(k) = fold_invariant_fails_at(node, i, &inputs, callee) {
+                let kind = if k == 0 { "FOLD.base" } else { "FOLD.step" };
+                out.findings
+                    .entry(format!("@{label}/%{i}/{kind}"))
+                    .or_insert(Finding {
+                        inputs: inputs.clone(),
+                        message: format!("pre-screen: the INVARIANT is false at step {k}"),
+                    });
+            }
+        }
         match run(node, &inputs, callee, &mut NoEffectsHost) {
             Err(trap) => {
                 let Some(i) = trap.op else { continue };
@@ -279,11 +361,21 @@ pub(crate) fn prescreen(
                     .split(['(', ':', ' '])
                     .next()
                     .unwrap_or_default();
-                // The trap must name an obligation of this op, not of one inside a callee.
+                // The trap must name an obligation of this op, not of one inside a callee: an op
+                // traps with its own name (`DIV.nonzero`), a combinator with its rule's
+                // (`FOLD.pre.0` for FOLD_BOUNDED).
                 let op_name = vg_core::opcode::by_code(node.ops[i as usize].opcode)
                     .map(|o| o.name)
                     .unwrap_or_default();
-                if kind.split('.').next() == Some(op_name) && kind.contains('.') {
+                let rule = match op_name {
+                    "FOLD_BOUNDED" => "FOLD",
+                    "GENERATE" => "GEN",
+                    "SIMD_MAP" => "MAP",
+                    "ASSERT_GUARD" => "GUARD",
+                    "CALL_HASH" => "CALL",
+                    other => other,
+                };
+                if kind.split('.').next() == Some(rule) && kind.contains('.') {
                     out.findings
                         .entry(format!("@{label}/%{i}/{kind}"))
                         .or_insert(Finding {
@@ -346,7 +438,12 @@ fn literals(node: &Node) -> Vec<(Type, Value)> {
         match t {
             Term::Const(c) => {
                 let c = &node.consts[*c as usize];
-                if let Ok(v) = decode_const(c) {
+                // Formula integers are mathematical (type Int), stored as little-endian bytes.
+                let v = match c.ty {
+                    Type::Int => vg_core::lower::int_value(&c.bytes).map(Value::Int),
+                    _ => decode_const(c).ok(),
+                };
+                if let Some(v) = v {
                     out.push((c.ty.clone(), v));
                 }
             }
@@ -447,16 +544,19 @@ fn candidates(ty: &Type, lits: &[(Type, Value)]) -> Vec<Value> {
             .collect(),
         _ => vec![],
     };
-    for (lt, lv) in lits.iter().filter(|(lt, _)| lt == ty) {
-        match (lt, lv) {
-            (Type::UInt(_) | Type::SInt(_), Value::Int(c)) => {
+    // A literal is a boundary for every integer type it fits: formula literals are not typed like
+    // the values they bound (`xs[i] <= 100` for a u32 xs).
+    for (lt, lv) in lits {
+        match (lv, ty) {
+            (Value::Int(c), Type::UInt(_) | Type::SInt(_)) => {
                 for d in [c - 1, *c, c + 1] {
                     if vg_core::value::int_fits(d, ty) {
                         v.push(Value::Int(d));
                     }
                 }
             }
-            _ => v.push(lv.clone()),
+            _ if lt == ty => v.push(lv.clone()),
+            _ => {}
         }
     }
     let mut seen = Vec::new();

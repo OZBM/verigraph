@@ -1221,15 +1221,20 @@ fn check_callee_pre(
     if callee_node.contract.pre.is_empty() {
         return Ok(());
     }
-    let ok = holds_with_depth(callee_node, Clause::Pre, args, &[], callee, depth + 1)
-        .map_err(|e| e.with_op(op_idx, op_name))?;
-    if !ok {
-        let suffix = step.map_or_else(String::new, |s| format!(" at step/elem {s}"));
-        return Err(Trap::op(
-            op_idx,
-            op_name,
-            format!("{obl_kind}{suffix}: callee PRE failed for args {args:?}"),
-        ));
+    // The first conjunct that fails, so the trap names its obligation, `<kind>.<j>` (docs/15).
+    for j in 0..callee_node.contract.pre.len() {
+        let mut one = callee_node.clone();
+        one.contract.pre = vec![callee_node.contract.pre[j].clone()];
+        let ok = holds_with_depth(&one, Clause::Pre, args, &[], callee, depth + 1)
+            .map_err(|e| e.with_op(op_idx, op_name))?;
+        if !ok {
+            let suffix = step.map_or_else(String::new, |s| format!(" at step/elem {s}"));
+            return Err(Trap::op(
+                op_idx,
+                op_name,
+                format!("{obl_kind}.{j}{suffix}: callee PRE failed for args {args:?}"),
+            ));
+        }
     }
     Ok(())
 }

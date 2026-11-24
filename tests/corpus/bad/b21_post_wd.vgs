@@ -1,10 +1,14 @@
 // expect: reject @f/POST.0.wd.0
 module b21_post_wd;
 
-// POST divides by y, which may be zero: the formula is not defined there (ADR 0010).
+// POST divides by the result, which is zero whenever x's low byte is: the formula is not defined
+// there (ADR 0010).
 NODE @f {
-  SIGNATURE: (x: u32, y: u32) -> (u32);
+  SIGNATURE: (x: u32) -> (u32);
   EFFECTS: [];
-  CONTRACT { POST: result == x / y * y + x % y; }
-  BODY { RETURN(x); }
+  CONTRACT { POST: x / result >= 0; }
+  BODY {
+    %0 = AND(x, 255:u32);
+    RETURN(%0);
+  }
 }

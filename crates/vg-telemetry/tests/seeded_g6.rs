@@ -44,10 +44,19 @@ fn g6_seeded_slices() {
     for path in &files {
         let fname = path.file_name().unwrap().to_string_lossy();
         let src = std::fs::read_to_string(path).unwrap();
-        let expect_id = src
+        // `reject <ID>`: a counterexample reproduced on real inputs; `contract_gap <ID>`: the
+        // obligation fails only through values a contract or invariant allows (ADR 0006).
+        let (want, expect_id) = src
             .lines()
-            .find_map(|l| l.strip_prefix("// expect: reject "))
-            .map(str::trim)
+            .find_map(|l| {
+                l.strip_prefix("// expect: reject ")
+                    .map(|id| (Verdict::Counterexample, id))
+                    .or_else(|| {
+                        l.strip_prefix("// expect: contract_gap ")
+                            .map(|id| (Verdict::ContractGap, id))
+                    })
+            })
+            .map(|(v, id)| (v, id.trim()))
             .unwrap_or_else(|| panic!("missing expect line in {fname}"));
         let slice_max: usize = src
             .lines()
@@ -75,9 +84,9 @@ fn g6_seeded_slices() {
             ));
             continue;
         };
-        if ob.verdict != Verdict::Counterexample {
+        if ob.verdict != want {
             failures.push(format!(
-                "{fname}: expected Counterexample for {expect_id}, got {:?} ({})",
+                "{fname}: expected {want:?} for {expect_id}, got {:?} ({})",
                 ob.verdict, ob.message
             ));
             continue;
