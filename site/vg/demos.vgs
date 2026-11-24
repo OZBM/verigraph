@@ -1,0 +1,212 @@
+// expect: verify
+// The lab nodes of the site's chapters: a plotting grid, the repaired soft-knee mapped over a grid,
+// and the loud test chord the audio-limiter demo feeds to examples/audio_limiter.vgs's @limit_frame.
+// @soft_knee, @fract and @sin_turns are copies, character for character, of the nodes of
+// examples/quickstart.vgs and site/vg/weblib.vgs: a node's identity is its content, so the copies
+// have the same node hash as the originals, and site/build.sh checks that they do.
+module demos;
+
+// ---------------------------------------------------------------------------------------------
+// Plotting
+// ---------------------------------------------------------------------------------------------
+
+NODE @grid_pt [intent: "Point j of 256 evenly spaced points from lo to hi, kept inside [lo, hi]"] {
+  SIGNATURE: (j: u64, lo: f32, hi: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: j < 256 && lo >= -1000000.0 && hi <= 1000000.0 && lo < hi;
+    POST: result >= lo && result <= hi;
+  }
+  BODY {
+    %0 = CAST.f32(j);
+    %1 = FDIV(%0, 255.0:f32);
+    %2 = FSUB(hi, lo);
+    %3 = FMA(%2, %1, lo);
+    %4 = FCLAMP(%3, lo, hi);
+    RETURN(%4);
+  }
+}
+
+NODE @grid [intent: "256 evenly spaced points from lo to hi: the x axis of a plot", export] {
+  SIGNATURE: (lo: f32, hi: f32) -> (Array<f32, 256>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lo >= -1000000.0 && hi <= 1000000.0 && lo < hi;
+    POST: forall(j in 0..256) { result[j] >= lo && result[j] <= hi };
+  }
+  BODY {
+    %0 = GENERATE(@grid_pt, 256:u64, lo, hi);
+    RETURN(%0);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The repaired soft-knee of examples/quickstart.vgs and examples/audio_limiter.vgs, over a grid
+// ---------------------------------------------------------------------------------------------
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}
+
+NODE @knee_curve [intent: "The repaired soft-knee applied to 256 samples", export] {
+  SIGNATURE: (xs: Array<f32, 256>, knee: f32) -> (Array<f32, 256>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: knee >= 0.5 && knee <= 0.99 && forall(i in 0..256) { is_finite(xs[i]) };
+    POST: forall(i in 0..256) { result[i] >= -1.0 && result[i] <= 1.0 && ((xs[i] >= 0.0) == (result[i] >= 0.0)) };
+  }
+  BODY {
+    %0 = SIMD_MAP(@soft_knee, xs, knee);
+    RETURN(%0);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The test signal of the audio-limiter demo: an A major chord, too loud on purpose
+// ---------------------------------------------------------------------------------------------
+
+// Copies of site/vg/weblib.vgs's @fract and @sin_turns (see there for the approximation).
+NODE @fract [intent: "The fractional part of x for 0 <= x < 2^23, like GLSL fract; 0 elsewhere"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0.0 && result < 1.0;
+  }
+  BODY {
+    %0 = GE.f(x, 0.0:f32);
+    %1 = LT.f(x, 8388608.0:f32);
+    %2 = BAND(%0, %1);
+    %3 = SELECT(%2, x, 0.0:f32);
+    %4 = CAST.u32(%3);
+    %5 = CAST.f32(%4);
+    %6 = FSUB(%3, %5);
+    RETURN(%6);
+  }
+}
+
+NODE @sin_turns [intent: "sin(2 pi x) for 0 <= x < 2^22, within 0.0011: Math.sin in turns"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FADD(x, 0.5:f32);
+    %1 = CALL_HASH(@fract, %0);
+    %2 = FSUB(%1, 0.5:f32);
+    %3 = FABS(%2);
+    %4 = FMUL(%2, %3);
+    %5 = FMUL(%2, 8.0:f32);
+    %6 = FMUL(%4, 16.0:f32);
+    %7 = FSUB(%5, %6);
+    %8 = FABS(%7);
+    %9 = FMUL(%7, %8);
+    %10 = FSUB(%9, %7);
+    %11 = FMUL(%10, 0.2249999940395355224609375:f32);
+    %12 = FADD(%11, %7);
+    RETURN(%12);
+  }
+}
+
+// Element i of a 512 x 2 frame in memory order (sample i / 2, channel i mod 2) at 44.1 kHz:
+// 0.5 sin(220 Hz) + 0.35 sin(277.18 Hz) + 0.3 sin(329.63 Hz), the last a quarter turn later on the
+// right channel, times drive. Its peaks (1.15 x drive) are far above 1 once drive passes 1.
+NODE @tone_sample [intent: "Element i of frame f of a loud A major chord, stereo, 44.1 kHz"] {
+  SIGNATURE: (i: u64, frame: u32, drive: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 1024 && frame < 256 && drive >= 0.25 && drive <= 8.0;
+    POST: result >= -9.5 && result <= 9.5;
+  }
+  BODY {
+    %0 = DIV.checked(i, 2:u64);
+    %1 = MOD.checked(i, 2:u64);
+    %2 = CAST.u64(frame);
+    %3 = MUL.checked(%2, 512:u64);
+    %4 = ADD.checked(%3, %0);
+    %5 = CAST.f32(%4);
+    %6 = CAST.f32(%1);
+    %7 = FMUL(%5, 0.0049886621315192746:f32);
+    %8 = FMUL(%5, 0.0062853197278911566:f32);
+    %9 = FMUL(%5, 0.0074745487528344673:f32);
+    %10 = FMA(%6, 0.25:f32, %9);
+    %11 = CALL_HASH(@sin_turns, %7);
+    %12 = CALL_HASH(@sin_turns, %8);
+    %13 = CALL_HASH(@sin_turns, %10);
+    %14 = FMUL(%11, 0.5:f32);
+    %15 = FMUL(%12, 0.35:f32);
+    %16 = FMUL(%13, 0.3:f32);
+    %17 = FADD(%14, %15);
+    %18 = FADD(%17, %16);
+    %19 = FMUL(%18, drive);
+    RETURN(%19);
+  }
+}
+
+// Every element is bounded, hence finite: exactly what @limit_frame's PRE asks of its input, so
+// this frame's bytes can go to the limiter as they are.
+NODE @tone [intent: "Frame f of the loud test chord: 512 stereo samples, interleaved, as @limit_frame reads them", export] {
+  SIGNATURE: (frame: u32, drive: f32) -> (Array<f32, 1024>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: frame < 256 && drive >= 0.25 && drive <= 8.0;
+    POST: forall(i in 0..1024) { result[i] >= -9.5 && result[i] <= 9.5 };
+  }
+  BODY {
+    %0 = GENERATE(@tone_sample, 1024:u64, frame, drive);
+    RETURN(%0);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The peak of a frame, so the page shows how loud a frame is without computing it itself
+// ---------------------------------------------------------------------------------------------
+
+NODE @peak_step [intent: "Fold step: the larger of the peak so far and |x|"] {
+  SIGNATURE: (acc: f32, x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc >= 0.0 && is_finite(x);
+    POST: result >= acc && result >= 0.0;
+  }
+  BODY {
+    %0 = FABS(x);
+    %1 = FMAX(acc, %0);
+    RETURN(%1);
+  }
+}
+
+NODE @peak [intent: "The largest absolute value of a 512 x 2 frame's 1024 samples", export] {
+  SIGNATURE: (xs: Array<f32, 1024>) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..1024) { is_finite(xs[i]) };
+    POST: result >= 0.0;
+    INVARIANT @nonneg(k, acc): acc >= 0.0;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@peak_step, xs, init=0.0:f32, invariant=@nonneg);
+    RETURN(%0);
+  }
+}

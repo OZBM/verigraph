@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Chapitre 3 · Lire et écrire VG-Sym · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Maîtriser la syntaxe de VG-Sym, ses types, ses neuf familles d'opérations, ses combinateurs bornés, ses contrats et le décodage contraint vg-decode.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/vg-sym.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 3 · Le langage · vg-decode</p>
+    <h1>Lire et écrire <em>VG-Sym.</em></h1>
+    <p class="lede"><code>VG-Sym</code> est la projection textuelle que les agents rédigent et que les humains relisent. Chaque port y est assigné une seule fois, chaque expression est mise à plat, et l'ordre strict de définition avant usage permet de contrôler la validité d'un programme à chaque jeton produit.</p>
+    <ul class="crates">
+      <li><code>vg-core</code></li>
+      <li><code>vg-decode</code></li>
+    </ul>
+    <div class="ch-meta">
+      <span>Lecture : 16 min</span>
+      <span>Prérequis : chapitre 2</span>
+    </div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="anatomie"><span class="n">3.1</span>Anatomie d'un nœud VG-Sym</h2>
+        <p><dfn>VG-Sym</dfn> est un langage volontairement explicite. Il interdit les expressions imbriquées (<code>a + b * c</code>) et impose l'<dfn>assignation unique</dfn> : chaque instruction produit un ou plusieurs ports frais (<code>%0</code>, <code>%1</code>, …) à partir d'une unique opération. De plus, la règle de <dfn>définition avant usage</dfn> (ADR 0005) oblige à déclarer chaque port avant de le lire, et chaque nœud ou spécification avant de l'appeler.</p>
+        <p>Un fichier commence toujours par <code>module &lt;nom&gt;;</code>, puis enchaîne des définitions de nœuds (<code>NODE</code>), de spécifications exécutables (<code>SPEC</code>) ou de requêtes au registre (<code>@MESH_QUERY</code>). Chaque nœud est désigné par une <dfn>étiquette</dfn> commençant par <code>@</code> (jamais une empreinte écrite à la main) et utilise des <dfn>littéraux typés</dfn> comme <code>0.0:f32</code>. Survolez ou sélectionnez au clavier les éléments surlignés de <code>@soft_knee</code> ci-dessous pour inspecter chaque pièce de son anatomie.</p>
+
+        <div class="annotated">
+<pre class="code vgs" data-file="examples/audio_limiter.vgs"><code><span data-title="module" data-note="En-tête obligatoire du fichier. Un module regroupe des définitions ordonnées de haut en bas (les noyaux d'abord, le nœud principal ensuite).">module audio_limiter;</span>
+
+<span data-title="NODE et étiquette" data-note="Déclare un nœud identifié localement par l'étiquette @soft_knee. La chaîne d'outils calculera son empreinte BLAKE3 et l'épinglera dans vg.lock.">NODE @soft_knee</span> <span data-title="Attribut intent" data-note="Description humaine stockée dans la section DEBUG (0x7F). Elle aide à la relecture et à l'indexation, mais n'entre jamais dans node_hash.">[intent: "Soft-knee clip of one sample into [-1, 1]"]</span> {
+  <span data-title="SIGNATURE" data-note="Liste des paramètres d'entrée nommés (x, knee) et des types de sortie. Renommer x ou knee ne change pas l'empreinte du nœud.">SIGNATURE: (x: f32, knee: f32) -&gt; (f32);</span>
+  <span data-title="EFFECTS" data-note="Ensemble d'effets autorisés. Une liste vide [] signifie que le nœud est pur (PURE) et peut servir de noyau aux combinateurs.">EFFECTS: [];</span>
+  <span data-title="CONTRACT" data-note="Bloc des propriétés formelles. Toutes les clauses PRE et POST s'assemblent en conjonctions vérifiées par les solveurs SMT.">CONTRACT</span> {
+    <span data-title="PRE" data-note="Précondition : supposée vraie à l'entrée. Chaque appelant doit la prouver, et le point d'entrée exporté la valide à la frontière.">PRE:  is_finite(x) &amp;&amp; knee &gt;= 0.5 &amp;&amp; knee &lt;= 0.99;</span>
+    <span data-title="POST" data-note="Postcondition : prouvée sur result pour toute entrée satisfaisant PRE. Ses trois conjonctions sont numérotées POST.0, POST.1 et POST.2.">POST: result &gt;= -1.0 &amp;&amp; result &lt;= 1.0 &amp;&amp; ((x &gt;= 0.0) == (result &gt;= 0.0));</span>
+  }
+  <span data-title="BODY" data-note="Graphe acyclique d'instructions. Aucun saut ni boucle : la terminaison est garantie par la structure.">BODY</span> {
+    <span data-title="Port et opération" data-note="Assignation unique : le port %0 reçoit la valeur absolue IEEE 754 de x. Il ne pourra jamais être réassigné.">%0  = FABS(x);</span>
+    %1  = FSUB(%0, knee);
+    <span data-title="Littéral typé" data-note="Chaque constante dans BODY porte explicitement son type (0.0:f32), car aucune conversion implicite n'existe dans le langage.">%2  = FMAX(%1, 0.0:f32);</span>           // excess over the knee, &gt;= 0
+    %3  = FSUB(1.0:f32, knee);         // exact for knee in [0.5, 1]
+    %4  = FDIV(%2, %3);                // t; overflows to +inf for huge x
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);           // u = 1 - 1/(1+t), in [0, 1]
+    <span data-title="FMA" data-note="Multiplication-addition fusionnée en un seul arrondi IEEE 754 : knee + (1 - knee) * u. Pas de contraction implicite ailleurs.">%8  = FMA(%3, %7, knee);</span>           // knee + (1 - knee) * u
+    %9  = FCOPYSIGN(%8, x);
+    <span data-title="Comparaison typée" data-note="Le suffixe .f répète que les opérandes sont des flottants (.s pour signés, .u pour non signés). vg-types vérifie la concordance.">%10 = LE.f(%0, knee);</span>
+    <span data-title="SELECT" data-note="Multiplexeur strict : évalue %10, x et %9, puis choisit x si %10 est vrai et %9 sinon.">%11 = SELECT(%10, x, %9);</span>          // linear below the knee
+    <span data-title="FCLAMP" data-note="Borne dans [-1.0, 1.0] en propageant NaN. Porte une obligation FCLAMP.bounds vérifiant que -1.0 &lt;= 1.0 et qu'aucune borne n'est NaN.">%12 = FCLAMP(%11, -1.0:f32, 1.0:f32);</span>
+    <span data-title="RETURN" data-note="Seule sortie autorisée du corps. Doit être la dernière instruction et correspondre exactement aux types résultats de SIGNATURE.">RETURN(%12);</span>
+  }
+}</code></pre>
+          <aside class="panel annot-panel">
+            <span class="label">Inspectez le code</span>
+            <p>Survolez ou tabulez vers n'importe quel segment souligné de <code>@soft_knee</code> pour afficher son rôle exact dans le graphe.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="types"><span class="n">3.2</span>Les types du langage</h2>
+        <p>Le système de types du MVP distingue les scalaires de taille fixe, les collections statiques ou dynamiques, les produits, les résultats d'erreur et les types de contrôle d'effets. Un sous-ensemble dit de <dfn>taille fixe</dfn> (<em>fixed-size</em> : <code>Bool</code>, scalaires, et <code>Array</code>, <code>Tensor</code>, <code>Tuple</code> ou <code>Result</code> bâtis uniquement avec eux) ne nécessite aucune allocation dans l'arène et peut donc circuler librement dans les noyaux de boucles.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Signification et règles clés</th><th>Phase</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Bool</code></td><td>Booléen <code>true</code> ou <code>false</code> (1 octet : <code>0x01</code> ou <code>0x00</code>)</td><td>MVP</td></tr>
+              <tr><td><code>u8</code>..<code>u64</code>, <code>i8</code>..<code>i64</code></td><td>Entiers 8, 16, 32 ou 64 bits ; toute arithmétique nomme son mode</td><td>MVP</td></tr>
+              <tr><td><code>f32</code>, <code>f64</code></td><td>Flottants IEEE 754-2019 avec un unique <code>NaN</code> canonique</td><td>MVP</td></tr>
+              <tr><td><code>f16</code>, <code>bf16</code></td><td>Stockage uniquement : convertir via <code>CAST</code> avant tout calcul</td><td>MVP</td></tr>
+              <tr><td><code>Array&lt;T, N&gt;</code></td><td>Tableau de taille fixe connue à la compilation (<code>N &lt; 2³²</code>, max 16 Mio)</td><td>MVP</td></tr>
+              <tr><td><code>Tensor&lt;T, [d…]&gt;</code></td><td>Tableau <em>n</em>-dimensionnel en ordre ligne-majeur (dimensions statiques au MVP)</td><td>MVP / Alpha</td></tr>
+              <tr><td><code>Slice&lt;T&gt;</code></td><td>Vue avec longueur dynamique (<code>u64</code>) sur une entrée ou l'arène</td><td>MVP</td></tr>
+              <tr><td><code>Tuple&lt;T1, …&gt;</code></td><td>Produit jusqu'à 255 champs, projeté par <code>PROJ(t, j)</code></td><td>MVP</td></tr>
+              <tr><td><code>Result&lt;T, E&gt;</code></td><td>Somme binaire construite par <code>OK</code>/<code>ERR</code> (annotation de port requise)</td><td>MVP</td></tr>
+              <tr><td><code>Eff</code></td><td>Jeton linéaire qui ordonne les opérations à effets</td><td>MVP</td></tr>
+              <tr><td><code>FileIn</code>, <code>FileOut</code>, <code>Clock</code></td><td>Poignées de capacité créées uniquement par <code>vg-rt</code></td><td>MVP</td></tr>
+              <tr><td><code>{x: T | φ}</code></td><td>Type de raffinement (en tête de <code>SIGNATURE</code> au MVP)</td><td>MVP</td></tr>
+              <tr><td><code>Arena&lt;N&gt;</code>, unions, génériques</td><td>Arènes explicites, types sommes et polymorphisme paramétrique</td><td>Alpha</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="note note-warn">
+          <b>Attention — Quatre pièges lexicaux fréquents (docs/03)</b>
+          <ul>
+            <li><strong>Espace autour de <code>%</code> :</strong> un port comme <code>%2</code> est un jeton unique. Écrire <code>x%2</code> dans une formule se lit <code>x</code> suivi du port <code>%2</code> ; écrivez toujours <code>x % 2</code>.</li>
+            <li><strong>Projections imbriquées :</strong> <code>t.0.1</code> se découpe en <code>t</code>, <code>.</code> et le décimal <code>0.1</code> ; écrivez <code>(t.0).1</code>.</li>
+            <li><strong>Signe des littéraux :</strong> les nombres ne portent pas de signe dans le lexeur (<code>x-1</code> vaut <code>x</code>, <code>-</code>, <code>1</code>), sauf dans une formule devant un littéral typé comme <code>-128:i8</code>.</li>
+            <li><strong>Mots réservés :</strong> tous les noms de types, d'opérations et de clauses (<code>result</code>, <code>in</code>, <code>f32</code>, <code>NODE</code>) sont réservés (<code>VG-P0004</code>).</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="operations"><span class="n">3.3</span>Les neuf familles d'opérations</h2>
+        <p>La table normative <code>docs/14-opcode-reference.md</code> recense toutes les opérations du MVP en neuf familles. Chaque opération déduit ses types de sortie uniquement de son opcode, de son mode et des types de ses opérandes (sauf <code>OK</code> et <code>ERR</code>, qui lisent l'annotation écrite sur le port de destination).</p>
+
+        <div class="cards">
+          <div class="card">
+            <span class="label">0x0001–0x000C · Structure</span>
+            <h3>Plomberie et conversions</h3>
+            <p><code>IDENTITY</code>, <code>TUPLE</code>, <code>PROJ</code>, <code>SELECT</code>, <code>CAST</code>, <code>AS_BYTES</code>, <code>OK</code>, <code>ERR</code>, <code>IS_OK</code>, <code>GET_OK</code>, <code>GET_ERR</code>.</p>
+            <div class="op-card-code">%17 = CAST.u32(%14);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0010–0x001F · Arithmétique entière</span>
+            <h3>Modes explicites obligatoires</h3>
+            <p><code>ADD</code>, <code>SUB</code>, <code>MUL</code>, <code>DIV</code>, <code>MOD</code>, <code>NEG</code> avec <code>.checked</code> (obligation), <code>.wrap</code> (modulaire) ou <code>.sat</code> (borné).</p>
+            <div class="op-card-code">%0 = ADD.sat(a, b);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0030–0x003F · Bits</span>
+            <h3>Masques, décalages, rotations</h3>
+            <p><code>AND</code>, <code>OR</code>, <code>XOR</code>, <code>NOT</code>, <code>SHL</code>/<code>SHR</code> (<code>.checked</code> ou <code>.wrap</code>), <code>ROTL</code>, <code>ROTR</code>.</p>
+            <div class="op-card-code">%2 = SHR.checked(%1, 1:u32);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0040–0x004F · Flottants IEEE 754</span>
+            <h3>Arrondi au plus près pair</h3>
+            <p><code>FADD</code>, <code>FSUB</code>, <code>FMUL</code>, <code>FDIV</code>, <code>FMA</code>, <code>FNEG</code>, <code>FABS</code>, <code>FMIN</code>, <code>FMAX</code>, <code>FCLAMP</code>, <code>FCOPYSIGN</code>, <code>FSQRT</code>.</p>
+            <div class="op-card-code">%8 = FMA(%3, %7, knee);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0050–0x005F · Comparaison &amp; logique</span>
+            <h3>Suffixes .s, .u, .f</h3>
+            <p><code>EQ</code>, <code>NE</code>, <code>LT</code>, <code>LE</code>, <code>GT</code>, <code>GE</code>, plus les opérateurs booléens <code>BAND</code>, <code>BOR</code> et <code>BNOT</code>.</p>
+            <div class="op-card-code">%10 = LE.f(%0, knee);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0060–0x006F · Collections</span>
+            <h3>Tableaux et tranches</h3>
+            <p><code>INDEX</code>, <code>UPDATE</code>, <code>LEN</code> (retourne <code>u64</code>), <code>SLICE</code> (vue sans copie) et <code>CONCAT</code>.</p>
+            <div class="op-card-code">%16 = INDEX(palette, %15);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0100–0x0107 · Combinateurs</span>
+            <h3>Itération et garde paresseuse</h3>
+            <p><code>SIMD_MAP</code>, <code>FOLD_BOUNDED</code>, <code>GENERATE</code> et <code>ASSERT_GUARD</code> / <code>ASSERT_GUARD.branch</code>.</p>
+            <div class="op-card-code">%0 = SIMD_MAP(@soft_knee, frame, knee);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0300 · Composition</span>
+            <h3>Appel par empreinte</h3>
+            <p><code>CALL_HASH</code> appelle un nœud ou une requête <code>@MESH_QUERY</code> épinglée ; la preuve ne lit que son contrat.</p>
+            <div class="op-card-code">%2 = CALL_HASH(@sha256, %1);</div>
+          </div>
+          <div class="card">
+            <span class="label">0x0400–0x0402 · Effets MVP</span>
+            <h3>Chaînés par le jeton Eff</h3>
+            <p><code>FILE_READ</code>, <code>FILE_WRITE</code> et <code>CLOCK_READ</code> prennent et rendent le jeton <code>Eff</code> en première position.</p>
+            <div class="op-card-code">%0, %1 = FILE_READ(io, f, 4096:u64);</div>
+          </div>
+        </div>
+
+        <p>Dans le terminal ci-dessous, <code>vg run</code> exécute trois nœuds de <code>examples/quickstart.vgs</code> dans l'interpréteur de référence <code>vg-interp</code> : une addition saturante sur octets (<code>ADD.sat</code>), un calcul de moyenne sans débordement par décalage de bits (<code>SHR.checked</code>), et une somme bornée par <code>FOLD_BOUNDED</code>.</p>
+
+        <div class="term" id="term-ops"></div>
+      </section>
+
+      <section>
+        <h2 id="combinateurs"><span class="n">3.4</span>Trois combinateurs au lieu des boucles</h2>
+        <p>Le sous-ensemble MVP de <code>VG-Sym</code> ne comporte aucune boucle impérative <code>for</code> ou <code>while</code>. À la place, il fournit trois combinateurs d'ordre supérieur qui appliquent un <dfn>noyau</dfn> — un nœud pur, sans effets, à types de taille fixe et à résultat unique — sur un domaine borné. Comme un noyau ne capture rien implicitement, toute donnée extérieure doit lui être transmise en argument de diffusion (<em>broadcast</em>) après la collection ou le compteur.</p>
+
+        <h3>1 · <code>SIMD_MAP</code> — Appliquer un noyau à chaque élément</h3>
+        <p><code>SIMD_MAP(@f, xs, b…)</code> applique le noyau <code>@f</code> à chaque élément d'un tableau, d'un tenseur ou d'une tranche <code>xs</code>, indépendamment et dans un ordre quelconque. Le vérifieur n'a pas besoin de dérouler la boucle : il prouve la précondition de <code>@f</code> une seule fois pour un élément arbitraire (<em>fresh element</em>).</p>
+
+<pre class="code vgs" data-file="examples/audio_limiter.vgs"><code>NODE @limit_frame [intent: "Limit a 512x2 stereo frame and digest it", export] {
+  SIGNATURE: (frame: Tensor&lt;f32, [512, 2]&gt;) -&gt; (Tensor&lt;f32, [512, 2]&gt;, Array&lt;u8, 32&gt;);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  forall(i in 0..512, c in 0..2) { is_finite(frame[i, c]) };
+    POST: forall(i in 0..512, c in 0..2) { result.0[i, c] &gt;= -1.0 &amp;&amp; result.0[i, c] &lt;= 1.0
+                                           &amp;&amp; ((frame[i, c] &gt;= 0.0) == (result.0[i, c] &gt;= 0.0)) }
+          &amp;&amp; result.1 == spec:sha256(as_bytes(result.0));
+    COST: heap_bytes == 0 &amp;&amp; arena_bytes == 0;
+    BUDGET: latency_p99_us &lt;= 500;
+  }
+  LEARNABLE {
+    knee: f32 in [0.5, 0.99];          // frozen in the MVP; a loss arrives with the tuner (P9, R-07)
+  }
+  BODY {
+    %0 = SIMD_MAP(@soft_knee, frame, knee);
+    %1 = AS_BYTES(%0);
+    %2 = CALL_HASH(@sha256, %1);
+    RETURN(%0, %2);
+  }
+}</code></pre>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-map" role="img" aria-label="Schéma de SIMD_MAP dans @limit_frame appliquant @soft_knee à chaque échantillon avec diffusion de knee"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="btn-map">Animer SIMD_MAP</button>
+            </div>
+          </div>
+          <figcaption><b>Figure 3.1</b> <code>SIMD_MAP(@soft_knee, frame, knee)</code> dans <code>@limit_frame</code> : les <code>1 024</code> échantillons sont transformés en parallèle avant <code>AS_BYTES</code> et <code>CALL_HASH(@sha256, %1)</code>. <span class="proof" id="fig-map-proof"></span></figcaption>
+        </figure>
+
+        <h3>2 · <code>FOLD_BOUNDED</code> — Réduction séquentielle avec invariant</h3>
+        <p>Lorsque chaque étape dépend de la précédente, on utilise <code>FOLD_BOUNDED(@f, xs, b…, init=a, invariant=@I)</code>. Le combinateur impose de nommer une clause <code>INVARIANT @I(k, acc)</code> qui relie le compteur d'étapes <code>k</code> et l'accumulateur <code>acc</code>. Le vérifieur prouve l'initialisation (<code>FOLD.base</code> à <code>k = 0</code>), la précondition du noyau à chaque pas (<code>FOLD.pre</code>) et le maintien de l'invariant (<code>FOLD.step</code>), sans jamais dérouler le tableau. Dans le contrat, le terme <code>fold:f(init, xs, k, b…)</code> (ADR 0008) représente la valeur exacte de la réduction après <code>k</code> étapes.</p>
+
+<pre class="code vgs" data-file="examples/quickstart.vgs"><code>NODE @add_step {
+  SIGNATURE: (acc: u32, x: u32) -&gt; (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  acc &lt;= 3000 &amp;&amp; x &lt;= 1000;
+    POST: result == acc + x;
+  }
+  BODY {
+    %0 = ADD.checked(acc, x);
+    RETURN(%0);
+  }
+}
+
+NODE @sum4 [intent: "Sum four readings of at most 1000 each"] {
+  SIGNATURE: (xs: Array&lt;u32, 4&gt;) -&gt; (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  forall(i in 0..4) { xs[i] &lt;= 1000 };
+    POST: result &lt;= 4000;
+    INVARIANT @bounded(k, acc): acc &lt;= 1000 * k;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@add_step, xs, init=0:u32, invariant=@bounded);
+    RETURN(%0);
+  }
+}</code></pre>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-fold" role="img" aria-label="Chaîne séquentielle de FOLD_BOUNDED sur quatre éléments dans @sum4 avec invariant @bounded"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="btn-fold">Suivre l'accumulateur</button>
+            </div>
+          </div>
+          <figcaption><b>Figure 3.2</b> Déroulement logique de <code>@sum4</code> : l'invariant <code>acc &lt;= 1000 * k</code> est vrai au départ (<code>0 &lt;= 0</code>), conservé à chaque appel à <code>@add_step</code>, et donne <code>result &lt;= 4000</code> à <code>k = 4</code>. <span class="proof" id="fig-fold-proof"></span></figcaption>
+        </figure>
+
+        <h3>3 · <code>GENERATE</code> — Construire une collection depuis ses indices</h3>
+        <p><code>GENERATE(@f, n, b…)</code> appelle <code>@f(i, b…)</code> pour tout indice <code>i</code> de <code>0</code> à <code>n - 1</code>. Si <code>n</code> est un littéral, le résultat est un <code>Array</code> alloué sur la pile ; sinon c'est un <code>Slice</code> alloué dans l'arène (nécessitant l'effet <code>ARENA</code>). Dans <code>examples/mandelbrot.vgs</code>, <code>@render</code> enchaîne deux <code>GENERATE</code> pour bâtir la palette de 16 couleurs puis l'image de <code>49 152</code> pixels.</p>
+
+<pre class="code vgs" data-file="examples/mandelbrot.vgs"><code>NODE @render [intent: "Render a 256 x 192 view of the Mandelbrot set as RGBA pixels", export] {
+  SIGNATURE: (cx: f32, cy: f32, scale: f32) -&gt; (Array&lt;u32, 49152&gt;);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: cx &gt;= -2.5 &amp;&amp; cx &lt;= 1.5 &amp;&amp; cy &gt;= -1.5 &amp;&amp; cy &lt;= 1.5 &amp;&amp; scale &gt; 0.0 &amp;&amp; scale &lt;= 0.02;
+    POST: forall(i in 0..49152) { result[i] &gt;= 4278190080 };
+  }
+  BODY {
+    %0 = GENERATE(@palette_entry, 16:u64);
+    %1 = GENERATE(@pixel, 49152:u64, cx, cy, scale, %0);
+    RETURN(%1);
+  }
+}</code></pre>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-gen" role="img" aria-label="Enchaînement de deux GENERATE dans @render pour produire la palette puis les pixels"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="btn-gen">Animer GENERATE</button>
+            </div>
+          </div>
+          <figcaption><b>Figure 3.3</b> Composition dans <code>@render</code> : <code>@palette_entry</code> produit un tableau de 16 couleurs transmises en diffusion à <code>@pixel</code> sur <code>49 152</code> indices. <span class="proof" id="fig-gen-proof"></span></figcaption>
+        </figure>
+
+        <aside class="note note-warn">
+          <b>Attention — <code>SELECT</code> est strict, <code>ASSERT_GUARD</code> est paresseux</b>
+          <p><code>SELECT(cond, a, b)</code> évalue toujours ses deux branches <code>a</code> et <code>b</code> avant de choisir. Si l'une d'elles contient une opération qui peut piéger (comme <code>INDEX</code> sur une tranche potentiellement vide ou <code>DIV.checked</code> par un diviseur nul), placez-la dans un nœud dédié et appelez <code>ASSERT_GUARD.branch(cond, @oui, args…, else=@non)</code> : c'est la seule opération paresseuse du langage.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="contrats"><span class="n">3.5</span>Le langage des contrats</h2>
+        <p>Les clauses <code>PRE</code>, <code>POST</code>, <code>INVARIANT</code>, <code>COST</code> et <code>BUDGET</code> utilisent une logique d'expressions pure sans effets de bord. On y retrouve les connecteurs <code>==&gt;</code> (implication), <code>||</code>, <code>&amp;&amp;</code>, <code>!</code>, la quantification bornée <code>forall(i in a..b) { φ }</code>, l'accès <code>xs[i]</code> et <code>t.j</code>, ainsi que les primitives <code>len</code>, <code>is_finite</code>, <code>is_nan</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>as_bytes</code>, <code>same</code>, <code>is_ok</code>, <code>ok</code>, <code>err</code>, <code>spec:s(…)</code> et <code>fold:f(…)</code>.</p>
+        <p>Deux règles de typage distinguent les formules du corps du programme. D'abord, <strong>les termes entiers sont des entiers mathématiques non bornés</strong> : dans un contrat, <code>acc + 1</code> ne déborde jamais et <code>len(xs)</code> est un entier naturel. Ensuite, <strong>les flottants suivent IEEE 754</strong> : <code>==</code> suit l'égalité IEEE (donc <code>NaN == NaN</code> est faux et <code>-0.0 == 0.0</code> est vrai), tandis que <code>same(a, b)</code> teste l'identité exacte. Un littéral décimal non typé comme <code>0.99</code> dans <code>knee &lt;= 0.99</code> adopte automatiquement le type flottant du terme qu'il rencontre (<code>0.99:f32</code>).</p>
+
+        <details class="deep">
+          <summary>Pour aller plus loin : bonne définition (.wd) et numérotation des obligations</summary>
+          <div>
+            <p>Selon ADR 0010 (<code>docs/13-semantics.md</code>), une formule ne doit jamais s'appuyer sur une valeur indéfinie comme <code>a / 0</code>, un indice hors bornes <code>xs[i]</code>, <code>ok(r)</code> sur un <code>Err</code> ou un appel <code>spec:s(args)</code> hors de sa <code>PRE</code>. Le vérifieur engendre automatiquement des obligations <code>.wd</code> (<em>well-definedness</em>) prouvées dans le contexte de la clause (par exemple <code>d != 0 ==&gt; result == x / d</code>).</p>
+            <p>Par ailleurs, plusieurs clauses <code>PRE</code> ou <code>POST</code> se fusionnent en une conjonction dans l'ordre du fichier (ADR 0007), et chaque conjonctif de haut niveau reçoit un identifiant indexé à partir de zéro : <code>@soft_knee/POST.0</code>, <code>POST.1</code>, <code>POST.2</code>.</p>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="decode"><span class="n">3.6</span>Décodage contraint (<code>vg-decode</code>)</h2>
+        <p>Pourquoi la règle « définition avant usage » est-elle si précieuse pour une IA ? Parce qu'elle rend <code>VG-Sym</code> vérifiable préfixe par préfixe. La bibliothèque <code>vg-decode</code> exploite cette propriété sur deux niveaux déjà livrés dans le MVP et prépare un troisième niveau de recherche :</p>
+        <ul>
+          <li><strong>Niveau 1 — Export de grammaire (<code>crates/vg-decode/src/grammar.rs</code>) :</strong> une source unique produit les grammaires <code>GBNF</code> (pour <code>llama.cpp</code>), <code>Lark</code> et <code>llguidance</code>. Sur <code>tools/vgsym.lark</code> (<span id="lark-lines">—</span> lignes), cela représente <span id="lark-nt">—</span> règles non terminales et <span id="lark-term">—</span> terminaux.</li>
+          <li><strong>Niveau 2 — Vérifieur incrémental <code>Prefix</code> (<code>crates/vg-decode/src/prefix.rs</code>) :</strong> consomme le texte jeton par jeton (<code>push(tok)</code>) et calcule par <code>allowed()</code> les classes de jetons, ports typés, étiquettes et opcodes autorisés sans erreur de syntaxe, de structure, de type ou d'effet. Sur le corpus de référence, <code>allowed()</code> tourne à <code>23 µs</code> au 99ᵉ centile (<code>PROGRESS.md</code>, 2026-11-23).</li>
+          <li><strong>Niveau 3 — Garde SMT (<code>[R-01]</code>) :</strong> masquage paresseux et asynchrone aux points de liaison pour les modèles locaux ouverts (<code>E-13</code>). Les API commerciales hébergées n'exposant pas de masquage de logits par jeton (<code>E-26</code>), elles passent par la boucle d'outils <code>vg check</code> / <code>vg verify</code>.</li>
+        </ul>
+
+        <p>Faites défiler les étapes ci-dessous pour observer comment l'automate de <code>Prefix</code> restreint les choix possibles jeton après jeton sur une ligne réelle tirée du test unitaire <code>allowed_precision_unit_tests</code> (<code>crates/vg-decode/tests/prefix.rs</code>), dans un nœud pur de signature <code>(x: u32, y: f32) -&gt; (u32)</code>.</p>
+
+        <div class="scrolly" id="story-decode">
+          <div class="scrolly-stage">
+            <figure class="fig" style="margin:0">
+              <div class="fig-stage">
+                <div class="decode-box">
+                  <div class="decode-line" id="decode-line" aria-live="polite"></div>
+                  <div class="decode-lists">
+                    <div class="decode-group">
+                      <span class="label">Jetons autorisés par Prefix::allowed()</span>
+                      <div class="tok-pills" id="decode-allow"></div>
+                    </div>
+                    <div class="decode-group">
+                      <span class="label">Exemples bloqués dès ce préfixe</span>
+                      <div class="tok-pills" id="decode-block"></div>
+                    </div>
+                  </div>
+                  <p class="decode-note" id="decode-note"></p>
+                </div>
+              </div>
+              <figcaption><b>Figure 3.4</b> Illustration jeton par jeton de <code>Prefix::allowed()</code> dérivée de <code>tools/vgsym.lark</code>, <code>crates/vg-decode/src/prefix.rs</code> et <code>crates/vg-decode/tests/prefix.rs:172-256</code> (<code>vg-decode</code> étant une bibliothèque Rust sans sous-commande CLI).</figcaption>
+            </figure>
+          </div>
+          <div class="scrolly-steps">
+            <div>
+              <h3>1 · Début d'instruction</h3>
+              <p>Dans un corps de nœud, une instruction ne peut commencer que par un nouveau port (<code>%0</code>) ou par <code>RETURN</code> (après au moins une instruction, ou directement).</p>
+            </div>
+            <div>
+              <h3>2 · Après le port <code>%0</code></h3>
+              <p>Un lien de port accepte soit une annotation de type optionnelle <code>:</code>, soit une virgule <code>,</code> pour une opération à plusieurs sorties, soit <code>=</code>.</p>
+            </div>
+            <div>
+              <h3>3 · Après <code>=</code> (filtrage d'effets)</h3>
+              <p>Comme <code>EFFECTS: []</code> est vide, <code>allowed().opcodes</code> autorise <code>ADD</code> ou <code>SUB</code>, mais exclut immédiatement <code>FILE_READ</code>, <code>FILE_WRITE</code> et <code>CLOCK_READ</code>.</p>
+            </div>
+            <div>
+              <h3>4 · Après <code>ADD</code> (mode obligatoire)</h3>
+              <p>Comme <code>ADD</code> exige un mode arithmétique, la parenthèse ouvrante <code>(</code> est refusée ; seul le point <code>.</code> est accepté.</p>
+            </div>
+            <div>
+              <h3>5 · Après <code>.</code> (modes valides)</h3>
+              <p>Seuls les trois modes de <code>ADD</code> (<code>checked</code>, <code>wrap</code>, <code>sat</code>) sont permis ; les suffixes de comparaison <code>s</code>, <code>u</code> ou <code>f</code> sont rejetés avant même d'être générés.</p>
+            </div>
+            <div>
+              <h3>6 · Premier opérande après <code>(</code></h3>
+              <p><code>ADD.checked</code> attend deux entiers de même largeur ou le premier opérande entier. Le paramètre <code>x: u32</code> est proposé, mais <code>y: f32</code> est filtré hors de <code>allowed().ports</code>.</p>
+            </div>
+            <div>
+              <h3>7 · Après <code>x, 1:</code> (typage du littéral)</h3>
+              <p>Puisque le premier opérande a fixé le type à <code>u32</code>, la seule annotation de type scalaire autorisée après <code>1:</code> est <code>u32</code> (ni <code>i32</code>, ni <code>u8</code>, ni <code>f32</code>).</p>
+            </div>
+            <div>
+              <h3>8 · Dans <code>RETURN(</code></h3>
+              <p>La signature attend <code>(u32)</code>. <code>Prefix</code> n'autorise donc que <code>%0: u32</code> ou <code>x: u32</code>, et écarte <code>y: f32</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p><code>vg-decode</code> s'intègre côté moteur d'inférence pour les modèles ouverts ; avec les modèles hébergés, la syntaxe est vérifiée a posteriori par <code>vg check</code>. De plus, comme le note <code>docs/adr/0001-format-encodings.md</code>, <code>VG-Sym</code> ne possède pas encore de littéraux textuels pour <code>nan:f32</code> ou <code>inf:f32</code> (un nœud qui en contient à l'état binaire n'a pas de désassemblage texte).</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">3.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Dans <code>%3 = ADD.checked(acc, %1);</code>, pourquoi doit-on écrire explicitement <code>.checked</code> ?</p>
+          <ol>
+            <li><button class="choice" data-right>Parce qu'aucune opération entière n'a de mode par défaut : l'agent doit choisir entre <code>.checked</code>, <code>.wrap</code> et <code>.sat</code>.</button></li>
+            <li><button class="choice">Parce que <code>ADD</code> sans suffixe ne s'applique qu'aux flottants.</button></li>
+            <li><button class="choice">Parce que <code>.checked</code> active un test à l'exécution dans le binaire compilé.</button></li>
+          </ol>
+          <p class="why" hidden><code>VG-Sym</code> bannit tout comportement implicite (invariant 6). Chaque opération entière doit nommer sa sémantique de débordement (<code>VG-S0102</code> si absent), et <code>.checked</code> engendre une obligation prouvée statiquement sans garde résiduelle.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Vous souhaitez lire le premier élément d'une tranche <code>xs</code> uniquement si <code>len(xs) &gt; 0</code>, sinon retourner <code>0</code>. Quelle construction est valide ?</p>
+          <ol>
+            <li><button class="choice">Calculer <code>%e = INDEX(xs, 0:u64);</code> puis <code>SELECT(%non_vide, %e, 0:u32);</code>.</button></li>
+            <li><button class="choice" data-right>Tester <code>len(xs) &gt; 0</code> et appeler <code>ASSERT_GUARD.branch(%cond, @head, xs, else=@zero)</code>.</button></li>
+            <li><button class="choice">Utiliser <code>SIMD_MAP(@head, xs)</code>.</button></li>
+          </ol>
+          <p class="why" hidden><code>SELECT</code> est strict et évalue ses deux arguments : <code>INDEX(xs, 0:u64)</code> échouerait à la vérification dès que <code>len(xs) == 0</code> est possible. <code>ASSERT_GUARD.branch</code> n'exécute que la branche sélectionnée.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Quelle règle de <code>VG-Sym</code> permet à <code>vg-decode</code> de rejeter <code>y: f32</code> dès la génération de <code>ADD.checked(x, …)</code> ?</p>
+          <ol>
+            <li><button class="choice">L'indentation obligatoire par deux espaces.</button></li>
+            <li><button class="choice" data-right>La définition avant usage (ADR 0005) combinée au typage local des opérandes.</button></li>
+            <li><button class="choice">L'exécution de <code>z3</code> après chaque caractère.</button></li>
+          </ol>
+          <p class="why" hidden>Parce que la signature, les effets et les ports antérieurs sont déjà connus dans le préfixe, <code>Prefix::allowed()</code> détermine localement, en quelques microsecondes, les types et opcodes compatibles sans aucun appel solveur.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p><code>VG-Sym</code> combine assignation unique, définition avant usage, modes explicites et trois combinateurs bornés pour rester à la fois lisible par l'humain, contraignable par <code>vg-decode</code> et vérifiable par les solveurs. Le chapitre suivant explore en détail comment <code>vg-types</code> vérifie les types, le jeton linéaire <code>Eff</code> et les poignées de capacité.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/vg-sym.js"></script>

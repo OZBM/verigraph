@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Du graphe au binaire · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment vg-codegen efface les preuves, émet de l'IR LLVM textuel et compile des binaires reproductibles avec vg-rt et son bac à sable.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/compilation.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 7 · vg-codegen · vg-rt</p>
+    <h1>Du graphe au binaire, <em>bit pour bit.</em></h1>
+    <p class="lede">Une fois toutes les obligations prouvées, <code>vg-codegen</code> transforme le graphe canonique en LLVM IR textuel, efface les vérifications superflues et compile avec <code>clang</code> vers Linux x86_64, macOS ARM64 et WebAssembly WASI, en liant un petit runtime C qui enferme le binaire dans un bac à sable système.</p>
+    <ul class="crates"><li><code>vg-codegen</code></li><li><code>vg-rt</code></li><li><code>clang</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 14 min</span><span>Prérequis : chapitre 5</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="pipeline"><span class="n">7.1</span>Six étapes du graphe vérifié au binaire</h2>
+        <p>Dans un compilateur traditionnel, la sûreté repose sur des contrôles à l'exécution (bornes de tableaux, vérifications de débordement) ou sur l'hypothèse risquée qu'il n'y a aucun comportement indéfini. VeriGraph suit la voie inverse : parce que <code>vg-smt</code> a déjà démontré l'absence de débordement et d'accès hors bornes, <code>vg-codegen</code> peut retirer les gardes prouvées tout en conservant une frontière sûre à l'entrée du module.</p>
+
+        <aside class="note note-info">
+          <b>Analogie · L'échafaudage retiré après le clavage</b>
+          <p>Les contrats et les obligations prouvées jouent le rôle d'un échafaudage qui garantit la géométrie d'une voûte pendant sa construction. Une fois la clef de voûte posée (<code>UNSAT</code>), l'échafaudage est démonté avant l'ouverture : ne restent que des instructions machine ajustées, et un portique de contrôle à l'entrée publique.</p>
+        </aside>
+
+        <figure class="fig">
+          <div class="fig-stage"><svg class="dg" id="fig-codegen" role="img" aria-label="Pipeline de vg-codegen en six étapes vers clang et vg-rt"></svg></div>
+          <figcaption><b>Figure 7.1</b> Les six étapes de <code>vg-codegen</code> (<code>docs/06-codegen-runtime.md</code>). <span class="proof" id="codegen-proof"></span></figcaption>
+        </figure>
+
+        <p>Pourquoi émettre de l'<dfn>IR LLVM textuel</dfn> plutôt que de lier l'API C++ d'une version précise de LLVM ? Parce que la syntaxe textuelle isole le compilateur Rust d'une dépendance lourde et permet d'inspecter directement le code envoyé à <code>clang</code> via l'option <code>--emit-llvm</code>. Voici l'IR réellement produit pour <code>@midpoint</code> (<code>examples/quickstart.vgs</code>) :</p>
+
+        <div class="tabs">
+          <div class="tablist">
+            <button aria-controls="tab-ir-int">Fonction interne <code>vgi_*</code></button>
+            <button aria-controls="tab-ir-chk">Entrée vérifiée <code>vg_*</code></button>
+          </div>
+          <div class="tabpanel" id="tab-ir-int">
+            <p>La fonction interne <code>vgi_ad55d2a62412</code> suppose <code>PRE</code> déjà vraie, marque le tampon de sortie <code>noalias</code> et porte l'attribut <code>nuw</code> sur <code>add</code> car <code>vg-smt</code> a prouvé l'absence de débordement :</p>
+            <pre class="code"><code id="ir-midpoint-internal"></code></pre>
+          </div>
+          <div class="tabpanel" id="tab-ir-chk">
+            <p>L'entrée exportée <code>vg_ad55d2a62412</code> contrôle la taille d'arène disponible, fixe l'environnement flottant par défaut via <code>vg_fp_enter()</code>, appelle <code>vgi_*</code>, puis restaure l'état du processeur avec <code>vg_fp_leave()</code> :</p>
+            <pre class="code"><code id="ir-midpoint-checked"></code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="effacement"><span class="n">7.2</span>Effacement des preuves, entrée vérifiée et NaN canonique</h2>
+        <p>L'<dfn>effacement des preuves</dfn> se voit concrètement en comparant le même calcul entier — <code>%0 = ADD.checked(x, 1:u8); RETURN(%0);</code> — compilé sous forme vérifiée (<code>tests/corpus/good/g01_add_bounded.vgs</code>, avec <code>PRE: x &lt; 255</code>) puis compilé sans preuve grâce au drapeau <code>--unverified</code> (<code>tests/corpus/bad/b01_add_overflow.vgs</code>) :</p>
+
+        <div class="ir-compare">
+          <div class="ir-box ok">
+            <span class="label" style="color:var(--proven)">Vérifié · g01_add_bounded.vgs</span>
+            <span class="ir-meta" id="erasure-ok-meta">—</span>
+            <pre class="code"><code id="erasure-ok-ir"></code></pre>
+          </div>
+          <div class="ir-box unv">
+            <span class="label" style="color:var(--coral)">Non vérifié · --unverified</span>
+            <span class="ir-meta" id="erasure-unv-meta">—</span>
+            <pre class="code"><code id="erasure-unv-ir"></code></pre>
+          </div>
+        </div>
+
+        <p>Dans la version prouvée, <code>vg-codegen</code> transmet la précondition via <code>llvm.assume</code> et émet un simple <code>add nuw i8 %in0, 1</code>, sans branchement. Avec <code>--unverified</code>, chaque opération partielle génère un test dynamique (<code>llvm.uadd.with.overflow.i8</code>) et un saut vers <code>vg_trap_guard</code> qui termine le processus avec le code <strong>4</strong> en cas de dépassement. L'outil MCP <code>vg_build</code> interdit d'ailleurs <code>--unverified</code>.</p>
+        <p>En parallèle, les rapports de compilation comptent dans <code>residual_guards</code> les <code>ASSERT_GUARD</code> dynamiques qui n'ont pas pu être prouvés toujours vrais : <code>0</code> sur <code>g01_add_bounded</code> et <code>@midpoint</code>, contre <code id="guard-demo-count">1</code> sur un nœud contenant un <code>ASSERT_GUARD</code> dépendant d'une condition booléenne inconnue (<code>ASSERT_GUARD.branch</code>, qui est un branchement normal, n'est jamais compté comme garde résiduelle). Le drapeau <code>--no-proof-facts</code> permet enfin aux tests différentiels de compiler sans <code>nsw</code>/<code>nuw</code>/<code>inbounds</code>/<code>llvm.assume</code> afin de vérifier qu'aucun fait erroné n'a corrompu l'optimisation.</p>
+
+        <h3>La frontière de confiance : l'entrée vérifiée (ADR 0009)</h3>
+        <p>Un appelant C ou JavaScript externe n'est pas prouvé par VeriGraph. Chaque nœud exporté ou racine reçoit donc une <dfn>entrée vérifiée</dfn> (<code>vg_&lt;12 hex&gt;</code>) qui valide les octets d'entrée avant d'appeler <code>vgi_&lt;12 hex&gt;</code> : elle renvoie <strong>0</strong> en cas de succès, <strong>1</strong> si <code>PRE</code> échoue, <strong>2</strong> si un encodage est invalide (un <code>Bool</code> différent de <code>0</code>/<code>1</code> ou un <code>NaN</code> non canonique) et <strong>3</strong> si l'arène fournie est trop petite.</p>
+        <p>Avant d'exécuter le graphe, <code>vg_fp_enter()</code> sauvegarde le registre flottant de l'appelant (<code>MXCSR</code> mis à <code>0x1F80</code> sur x86_64, <code>FPCR</code> mis à <code>0</code> sur ARM64 Darwin ; WebAssembly n'a qu'un seul mode) pour imposer l'arrondi au plus près pair et interdire le vidage des sous-normaux vers zéro — indispensable lorsqu'un greffon audio appelle VeriGraph depuis un hôte configuré en <i>flush-to-zero</i>. Aucun drapeau <code>-ffast-math</code> ni contraction implicite (<code>-ffp-contract=off</code>) n'est jamais activé.</p>
+
+        <h3>Un seul NaN en mémoire (ADR 0002)</h3>
+        <p>LLVM et les architectures matérielles choisissent des motifs de <code>NaN</code> différents selon les opérandes. Pour que <code>vg-interp</code>, x86_64, ARM64 et WebAssembly produisent des octets identiques, toute valeur flottante susceptible d'être <code>NaN</code> est normalisée en <dfn>NaN canonique</dfn> (bit de signe nul, calme) dès qu'elle devient des octets en mémoire ou en sortie ; lorsque le vérificateur prouve qu'un flottant n'est jamais <code>NaN</code> (comme dans <code>@soft_knee</code>), cette comparaison est effacée :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Format</th><th><code>f16</code></th><th><code>bf16</code></th><th><code>f32</code></th><th><code>f64</code></th></tr>
+            </thead>
+            <tbody>
+              <tr><td>NaN canonique (ADR 0002)</td><td><code>0x7E00</code></td><td><code>0x7FC0</code></td><td><code>0x7FC00000</code></td><td><code>0x7FF8000000000000</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details class="deep">
+          <summary>Comment les types VG deviennent l'ABI C et où vit la mémoire</summary>
+          <div>
+            <p>Chaque type VG correspond à une représentation C stable (<code>docs/06-codegen-runtime.md</code>) : <code>Bool</code> sur un octet (<code>uint8_t</code>), <code>Array</code> et <code>Tensor</code> en tableaux contigus ligne par ligne passés par pointeur, <code>Slice&lt;T&gt;</code> comme une paire <code>{ ptr, uint64_t len }</code>, et <code>Eff</code> effacé à la compilation une fois l'ordre des effets figé. Les valeurs fixes de plus de 4 Kio passent dans un bloc <i>scratch</i> au début de l'arène d'appel plutôt que sur la pile, afin de protéger les fils secondaires dont la pile peut être réduite à 512 Kio.</p>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="cibles"><span class="n">7.3</span>Trois cibles et reproductibilité octet pour octet</h2>
+        <p>Une seule commande <code>vg build</code> produit des exécutables liés pour les trois cibles du MVP : <code>aarch64-apple-darwin</code> (ligne de base <code>apple-m1</code>), <code>x86_64-unknown-linux-gnu</code> (<code>x86-64-v3</code> avec AVX2, FMA et BMI2, via <code>zig cc</code>) et <code>wasm32-wasip1</code> (<code>simd128</code> activé, <code>relaxed-simd</code> désactivé car non déterministe, pile de 8 Mio pour accueillir les tableaux fixes comme l'image de <code>mandelbrot.vgs</code>). Grâce à <code>-ffile-prefix-map</code> (<code>PROGRESS.md, 2026-11-23</code>), deux compilations séparées produisent exactement la même empreinte BLAKE3 :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Cible</th><th>Taille</th><th>Empreinte BLAKE3</th><th>Reproductibilité</th><th>Gardes</th></tr>
+            </thead>
+            <tbody id="targets-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="term" id="term-build"></div>
+      </section>
+
+      <section>
+        <h2 id="sandbox"><span class="n">7.4</span>Le runtime <code>vg-rt</code> et le bac à sable système (ADR 0011)</h2>
+        <p>Chaque binaire est lié avec <code>runtime/vg_rt.c</code> (~1 000 lignes de C compilées avec <code>-ffp-contract=off</code>). Au démarrage, <code>vg-rt</code> vérifie les capacités CPU et l'environnement flottant, alloue en une seule fois l'arène linéaire dimensionnée par la clause <code>COST</code> (<code>vg_*_arena_bytes</code>), ouvre uniquement les poignées déclarées dans le manifeste à partir de <code>argv</code> (code de sortie <strong>5</strong> si un fichier manque), puis appelle <code>vg_rt_sandbox()</code> avant d'entrer dans le nœud racine.</p>
+        <p>Le <dfn>bac à sable</dfn> applique une politique « tout refuser par défaut » adaptée au système : sur macOS, <code>sandbox_init("(version 1)(deny default)", ...)</code> laisse les descripteurs déjà ouverts lisibles mais bloque tout nouvel appel <code>open</code> avec <code>EPERM</code> ; sur Linux, Landlock (sans aucun droit fichier ni socket TCP) combiné à un filtre <code>seccomp</code> interdit <code>socket</code> avec <code>EPERM</code> et refuse de démarrer sur un noyau sans Landlock ; sous WASI, seuls les répertoires explicitement préouverts (<code>wasmtime --dir</code>) existent.</p>
+
+        <div class="tabs">
+          <div class="tablist">
+            <button aria-controls="tab-man-writer">Manifeste avec poignée <code>FileOut</code></button>
+            <button aria-controls="tab-man-pure">Manifeste d'un nœud pur (<code>@midpoint</code>)</button>
+          </div>
+          <div class="tabpanel" id="tab-man-writer">
+            <pre class="code"><code id="manifest-writer"></code></pre>
+          </div>
+          <div class="tabpanel" id="tab-man-pure">
+            <pre class="code"><code id="manifest-pure"></code></pre>
+          </div>
+        </div>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle · Bac à sable</b>
+          <p>Sous macOS, <code>sandbox_init</code> est déprécié par Apple : l'ADR 0011 précise que si Apple venait à le retirer, les binaires s'arrêteraient avec le code 5 plutôt que de s'exécuter sans confinement. De plus, d'après <code>reports/gate-g4.md</code>, les tests de refus sous macOS et WASM passent sur cet hôte ARM64, mais le test Linux (<code>linux_sandbox_refuses_an_ungranted_file</code>) n'a pas encore été exécuté sur un hôte Linux.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="bench"><span class="n">7.5</span>Performances face à <code>clang -O2</code> : état honnête</h2>
+        <p>Supprimer les contrôles redondants et annoter l'IR LLVM suffit-il à égaler du C écrit à la main avec <code>clang -O2 -ffp-contract=off</code> ? Pas encore partout. La figure ci-dessous trace les mesures réelles de <code>reports/bench/latest.md</code> à l'aide de <code>bar_chart.wasm</code> ; l'objectif de la porte G4 est un ratio d'au plus <strong>1,20×</strong> sur les deux cibles natives.</p>
+
+        <figure class="fig" id="bench-sec">
+          <div class="fig-stage">
+            <div class="panel bench-panel">
+              <div class="bench-chart" id="bench-chart"></div>
+              <div class="bench-key" id="bench-key"></div>
+              <p class="readout" id="bench-host"></p>
+            </div>
+          </div>
+          <figcaption><b>Figure 7.2</b> Médiane VeriGraph / médiane C (<code>clang -O2 -ffp-contract=off</code>). <span class="proof" id="bench-proof"></span></figcaption>
+        </figure>
+
+        <aside class="note note-limit">
+          <b>État honnête de la porte G4 (<code>reports/gate-g4.md</code>)</b>
+          <p><strong>La porte G4 échoue actuellement.</strong> Sur Apple M3 Max (<code>aarch64-apple-darwin</code>), <code>blend</code> (0,78×) et <code>crc32</code> (1,00×) atteignent l'objectif, mais trois noyaux dépassent 1,20× pour des raisons identifiées dans <code>PROGRESS.md, 2026-11-24</code> :</p>
+          <ul>
+            <li><strong><code>matmul</code> (1,38×) :</strong> matérialise <code>GENERATE(@iota, 256)</code> par cellule au lieu de fusionner générateur et pli.</li>
+            <li><strong><code>sha256</code> (2,64×) :</strong> absorbe un octet par tour de <code>FOLD_BOUNDED</code> et recopie l'état de 96 octets quatre fois par octet (~290 octets de <code>memcpy</code> par octet de message).</li>
+            <li><strong><code>mandelbrot</code> (4,48×) :</strong> garde des <code>SELECT</code> sans branchement et deux normalisations NaN sur le tuple accumulateur pendant les 64 itérations, là où le C utilise un <code>if (inside)</code> très prévisible.</li>
+          </ul>
+          <p>De plus, aucun benchmark ni test différentiel n'a encore été mesuré sur <code>x86_64-unknown-linux-gnu</code> sur cet hôte ARM64. En revanche, les sorties de tous les noyaux sont <strong>identiques octet pour octet</strong> au C, et 1 000 programmes générés (243 136 exécutions) concordent avec <code>vg-interp</code> sur ARM64 et WASM avec et sans faits de preuve.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="audio-demo"><span class="n">7.6</span>Démo en direct : le limiteur audio M1 (<code>@limit_frame</code>)</h2>
+        <p>Le jalon M1 aboutit avec <code>examples/audio_limiter.vgs</code>. Son nœud exporté <code>@limit_frame</code> applique <code>@soft_knee</code> en parallèle sur une trame stéréo de 512×2 flottants via <code>SIMD_MAP</code>, convertit le résultat en vue d'octets sans copie (<code>AS_BYTES</code>) et calcule son empreinte SHA-256 via un nœud <code>@sha256</code> résolu depuis VG-Mesh :</p>
+
+<pre class="code vgs" data-file="examples/audio_limiter.vgs"><code>NODE @limit_frame [intent: "Limit a 512x2 stereo frame and digest it", export] {
+  SIGNATURE: (frame: Tensor&lt;f32, [512, 2]&gt;) -> (Tensor&lt;f32, [512, 2]&gt;, Array&lt;u8, 32&gt;);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  forall(i in 0..512, c in 0..2) { is_finite(frame[i, c]) };
+    POST: forall(i in 0..512, c in 0..2) { result.0[i, c] >= -1.0 && result.0[i, c] <= 1.0
+                                           && ((frame[i, c] >= 0.0) == (result.0[i, c] >= 0.0)) }
+          && result.1 == spec:sha256(as_bytes(result.0));
+    COST: heap_bytes == 0 && arena_bytes == 0;
+    BUDGET: latency_p99_us <= 500;
+  }
+  LEARNABLE {
+    knee: f32 in [0.5, 0.99];
+  }
+  BODY {
+    %0 = SIMD_MAP(@soft_knee, frame, knee);
+    %1 = AS_BYTES(%0);
+    %2 = CALL_HASH(@sha256, %1);
+    RETURN(%0, %2);
+  }
+}</code></pre>
+
+        <p>La postcondition prouve mathématiquement que, pour <em>toute</em> trame stéréo finie possible et toute valeur de <code>knee</code> dans <code>[0.5, 0.99]</code>, chacun des 1 024 échantillons sortants reste dans <code>[-1, 1]</code> en conservant son signe, avec zéro allocation sur le tas ou dans l'arène (<code>heap_bytes == 0 && arena_bytes == 0</code>), et que le condensat de 32 octets correspond exactement à la spécification <code>spec:sha256</code>.</p>
+
+        <figure class="fig" id="audio-demo-fig">
+          <div class="fig-stage">
+            <div class="fig-controls" style="margin-top:0;margin-bottom:.85rem">
+              <label for="drive-slider">Gain d'entrée (<code>drive</code>) :
+                <input id="drive-slider" type="range" min="0.25" max="8.0" step="0.05" value="3.0">
+                <output id="drive-val">3.00×</output>
+              </label>
+              <label for="knee-slider">Coude (<code>knee</code>, paramètre <code>LEARNABLE</code>) :
+                <input id="knee-slider" type="range" min="0.5" max="0.99" step="0.01" value="0.7">
+                <output id="knee-val">0,70</output>
+              </label>
+              <span class="readout" id="frame-peaks">—</span>
+            </div>
+            <svg class="wave-svg" id="wave-svg" viewBox="-6 -9.6 524 19.2" preserveAspectRatio="none" role="img" aria-label="Forme d'onde brute (corail) et limitée (vert) sur 512 échantillons"></svg>
+            <div class="digest-box">
+              SHA-256 vérifié de la trame 0 (<code>limiter.wasm</code>, octets 4096..4128) : <b id="frame-digest">—</b>
+            </div>
+            <div class="audio-controls">
+              <button class="btn primary small" type="button" id="btn-play-lim">Écouter le signal limité</button>
+              <button class="btn small" type="button" id="btn-play-raw">Écouter le signal brut</button>
+              <button class="btn small" type="button" id="btn-stop">Arrêter</button>
+              <span class="readout" id="audio-status">Cliquez pour synthétiser ~2 s (172 trames × 512 échantillons à 44,1 kHz) en WebAssembly. Baissez le volume : le signal brut sature volontairement.</span>
+            </div>
+          </div>
+          <figcaption><b>Figure 7.3</b> Trame stéréo générée par <code>tone.wasm</code> et limitée en direct par <code>limiter.wasm</code> (canal gauche ; le cadre va de −9,6 à +9,6, au-delà de la borne ±9,5 que le contrat de <code>@tone</code> prouve). <code>knee</code> est un paramètre <code>LEARNABLE</code> : une entrée de plus que le binaire lit après la trame, et la preuve vaut pour toute valeur de [0,5 ; 0,99]. Les pics viennent de <code>peak.wasm</code>. <span class="proof" id="limiter-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">7.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Quelle différence observe-t-on dans l'IR LLVM entre <code>g01_add_bounded.vgs</code> (vérifié) et <code>b01_add_overflow.vgs --unverified</code> ?</p>
+          <ol>
+            <li><button class="choice">Aucune : clang optimise les deux exactement de la même manière.</button></li>
+            <li><button class="choice" data-right>Le binaire vérifié émet add nuw sans branchement, alors que --unverified émet llvm.uadd.with.overflow et un appel à vg_trap_guard.</button></li>
+            <li><button class="choice">Le binaire vérifié active -ffast-math.</button></li>
+          </ol>
+          <p class="why" hidden>La preuve de non-débordement permet à <code>vg-codegen</code> de supprimer le contrôle dynamique et d'attacher <code>nuw</code> (et <code>llvm.assume</code>), ce qui est interdit sans preuve.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Pourquoi l'entrée vérifiée <code>vg_*</code> appelle-t-elle <code>vg_fp_enter()</code> avant d'exécuter le nœud interne ?</p>
+          <ol>
+            <li><button class="choice" data-right>Pour imposer l'arrondi au plus près pair et empêcher le mode flush-to-zero de l'hôte de modifier les résultats flottants.</button></li>
+            <li><button class="choice">Pour allouer la mémoire sur le tas avec malloc.</button></li>
+            <li><button class="choice">Pour désactiver le bac à sable système.</button></li>
+          </ol>
+          <p class="why" hidden>Les hôtes audio activent souvent le mode <i>flush-to-zero</i> sur les registres <code>MXCSR</code> ou <code>FPCR</code>. En restaurant l'environnement IEEE par défaut puis celui de l'appelant, VeriGraph garantit l'identité bit à bit avec <code>vg-interp</code>.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Que fait un binaire compilé avec un manifeste système s'il tente d'ouvrir un fichier non accordé après le démarrage ?</p>
+          <ol>
+            <li><button class="choice">Il ouvre le fichier en lecture seule par défaut.</button></li>
+            <li><button class="choice" data-right>Le noyau système le refuse (EPERM sous macOS sandbox_init ou Linux Landlock ; hors préouverture sous WASI).</button></li>
+            <li><button class="choice">Il relance vg check automatiquement.</button></li>
+          </ol>
+          <p class="why" hidden><code>vg-rt</code> ouvre d'abord les poignées déclarées depuis <code>argv</code>, puis applique le confinement avant d'exécuter le graphe racine (ADR 0011).</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir · Chapitre 7</b>
+          <p><code>vg-codegen</code> efface les gardes prouvées, convertit les preuves en attributs LLVM sûrs, normalise <code>NaN</code> aux frontières et produit des binaires reproductibles sur trois cibles, confinés dès le lancement par <code>vg-rt</code> et validés à chaque appel externe par une entrée vérifiée.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/compilation.js"></script>

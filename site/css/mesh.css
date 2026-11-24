@@ -1,0 +1,53 @@
+/* Styles spécifiques au chapitre 9 : VG-Mesh */
+.demo-box {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 1.2rem;
+  margin: 1.6rem 0 2rem;
+}
+.demo-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .8rem;
+  align-items: end;
+  margin-bottom: .9rem;
+}
+.demo-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-bottom: 1rem;
+}
+.demo-out {
+  display: grid;
+  gap: .75rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--line);
+}
+.demo-kv {
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: .7rem .9rem;
+}
+.demo-kv .label {
+  color: var(--faint);
+  display: block;
+  margin-bottom: .35rem;
+}
+.demo-kv code {
+  background: none;
+  padding: 0;
+  font-size: .88rem;
+  color: var(--proven);
+  word-break: break-all;
+}
+.demo-kv code.ref {
+  color: var(--sky);
+}
+@media (max-width: 680px) {
+  .demo-row {
+    grid-template-columns: 1fr;
+  }
+}

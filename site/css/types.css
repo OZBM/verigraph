@@ -1,0 +1,113 @@
+/* Styles propres au chapitre 4 (types.html). */
+
+.err-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-bottom: 1rem;
+}
+
+.err-tabs .btn[aria-pressed="true"] {
+  background: var(--proven);
+  color: var(--night);
+  border-color: var(--proven);
+}
+
+.err-choices {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  display: grid;
+  gap: .5rem;
+}
+
+.err-choices button.choice {
+  width: 100%;
+  text-align: left;
+  font: .93rem/1.4 var(--sans);
+  color: var(--ink-2);
+  background: var(--deep);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  padding: .7rem .9rem;
+  cursor: pointer;
+  transition: border-color .25s var(--vg-out), background .25s var(--vg-out);
+}
+
+.err-choices button.choice:hover {
+  border-color: var(--muted);
+}
+
+.err-choices button.choice.right {
+  border-color: var(--proven);
+  background: color-mix(in srgb, var(--proven) 12%, var(--deep));
+  color: var(--ink);
+}
+
+.err-choices button.choice.wrong {
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 10%, var(--deep));
+}
+
+.err-diag {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--deep);
+}
+
+.err-diag[hidden] {
+  display: none;
+}
+
+.err-diag pre {
+  margin: .6rem 0;
+  padding: .75rem;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font: .78rem/1.55 var(--mono);
+  color: var(--ink-2);
+  overflow-x: auto;
+}
+
+.entry-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-bottom: 1rem;
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+.entry-field label {
+  display: block;
+  font: .74rem/1.3 var(--mono);
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: .35rem;
+}
+
+.entry-out {
+  margin-top: 1rem;
+  padding: .9rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--deep);
+  font: .84rem/1.55 var(--mono);
+}
+
+.entry-out.is-ok {
+  border-color: color-mix(in srgb, var(--proven) 60%, var(--line));
+}
+
+.entry-out.is-fail {
+  border-color: color-mix(in srgb, var(--coral) 65%, var(--line));
+}

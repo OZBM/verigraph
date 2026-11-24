@@ -1,0 +1,111 @@
+<!doctype html>
+<!-- MODÈLE DE CHAPITRE. Copiez ce fichier pour écrire une page ; il montre chaque composant du site.
+     Règles : tout en français (code et noms d'outils en anglais) ; espaces insécables fines (U+202F)
+     avant ; : ! ? et dans « » ; chaque chiffre affiché vient d'un fichier data/*.json écrit par la
+     chaîne d'outils, ou d'un document du dépôt cité ; JavaScript ne calcule aucune valeur affichée. -->
+<html lang="fr">
+<meta charset="utf-8">
+<title>Titre du chapitre · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Une phrase qui dit ce que le lecteur apprend ici.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<!-- <link rel="stylesheet" href="css/NOM.css">  seulement si la page a des styles à elle -->
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre N · vg-xxx</p>
+    <h1>Un titre court, <em>et sa promesse.</em></h1>
+    <p class="lede">Deux ou trois phrases : ce que fait ce composant, pourquoi il existe, ce que le lecteur saura faire à la fin.</p>
+    <ul class="crates"><li><code>vg-xxx</code></li><li><code>vg-yyy</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 10 min</span><span>Prérequis : chapitre 2</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="idee"><span class="n">N.1</span>L'idée en une phrase</h2>
+        <p>Un paragraphe. Les <dfn>termes définis</dfn> sont marqués ainsi, puis repris au glossaire.</p>
+        <aside class="note note-key"><b>À retenir</b><p>La phrase que le lecteur doit garder.</p></aside>
+        <aside class="note note-info"><b>Analogie</b><p>Une comparaison avec quelque chose de familier.</p></aside>
+        <aside class="note note-warn"><b>Attention</b><p>Un piège, une idée reçue.</p></aside>
+        <aside class="note note-limit"><b>Limite actuelle</b><p>Ce qui n'est pas encore fait, dit honnêtement.</p></aside>
+      </section>
+
+      <section>
+        <h2 id="schema"><span class="n">N.2</span>Un schéma</h2>
+        <figure class="fig">
+          <div class="fig-stage"><svg class="dg" id="fig-1" role="img" aria-label="Description du schéma"></svg></div>
+          <figcaption><b>Figure N.1</b> Ce que montre le schéma. <span class="proof" id="fig-1-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="code"><span class="n">N.3</span>Du code annoté</h2>
+        <div class="annotated">
+<pre class="code vgs" data-file="examples/quickstart.vgs"><code><span data-note="Un nœud a un nom (un label), local au fichier." data-title="NODE">NODE @add_sat</span> {
+  SIGNATURE: (a: u8, b: u8) -> (u8);
+}</code></pre>
+          <aside class="panel annot-panel"><span class="label">Survolez le code</span><p>Le texte affiché par défaut.</p></aside>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="terminal"><span class="n">N.4</span>Un terminal rejoué</h2>
+        <div class="term" id="term-1"></div>
+        <!-- js : terminal($("#term-1"), data.session, { title: "vg check" }) avec des sorties réelles -->
+      </section>
+
+      <section>
+        <h2 id="histoire"><span class="n">N.5</span>Une histoire pas à pas</h2>
+        <div class="scrolly" id="story">
+          <div class="scrolly-stage"><div class="fig-stage"><svg class="dg" id="story-fig"></svg></div></div>
+          <div class="scrolly-steps">
+            <div><h3>Étape 1</h3><p>…</p></div>
+            <div><h3>Étape 2</h3><p>…</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="onglets"><span class="n">N.6</span>Des onglets, des étapes, des cartes</h2>
+        <div class="tabs">
+          <div class="tablist"><button aria-controls="tab-a">Premier</button><button aria-controls="tab-b">Second</button></div>
+          <div class="tabpanel" id="tab-a"><p>…</p></div>
+          <div class="tabpanel" id="tab-b"><p>…</p></div>
+        </div>
+        <ol class="steps">
+          <li><b>Écrire</b>…</li>
+          <li><b>Vérifier</b>…</li>
+        </ol>
+        <div class="cards">
+          <div class="card"><span class="label">vg-core</span><h3>Titre</h3><p>Texte court.</p></div>
+        </div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div><p>Le détail technique.</p></div></details>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">N.7</span>Vérifiez votre compréhension</h2>
+        <div class="quiz">
+          <span class="label">Question</span>
+          <p class="q">La question ?</p>
+          <ol>
+            <li><button class="choice" data-right>La bonne réponse</button></li>
+            <li><button class="choice">Une mauvaise réponse plausible</button></li>
+          </ol>
+          <p class="why" hidden>Pourquoi c'est la bonne réponse.</p>
+        </div>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/NOM.js"></script>

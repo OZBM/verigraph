@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Quand la preuve échoue · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment VeriGraph transforme une preuve échouée en contre-exemple rejoué, tranche d'échec minimale et réparation vérifiée.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/contre-exemple.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 6 · vg-interp · vg-telemetry</p>
+    <h1>Quand la preuve échoue, <em>le graphe répond.</em></h1>
+    <p class="lede">Un compilateur classique dit « erreur » ; un solveur SMT brut renvoie un modèle de cent lignes. VeriGraph rejoue le nœud dans son interpréteur de référence, isole les quelques opérations responsables et formule la condition qui manque pour que le contrat tienne.</p>
+    <ul class="crates"><li><code>vg-interp</code></li><li><code>vg-telemetry</code></li><li><code>vg-smt</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 12 min</span><span>Prérequis : chapitre 5</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="idee"><span class="n">6.1</span>Un échec de preuve est un diagnostic, pas une impasse</h2>
+        <p>Lorsqu'un programme échoue à un test unitaire, le développeur sait seulement que l'entrée choisie par le test a posé problème. Il ignore encore si l'anomalie vient d'une seule valeur isolée, d'un cas limite oublié, ou d'une erreur structurelle dans sa formule. Lorsqu'une obligation échoue dans VeriGraph, la chaîne cherche un <dfn>contre-exemple</dfn> : une entrée concrète qui respecte toutes les préconditions du contrat (<code>PRE</code>) mais viole la postcondition (<code>POST</code>) ou déclenche un piège sur une opération partielle (division par zéro, dépassement entier, indice hors bornes).</p>
+        <p>Mais une entrée seule ne suffit pas à guider une réparation rapide, surtout pour un agent d'intelligence artificielle dont chaque tour de contexte coûte des jetons et où un journal brut de solveur SMT reste illisible. Avant de répondre, VeriGraph exécute le <dfn>rejeu concret</dfn> dans <code>vg-interp</code> pour vérifier que la défaillance est réelle et non due à une abstraction modulaire, puis confie la trace d'exécution à <code>vg-telemetry</code> afin d'extraire une <dfn>tranche d'échec</dfn> minimale et une condition différentielle.</p>
+
+        <aside class="note note-info">
+          <b>Analogie · La boîte noire aéronautique</b>
+          <p>Au lieu d'afficher la liste brute des capteurs de tout l'avion après un incident, <code>vg-telemetry</code> rejoue le vol en simulateur exact (<code>vg-interp</code>), compare cette trajectoire à un vol sans incident, puis ne garde que les quatre ou cinq jauges dont la valeur explique la panne.</p>
+        </aside>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>Dans VeriGraph, aucun contre-exemple n'est accepté sur parole d'un solveur : chaque modèle candidat est rejoué bit pour bit par <code>vg-interp</code> avant de recevoir le code <code>VG-V0001</code>.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="brouillon"><span class="n">6.2</span>Le brouillon de <code>@soft_knee</code> et son contrat</h2>
+        <p>L'exemple directeur de VeriGraph (<code>docs/03-vg-sym.md</code>, jalon M1) est un limiteur audio stéréo. Son noyau <code>@soft_knee</code> doit compresser doucement tout échantillon flottant <code>x</code> au-delà d'un seuil <code>knee</code> compris entre <code>0.5</code> et <code>0.99</code>, afin que la sortie reste dans <code>[-1, 1]</code> tout en conservant le signe de l'entrée.</p>
+        <p>Dans la première ébauche conservée dans <code>examples/soft_knee_draft.vgs</code>, l'auteur écrit la formule algébrique la plus naturelle pour passer d'un excès positif <code>t</code> à un facteur dans <code>[0, 1]</code> : <code>u = t / (1 + t)</code>. Survolez les passages soulignés pour voir où se loge le piège.</p>
+
+        <div class="annotated">
+<pre class="code vgs" data-file="examples/soft_knee_draft.vgs"><code>// expect: reject @soft_knee/POST.0
+module soft_knee_draft;
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1], first draft"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    <span data-note="x doit seulement être fini (pas NaN, pas ±inf), ce qui autorise tous les flottants f32 jusqu'à ±3.4028235e38." data-title="PRE · Entrées finies">PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;</span>
+    <span data-note="Trois conjonctions : POST.0 (result >= -1.0), POST.1 (result <= 1.0) et POST.2 ((x >= 0.0) == (result >= 0.0)). La clause de signe empêche un clamp qui transformerait NaN en -1.0 pour passer la borne." data-title="POST · Borne et signe">POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));</span>
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    <span data-note="t = (%0 - knee) / (1 - knee). Lorsque |x| approche 3.4e38 et knee = 0.5, diviser par 0.5 multiplie par 2 et provoque un débordement IEEE 754 vers +inf." data-title="%4 · Débordement vers +inf">%4  = FDIV(%2, %3);</span>
+    %5  = FADD(1.0:f32, %4);
+    <span data-note="Quand %4 = +inf, %5 = 1 + inf = +inf. En arithmétique IEEE 754, +inf / +inf produit NaN." data-title="%6 · inf / inf = NaN">%6  = FDIV(%4, %5);</span>
+    <span data-note="En IEEE 754-2019 (llvm.minimum), FMIN(NaN, 1.0) propage NaN au lieu de le remplacer par 1.0." data-title="%7 · FMIN propage NaN">%7  = FMIN(%6, 1.0:f32);</span>
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    <span data-note="FCLAMP propage lui aussi NaN. La sortie finale est donc NaN pour tout x qui fait déborder %4." data-title="%12 · FCLAMP propage NaN">%12 = FCLAMP(%11, -1.0:f32, 1.0:f32);</span>
+    RETURN(%12);
+  }
+}</code></pre>
+          <aside class="panel annot-panel">
+            <span class="label">Survolez le code</span>
+            <p>Pointez ou sélectionnez une clause ou une opération soulignée pour comprendre son rôle dans la panne.</p>
+          </aside>
+        </div>
+
+        <aside class="note note-warn">
+          <b>Attention · Pourquoi un contrôle d'intervalle seul ne suffit pas</b>
+          <p>Comme le rappelle <code>docs/03-vg-sym.md</code>, un opérateur de saturation qui renverrait <code>-1.0</code> sur <code>NaN</code> satisferait <code>result >= -1.0 && result <= 1.0</code> tout en inversant le signe d'un pic audio positif très élevé. La clause relationnelle <code>(x >= 0.0) == (result >= 0.0)</code> interdit cette triche silencieuse.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="histoire"><span class="n">6.3</span>Anatomie d'un échec, étape par étape</h2>
+        <p>Faites défiler les huit étapes ci-dessous : le schéma suit l'exécution réelle de <code>vg verify</code> et <code>vg explain</code> sur <code>examples/soft_knee_draft.vgs</code>, depuis le contrat initial jusqu'à la preuve complète de la version réparée.</p>
+
+        <div class="scrolly" id="story">
+          <div class="scrolly-stage">
+            <div class="fig-stage">
+              <svg class="dg" id="story-fig" role="img" aria-label="Graphe de flot de données du brouillon @soft_knee et propagation de NaN"></svg>
+              <div id="story-readout"></div>
+            </div>
+            <p class="proof" id="story-proof"></p>
+          </div>
+          <div class="scrolly-steps">
+            <div>
+              <h3>1. Le brouillon et son contrat</h3>
+              <p>Le nœud <code>@soft_knee</code> (empreinte <code>node</code> <code id="hash-draft">6c4b417426406245…</code>) promet trois postconditions dès que <code>x</code> est fini et <code>knee</code> dans <code>[0.5, 0.99]</code>. Pour les valeurs ordinaires comme <code>0.3</code> ou <code>0.8</code>, le calcul donne exactement le résultat attendu.</p>
+            </div>
+            <div>
+              <h3>2. Le verdict du vérificateur</h3>
+              <p>À l'appel de <code>vg verify examples/soft_knee_draft.vgs --mode edit --detail 2</code>, <b id="draft-failed-count">3 sur 6</b> obligations échouent : <code>POST.0</code>, <code>POST.1</code> et <code>POST.2</code> reçoivent toutes le verdict <code>counterexample</code> (<code>VG-V0001</code>). Les obligations internes <code>%10/FCOPYSIGN.sign</code>, <code>%12/FCLAMP.bounds</code> et <code>NONVACUOUS</code> sont prouvées.</p>
+            </div>
+            <div>
+              <h3>3. Les entrées incriminées</h3>
+              <p>Le pré-filtrage concret (<code>prescreen</code>) détecte la faille immédiatement, sans même lancer de solveur SMT : avec <code>x = "-3.4028235e38"</code> (le plus grand négatif fini en <code>f32</code>) et <code>knee = "0.5"</code>, la précondition <code>PRE</code> est vraie, mais <code>result >= -1.0</code> est faux.</p>
+            </div>
+            <div>
+              <h3>4. Le rejeu concret dans <code>vg-interp</code></h3>
+              <p>Conformément à l'ADR 0006, <code>vg-interp</code> exécute le graphe canonique sur cette paire d'entrées : <code>pre: true</code>, <code>post: false</code>, sortie <code>["nan"]</code>. La propriété <code>reproduced</code> vaut <code>"concrete"</code> : l'erreur est réelle et reproductible.</p>
+            </div>
+            <div>
+              <h3>5. La tranche d'échec, port par port</h3>
+              <p><code>vg-telemetry</code> élague les treize opérations du corps pour ne retenir que cinq ports : <code>%0 FABS(x) → "3.4028235e38"</code>, <code>%4 FDIV(%2, %3) → "inf"</code>, <code>%5 FADD(1.0:f32, %4) → "inf"</code>, <code>%6 FDIV(%4, %5) → "nan"</code>, et <code>%12 FCLAMP → "nan"</code>. Le paquet corail suit ce chemin exact.</p>
+            </div>
+            <div>
+              <h3>6. La condition différentielle</h3>
+              <p>En comparant l'exécution défaillante à une exécution valide voisine trouvée par Z3, <code>vg-telemetry</code> synthétise la condition nécessaire et suffisante sur la tranche : <code>the obligation holds iff %4 is finite</code>. Dès que <code>%4</code> déborde vers <code>+inf</code>, l'échec est inévitable.</p>
+            </div>
+            <div>
+              <h3>7. La réparation en une ligne</h3>
+              <p>Algébriquement, <code>t / (1 + t)</code> vaut <code>1 - 1 / (1 + t)</code>. En flottant IEEE 754, la différence est décisive : lorsque <code>%4 = +inf</code>, <code>%5 = 1 + inf = +inf</code>, donc <code>%6 = 1.0 / inf = 0.0</code>, et <code>%7 = 1.0 - 0.0 = 1.0</code>. Aucun <code>NaN</code> ne peut apparaître, et l'instruction <code>FMIN</code> devient même inutile.</p>
+            </div>
+            <div>
+              <h3>8. Prouvé pour tous les flottants <code>f32</code></h3>
+              <p>Dans <code>examples/quickstart.vgs</code>, <code>@soft_knee</code> garde exactement le même contrat (<code>contract</code> <code id="hash-contract">194029dbd0d5c3fb…</code>) et obtient <b id="repaired-proven">6 / 6</b> obligations prouvées par Bitwuzla et le pré-filtrage. Son empreinte <code>node</code> (<code id="hash-repaired">347e9318b2e061c5…</code>) est strictement identique à celle du nœud utilisé dans <code>examples/audio_limiter.vgs</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <p>Voici le corps réparé tel qu'il figure dans <code>examples/quickstart.vgs</code> (lignes 63 à 86) :</p>
+<pre class="code vgs" data-file="examples/quickstart.vgs"><code>NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}</code></pre>
+      </section>
+
+      <section>
+        <h2 id="labo"><span class="n">6.4</span>Laboratoire en direct : brouillon contre noyau réparé</h2>
+        <p>Ce laboratoire exécute deux véritables binaires WebAssembly compilés par VeriGraph : <code>knee.wasm</code> (la version vérifiée et prouvée) et <code>knee_draft.wasm</code> (le brouillon compilé avec <code>--unverified</code>). Sur l'intervalle <code>[-3, 3]</code> tracé à l'aide de <code>grid.wasm</code>, les deux courbes se confondent : sous le seuil <code>knee</code>, le signal reste linéaire ; au-dessus, il s'infléchit doucement vers <code>+1</code> ou <code>-1</code>. Saisissez un nombre extrême comme <code>3e38</code> pour voir le brouillon s'effondrer en <code>NaN</code> tandis que la version réparée répond <code>1</code>, ou entrez <code>NaN</code> / <code>Infinity</code> pour observer l'entrée vérifiée (<code>ADR 0009</code>) refuser une entrée hors contrat. Dans un vrai flux audio ou un appel depuis C, cette barrière garantit que le noyau interne ne reçoit jamais une donnée qui viole ses hypothèses.</p>
+
+        <figure class="fig" id="knee-lab">
+          <div class="fig-stage">
+            <div class="knee-grid">
+              <div>
+                <svg class="knee-svg" id="knee-svg" viewBox="-3.2 -1.25 6.4 2.5" role="img" aria-label="Courbe de transfert de @soft_knee réparé et du brouillon entre -3 et +3"></svg>
+                <div class="legend-inline">
+                  <span><i style="background:var(--proven)"></i><code>@knee_curve</code> réparé (<code>knee.wasm</code>)</span>
+                  <span><i style="background:var(--coral)"></i><code>@draft_curve</code> brouillon (<code>knee_draft.wasm</code>)</span>
+                </div>
+              </div>
+              <div class="panel knee-eval">
+                <div class="fig-controls" style="margin-top:0">
+                  <label for="knee-slider">Seuil <code>knee</code> :
+                    <input id="knee-slider" type="range" min="0.50" max="0.99" step="0.01" value="0.50">
+                    <output id="knee-val">0.50</output>
+                  </label>
+                </div>
+                <div>
+                  <label for="x-input" class="label" style="display:block;margin-bottom:.35rem;color:var(--muted)">Valeur d'entrée <code>x</code> (<code>f32</code>)</label>
+                  <input id="x-input" type="text" value="3e38" autocomplete="off">
+                </div>
+                <div class="preset-btns" aria-label="Valeurs prédéfinies à tester">
+                  <button class="btn small" type="button" data-preset-x="0.3">0.3</button>
+                  <button class="btn small" type="button" data-preset-x="0.8">0.8</button>
+                  <button class="btn small" type="button" data-preset-x="3e38">3e38</button>
+                  <button class="btn small" type="button" data-preset-x="-3.4028235e38">-3.4028235e38</button>
+                  <button class="btn small" type="button" data-preset-x="NaN">NaN</button>
+                  <button class="btn small" type="button" data-preset-x="Infinity">Infinity</button>
+                </div>
+                <div class="eval-box">
+                  <div class="eval-row"><span>Réparé (<code>knee.wasm</code>)</span><b id="eval-ok">—</b></div>
+                  <div class="eval-row"><span>Brouillon (<code>knee_draft.wasm</code>)</span><b id="eval-draft">—</b></div>
+                </div>
+                <div class="refusal" id="eval-refusal" hidden></div>
+              </div>
+            </div>
+          </div>
+          <figcaption><b>Figure 6.1</b> Comparaison en direct entre le brouillon et la version réparée. <span class="proof" id="knee-proof"></span></figcaption>
+        </figure>
+
+        <h3>Comparaison enregistrée avec <code>vg run</code></h3>
+        <p>Le tableau ci-dessous provient directement d'exécutions réelles de <code>./target/release/vg run</code> sur les deux fichiers sources :</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Cas</th><th>Entrée <code>x</code></th><th>Brouillon (<code>soft_knee_draft.vgs</code>)</th><th>Réparé (<code>quickstart.vgs</code>)</th></tr>
+            </thead>
+            <tbody id="runs-tbody"></tbody>
+          </table>
+        </div>
+
+        <h3>Sorties brutes de <code>vg explain</code> et <code>vg run</code></h3>
+        <div class="term" id="term-explain"></div>
+      </section>
+
+      <section>
+        <h2 id="telemetrie"><span class="n">6.5</span>Comment <code>vg-telemetry</code> découpe un échec</h2>
+        <p>Un graphe réel peut compter plusieurs dizaines d'opérations, alors qu'une panne n'en implique généralement que quelques-unes. Le rôle de <code>vg-telemetry</code> (<code>crates/vg-telemetry/src/slice.rs</code>) est de réduire une trace d'échec à une poignée de ports pertinents, de manière déterministe.</p>
+
+        <figure class="fig">
+          <div class="fig-stage"><svg class="dg" id="fig-telemetry" role="img" aria-label="Pipeline de réduction d'échec dans vg-telemetry"></svg></div>
+          <figcaption><b>Figure 6.2</b> Chaîne de réduction d'une trace d'échec dans <code>vg-telemetry</code>. <span class="proof" id="telemetry-proof"></span></figcaption>
+        </figure>
+
+        <ol class="steps">
+          <li><b>Cône arrière dynamique</b>Partant de la postcondition ou de l'opération fautive, <code>vg-telemetry</code> remonte uniquement les dépendances de données effectivement actives pour cette entrée.</li>
+          <li><b>Recherche contrefactuelle</b>Le solveur <code>z3</code> (borné par une limite déterministe de 20 millions d'unités de ressources, jamais par l'horloge murale pour le choix de tranche, <code>PROGRESS.md, 2026-11-23</code>) cherche une entrée voisine qui satisfait l'obligation.</li>
+          <li><b>Delta debugging (<code>ddmin</code>)</b>L'algorithme de Zeller remplace tour à tour des sous-ensembles de ports du cône par leurs valeurs issues de l'exécution valide afin d'identifier le plus petit sous-ensemble dont les valeurs suffisent à reproduire la panne.</li>
+          <li><b>Fusion des passe-plats et condition diff</b>Si la tranche dépasse cinq opérations, les copies transparentes (<code>SELECT</code>, <code>PROJ</code>…) sont condensées, puis <code>diff.rs</code> dérive la condition nécessaire/suffisante affichée dans le champ <code>diff</code>.</li>
+        </ol>
+
+        <p>Sur le banc de test du jalon G6 (<code>reports/gate-g6.md</code>), composé de 60 bogues injectés, <strong>60 tranches sur 60</strong> comptent au plus 5 opérations (le critère de G6 en exigeait au moins 48). Les critères de la porte G6 sont tous satisfaits dans le rapport, en attente de validation par le propriétaire.</p>
+
+        <details class="deep">
+          <summary>Combien d'entrées flottantes faisaient échouer le brouillon exactement ?</summary>
+          <div>
+            <p>Une vérification exhaustive en C sur les flottants 32 bits (<code>docs/paper/softknee_check.c</code>, consignée dans <code>PROGRESS.md, 2026-11-06</code>) a montré qu'au seuil <code>knee = 0.5</code>, le brouillon échoue sur exactement <strong>2<sup>24</sup></strong> (16 777 216) entrées <code>f32</code> finies, alors que plus de 42 milliards d'évaluations du noyau réparé n'ont produit aucune violation de <code>POST</code>.</p>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="verdicts"><span class="n">6.6</span>Les quatre verdicts de rejeu (ADR 0006)</h2>
+        <p>Lorsqu'un solveur répond <code>SAT</code>, tout dépend de ce qui se passe au moment où <code>vg-interp</code> tente de rejouer le modèle. L'ADR 0006 distingue quatre issues pour éviter qu'une abstraction modulaire (un appelé remplacé par son contrat) ne passe à tort pour un bogue du programme.</p>
+
+        <div class="cards">
+          <div class="card v-ce">
+            <span class="label">VG-V0001 · counterexample</span>
+            <h3>Contre-exemple concret</h3>
+            <p>Le rejeu avec les vrais appelés échoue sur l'entrée du modèle (<code>reproduced: "concrete"</code>). Le corps du nœud est fautif, ou sa <code>PRE</code> est trop large.</p>
+          </div>
+          <div class="card v-gap">
+            <span class="label">VG-V0002 · contract_gap</span>
+            <h3>Lacune de contrat</h3>
+            <p>Le modèle brise le but en choisissant pour un appelé une valeur permise par sa <code>POST</code>, mais l'exécution réelle de l'appelé réussit. Il faut renforcer la <code>POST</code> de l'appelé (exemple <code>@inc</code> / <code>@add2</code> dans <code>docs/guide/verification.md</code>).</p>
+          </div>
+          <div class="card v-unk">
+            <span class="label">VG-V0006 · unknown</span>
+            <h3>Hypothèse partiellement instanciée</h3>
+            <p>Un <code>forall</code> ou terme <code>spec:</code> en hypothèse n'était instancié que sur certains indices ; au rejeu complet, l'entrée proposée ne satisfait même pas <code>PRE</code>. Jamais signalé comme contre-exemple.</p>
+          </div>
+          <div class="card v-err">
+            <span class="label">VG-V0008 · error</span>
+            <h3>Erreur interne du vérificateur</h3>
+            <p>Dans un nœud sans aucune abstraction, un modèle <code>SAT</code> ne reproduit pas la violation dans <code>vg-interp</code>. Le codage SMT diverge de la sémantique : la compilation s'arrête immédiatement.</p>
+          </div>
+        </div>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle · Version 0</b>
+          <p>D'après <code>docs/guide/verification.md</code> et <code>PROGRESS.md, 2026-11-23</code>, deux parties restent partielles en v0 : <code>vg-interp</code> ne dispose pas encore d'un point d'accroche pour injecter l'oracle d'un appelé lors du rejeu guidé par modèle (dans un nœud avec appelés, un modèle non reproduit est donc classé <code>contract_gap</code> même si une erreur de codage s'y cachait), et les requêtes Z3 de <code>diff.rs</code> restent bornées par horloge murale (2,5 s et 3 s) plutôt que par compteur de ressources.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">6.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Pourquoi le brouillon de <code>@soft_knee</code> échoue-t-il pour <code>x = -3.4028235e38</code> et <code>knee = 0.5</code> ?</p>
+          <ol>
+            <li><button class="choice">Parce que FABS(-3.4028235e38) déborde immédiatement en +inf.</button></li>
+            <li><button class="choice" data-right>Parce que %4 = FDIV(%2, %3) déborde vers +inf, puis %6 = FDIV(%4, %5) calcule inf / inf = NaN, que FMIN et FCLAMP propagent.</button></li>
+            <li><button class="choice">Parce que FCLAMP(-1.0, 1.0) rejette les nombres négatifs.</button></li>
+          </ol>
+          <p class="why" hidden><code>FABS</code> conserve <code>3.4028235e38</code>, qui est fini. C'est la division par <code>1 - 0.5 = 0.5</code> qui multiplie par 2 et produit <code>+inf</code>, transformé en <code>NaN</code> par <code>inf / inf</code>.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Dans quels cas un modèle <code>SAT</code> trouvé par le solveur est-il classé <code>contract_gap</code> (<code>VG-V0002</code>) ?</p>
+          <ol>
+            <li><button class="choice">Quand le solveur dépasse son délai de 2 secondes.</button></li>
+            <li><button class="choice" data-right>Quand le modèle choisit pour un appelé une valeur permise par sa POST, mais que le rejeu concret dans vg-interp avec le vrai appelé réussit.</button></li>
+            <li><button class="choice">Quand le nœud n'a aucune précondition PRE.</button></li>
+          </ol>
+          <p class="why" hidden>En vérification modulaire, le solveur ne voit que le contrat des appelés. Si son modèle repose sur une sortie fictive que la <code>POST</code> de l'appelé n'exclut pas, <code>vg-interp</code> le révèle au rejeu et propose de renforcer la <code>POST</code> de l'appelé.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Dans le laboratoire en direct, que se passe-t-il si vous envoyez <code>NaN</code> ou <code>Infinity</code> à <code>knee.wasm</code> ?</p>
+          <ol>
+            <li><button class="choice" data-right>L'entrée vérifiée (checked entry) rejette l'appel avec le code de sortie 1 avant même d'exécuter le noyau.</button></li>
+            <li><button class="choice">Le noyau retourne silencieusement 1.0.</button></li>
+            <li><button class="choice">Le navigateur corrige l'entrée en 0.0.</button></li>
+          </ol>
+          <p class="why" hidden>Conformément à l'ADR 0009, tout code externe non prouvé passe par une fonction d'entrée vérifiée qui contrôle <code>PRE</code> (ici <code>is_finite(x)</code>) et refuse l'exécution par <code>exit 1</code> si l'entrée est invalide.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir · Chapitre 6</b>
+          <p>Un échec de preuve fournit un contre-exemple rejoué concrètement par <code>vg-interp</code>, réduit par <code>vg-telemetry</code> à une tranche d'au plus quelques opérations accompagnée de sa condition différentielle. Corriger la cause racine transforme une exception flottante rare en preuve totale sur tout le domaine.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/contre-exemple.js"></script>

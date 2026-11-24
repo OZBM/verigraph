@@ -1,0 +1,73 @@
+/* Styles spécifiques au chapitre 10 : OmniLift */
+.compare-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin: 1.4rem 0 1.8rem;
+  align-items: start;
+}
+.compare-grid pre.code {
+  margin: 0;
+  max-height: 28rem;
+  overflow: auto;
+  font-size: .78rem;
+}
+@media (max-width: 900px) {
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.demo-box {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 1.2rem;
+  margin: 1.6rem 0 2rem;
+}
+.demo-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .8rem;
+  align-items: end;
+  margin-bottom: .9rem;
+}
+.demo-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-bottom: 1rem;
+}
+.demo-out {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: .8rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--line);
+}
+.demo-kv {
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: .7rem .9rem;
+}
+.demo-kv .label {
+  color: var(--faint);
+  display: block;
+  margin-bottom: .35rem;
+}
+.demo-kv code {
+  background: none;
+  padding: 0;
+  font-size: .95rem;
+  color: var(--proven);
+  word-break: break-all;
+}
+.demo-kv code.ref {
+  color: var(--sky);
+}
+@media (max-width: 680px) {
+  .demo-row {
+    grid-template-columns: 1fr;
+  }
+}

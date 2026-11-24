@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>VeriGraph · L'IA écrit le code, les mathématiques le prouvent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Un guide illustré de VeriGraph : des programmes en graphes typés, des contrats prouvés par des solveurs SMT, des binaires natifs et WebAssembly. Ce site est lui-même un programme VeriGraph.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/home.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <canvas id="sky" width="320" height="180" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <p class="eyebrow">Le guide illustré de VeriGraph</p>
+      <h1 id="hero-title">L'IA écrit le code. <em>Les mathématiques le prouvent.</em></h1>
+      <p class="lede">VeriGraph est un système de programmation pensé pour les modèles d'IA. Un programme y est un
+        graphe de calcul typé, identifié par son contenu et accompagné d'un contrat. Avant toute compilation, des
+        solveurs vérifient ce contrat pour <strong>toutes</strong> les entrées possibles, pas seulement pour quelques
+        tests. Ensuite seulement, le graphe devient un binaire natif ou WebAssembly.</p>
+      <div class="cta">
+        <a class="btn primary" href="idee.html">Commencer le parcours</a>
+        <a class="btn" href="utiliser.html">L'installer et l'utiliser</a>
+      </div>
+    </div>
+    <aside class="hud" aria-live="off">
+      <span class="tag">@aurora</span>
+      <span id="hud-line">320 × 180 pixels par image</span>
+      <span class="ok" id="hud-proof"></span>
+    </aside>
+  </section>
+
+  <section class="wrap home-sec" aria-labelledby="tour-title">
+    <div class="head">
+      <p class="eyebrow">En 90 secondes</p>
+      <h2 id="tour-title">D'une phrase à un binaire prouvé, <em>en six étapes.</em></h2>
+      <p class="sub">Voici le chemin que suit un programme VeriGraph. Cliquez sur une étape, ou laissez le schéma se
+        dérouler : la boucle orange est le moment où la preuve échoue, renvoie un contre-exemple au modèle, et où le
+        modèle répare son code.</p>
+    </div>
+    <div class="tour">
+      <figure class="fig" style="margin:0">
+        <div class="fig-stage"><svg class="dg" id="tour-fig" role="img" aria-label="Le pipeline de VeriGraph : demande, modèle d'IA, vg check, vg verify, vg build, puis trois binaires ; une flèche de retour va de vg verify au modèle."></svg></div>
+        <figcaption><span class="proof" id="tour-proof"></span></figcaption>
+      </figure>
+      <ol id="tour-steps">
+        <li tabindex="0" data-on="req"><b>Une demande</b><span>Une personne décrit ce qu'elle veut, en langage naturel : « un limiteur audio dont aucun échantillon ne dépasse 1 ».</span></li>
+        <li tabindex="0" data-on="model"><b>Le modèle écrit un nœud</b><span>Une IA écrit du VG-Sym : une signature, un contrat (PRE, POST) et un corps, le graphe d'opérations.</span></li>
+        <li tabindex="0" data-on="check"><b><code>vg check</code></b><span>La chaîne d'outils lit le texte, le met sous forme canonique, calcule son empreinte BLAKE3, vérifie types et effets.</span></li>
+        <li tabindex="0" data-on="verify"><b><code>vg verify</code></b><span>Chaque opération qui pourrait échouer devient une obligation ; des solveurs SMT prouvent chacune pour toutes les entrées.</span></li>
+        <li tabindex="0" data-on="back"><b>Contre-exemple, réparation</b><span>Si une obligation est fausse, le solveur donne une entrée qui la casse. Le modèle la reçoit en JSON et corrige.</span></li>
+        <li tabindex="0" data-on="build"><b><code>vg build</code></b><span>Le graphe prouvé devient du LLVM IR puis un binaire. Les preuves effacent les vérifications à l'exécution.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="wrap home-sec" aria-labelledby="self-title">
+    <div class="head">
+      <p class="eyebrow">Ce site lui-même</p>
+      <h2 id="self-title">Ce que vous voyez ici <em>a été prouvé avant d'être affiché.</em></h2>
+      <p class="sub">Le ciel ci-dessus, chaque courbe d'animation, la mise en page de chaque schéma, les graphiques, la
+        fractale, le son du limiteur et les empreintes sont calculés par des nœuds VeriGraph compilés en WebAssembly.
+        JavaScript garde l'heure et déplace des octets ; il ne calcule aucune des valeurs affichées.
+        <a href="ce-site.html">Voir comment c'est fait</a>.</p>
+    </div>
+    <div class="stats" id="stats">
+      <div class="stat"><b class="count" id="st-proven" style="--to:0"></b><span>obligations prouvées</span></div>
+      <div class="stat"><b class="count" id="st-nodes" style="--to:0"></b><span>nœuds vérifiés</span></div>
+      <div class="stat"><b class="count" id="st-bins" style="--to:0"></b><span>binaires WebAssembly</span></div>
+      <div class="stat"><b class="count ok" id="st-guards" style="--to:0"></b><span>vérifications restées à l'exécution</span></div>
+    </div>
+    <p class="proof" id="self-proof"></p>
+  </section>
+
+  <section class="wrap home-sec" aria-labelledby="map-title">
+    <div class="head">
+      <p class="eyebrow">La carte</p>
+      <h2 id="map-title">Douze composants, <em>un seul chemin.</em></h2>
+      <p class="sub">VeriGraph est fait de bibliothèques Rust (des <em>crates</em>) qui se passent le même graphe. Chaque
+        flèche dit « ce composant s'appuie sur celui-là ». Cliquez sur une boîte pour ouvrir le chapitre qui l'explique.</p>
+    </div>
+    <figure class="fig" style="margin:0">
+      <div class="fig-stage"><svg class="dg" id="map-fig" role="img" aria-label="Les crates de VeriGraph et leurs dépendances, de vg-core à vg-cli."></svg></div>
+      <figcaption><b>Les crates de <code>crates/</code>.</b> <span class="proof" id="map-proof"></span></figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap home-sec" aria-labelledby="demos-title">
+    <div class="head">
+      <p class="eyebrow">À essayer</p>
+      <h2 id="demos-title">Des démonstrations qui tournent <em>dans votre navigateur.</em></h2>
+    </div>
+    <div class="demos">
+      <a href="contre-exemple.html#labo"><span class="label">Chapitre 6</span><b>Cassez le brouillon</b><span>Tapez un nombre : le brouillon répond NaN là où le solveur l'avait prédit, la version réparée jamais.</span></a>
+      <a href="compilation.html"><span class="label">Chapitre 7</span><b>Écoutez le limiteur</b><span>Un accord saturé, puis le même passé dans le limiteur audio prouvé, avec son empreinte SHA-256.</span></a>
+      <a href="omnilift.html"><span class="label">Chapitre 10</span><b>Le CRC-32 de zlib</b><span>Du C relevé en VeriGraph, vérifié, recompilé : il calcule le CRC de votre texte.</span></a>
+      <a href="mesh.html"><span class="label">Chapitre 9</span><b>Un SHA-256 prouvé</b><span>Le nœud publié dans le registre, prouvé égal à sa spécification FIPS 180-4.</span></a>
+      <a href="ce-site.html#fractale"><span class="label">Chapitre 11</span><b>Une fractale sûre</b><span>Zoomez : le contrat de <code>@zoom</code> garantit que la vue reste une vue que <code>@render</code> accepte.</span></a>
+    </div>
+  </section>
+
+  <section class="wrap home-sec" aria-labelledby="path-title" style="padding-bottom:5rem">
+    <div class="head">
+      <p class="eyebrow">Le parcours</p>
+      <h2 id="path-title">Douze chapitres, <em>de l'idée à l'usage.</em></h2>
+      <p class="sub">Chaque chapitre part d'une question, donne l'intuition, montre le mécanisme sur un vrai fichier du
+        dépôt, puis ses limites actuelles et quelques questions pour vérifier ce que vous avez retenu.</p>
+    </div>
+    <div class="path" id="path"></div>
+  </section>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/index.js"></script>

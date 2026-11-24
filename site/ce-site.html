@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Chapitre 11 · Ce site est un programme · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment ce site est construit avec VeriGraph : une bibliothèque web vérifiée, compilée en WebAssembly, et des chiffres qui viennent tous de la chaîne d'outils.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/home.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 11 · la bibliothèque web vérifiée</p>
+    <h1>Ce site est <em>un programme VeriGraph.</em></h1>
+    <p class="lede">Une page web emprunte d'habitude ses courbes d'animation, ses graphiques et ses couleurs à des
+      bibliothèques JavaScript. Ici, chacune de ces fonctions a été réécrite en VG-Sym avec un contrat, prouvée, puis
+      compilée en WebAssembly. Ce chapitre ouvre le capot.</p>
+    <ul class="crates"><li><code>site/vg/weblib.vgs</code></li><li><code>site/vg/diagram.vgs</code></li><li><code>site/vg/demos.vgs</code></li><li><code>site/build.sh</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 10 min</span><span>Prérequis : chapitres 5 et 7</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="regle"><span class="n">11.1</span>La règle du jeu</h2>
+        <p>Une règle simple guide tout le site : <strong>JavaScript ne calcule aucune valeur que vous voyez.</strong>
+          Il garde l'heure, transmet vos clics et déplace des octets d'un binaire vers la page. Tout le reste, chaque
+          point d'une courbe, chaque coordonnée d'un schéma, chaque pixel du ciel, chaque échantillon du limiteur audio,
+          sort d'un nœud VeriGraph dont le contrat a été prouvé.</p>
+        <p>Les faits <em>sur</em> VeriGraph suivent une règle sœur : chaque empreinte, chaque nombre d'obligations,
+          chaque contre-exemple affiché vient d'une exécution réelle de la chaîne d'outils, enregistrée par
+          <code>site/build.sh</code> dans des fichiers JSON que les pages lisent. Rien n'est recopié à la main.</p>
+        <figure class="fig">
+          <div class="fig-stage"><svg class="dg" id="pipe-fig" role="img" aria-label="Comment le site est construit : les sources VG-Sym passent par vg verify et vg build, deviennent des binaires WebAssembly ; les rapports de la chaîne d'outils deviennent des fichiers JSON ; la page lit les deux."></svg></div>
+          <figcaption><b>Figure 11.1</b> La fabrication du site. Les flèches pleines portent des programmes, les
+            boîtes de droite sont ce que votre navigateur télécharge. <span class="proof" id="pipe-proof"></span></figcaption>
+        </figure>
+        <aside class="note note-info"><b>Analogie</b><p>Pensez à une imprimerie où chaque cliché est contrôlé avant
+          d'entrer dans la presse : la page (le papier, la mise en forme du texte) est ordinaire, mais toute image qui y
+          est imprimée a passé le contrôle.</p></aside>
+        <aside class="note note-warn"><b>Ce que la règle ne dit pas</b><p>Le texte, la typographie et les couleurs de
+          l'interface sont du HTML et du CSS ordinaires. Le navigateur dessine les tracés SVG et lisse les transitions
+          CSS ; les courbes de ces transitions, elles, sont échantillonnées dans la table de <code>@motion</code>.</p></aside>
+      </section>
+
+      <section>
+        <h2 id="bibliotheque"><span class="n">11.2</span>La bibliothèque, fonction par fonction</h2>
+        <p>Voici les nœuds que les pages appellent, avec ce qu'ils remplacent sur un site ordinaire et leur contrat tel
+          qu'il est écrit dans les sources. Sous chaque carte, le nombre d'obligations que les solveurs ont prouvées pour
+          ce nœud lui-même, lors du dernier <code>vg verify</code>.</p>
+        <div class="lib" id="lib"></div>
+      </section>
+
+      <section>
+        <h2 id="mouvement"><span class="n">11.3</span>Huit courbes qui arrivent <em>exactement</em> à 1</h2>
+        <p><code>@motion</code> renvoie une table de 8 × 256 échantillons. Son contrat prouve que chaque courbe part de 0
+          et arrive à 1, au bit près : une animation ne s'arrêtera jamais à 0,9999. Toutes les animations du site lisent
+          leur rythme dans cette table, et les transitions CSS reçoivent des courbes <code>linear()</code> tirées des
+          mêmes échantillons.</p>
+        <div class="curves" id="curves"></div>
+        <div class="fig-controls"><button class="btn small" id="replay" type="button">Rejouer</button><p class="proof" id="motion-proof"></p></div>
+        <details class="deep"><summary>La vérification a trouvé un vrai défaut</summary><div>
+          <p>Le premier brouillon promettait que <code>easeOutBack</code> ne dépasse jamais 1,1. Le solveur a trouvé
+            t = 0,58073705, où la courbe vaut 1,1000034 en f32 : la borne a été corrigée à 1,1001 (PROGRESS.md,
+            2026-11-24). C'est exactement le genre d'erreur qu'aucun test visuel n'aurait vu.</p></div></details>
+      </section>
+
+      <section>
+        <h2 id="preuves"><span class="n">11.4</span>Ce que les solveurs ont vérifié pour ce site</h2>
+        <p>L'anneau répartit toutes les obligations des modules du site par sorte ; il est dessiné par
+          <code>@donut</code>, qui fait le travail de <code>d3.pie</code> et <code>d3.arc</code>. Les barres, à droite,
+          sont placées par <code>@bar_chart</code>.</p>
+        <div class="proof-grid">
+          <figure class="panel donut-panel">
+            <div class="donut-stage">
+              <svg id="donut" viewBox="-1.08 -1.08 2.16 2.16" role="img" aria-labelledby="donut-title"><title id="donut-title">Obligations par sorte</title></svg>
+              <div class="donut-center"><b id="donut-total">0</b><span>obligations</span></div>
+            </div>
+            <figcaption class="proof" id="donut-proof"></figcaption>
+          </figure>
+          <div class="panel legend-panel">
+            <h3>Par sorte</h3>
+            <ol class="legend" id="legend"></ol>
+            <h3>Par solveur</h3>
+            <div class="hbars" id="solvers"></div>
+            <h3>Par preuve</h3>
+            <div class="hbars" id="evidence"></div>
+          </div>
+        </div>
+        <aside class="note note-key"><b>À retenir</b><p>« pré-criblage » veut dire que l'obligation a été tranchée avant
+          tout appel de solveur : par exemple, une entrée concrète trouvée pendant le criblage satisfait PRE, ce qui
+          prouve qu'un contrat n'est pas vide. « en cache » veut dire qu'une preuve identique, même empreinte de requête,
+          mêmes versions de solveurs, avait déjà été faite.</p></aside>
+      </section>
+
+      <section id="fractale">
+        <h2 id="explorateur"><span class="n">11.5</span>Une fractale qui ne peut pas demander une vue impossible</h2>
+        <p>Cliquez pour zoomer, Maj-clic pour dézoomer. <code>@zoom</code> calcule chaque nouvelle vue et son contrat
+          garantit qu'elle respecte la précondition de <code>@render</code> : le centre reste dans le cadre de
+          l'ensemble de Mandelbrot et l'échelle reste positive et bornée. Le POST de l'un est le PRE de l'autre ; c'est
+          ainsi que des nœuds prouvés séparément se composent sans vérification supplémentaire.</p>
+        <div class="explorer">
+          <canvas id="fractal-canvas" width="256" height="192" tabindex="0" aria-label="Ensemble de Mandelbrot. Cliquez pour zoomer, Maj-clic pour dézoomer, Entrée et moins au clavier."></canvas>
+          <div class="panel fx">
+            <dl>
+              <div><dt>centre, partie réelle</dt><dd id="fx-cx">−0,5</dd></div>
+              <div><dt>centre, partie imaginaire</dt><dd id="fx-cy">0</dd></div>
+              <div><dt>échelle par pixel</dt><dd id="fx-s">0,0125</dd></div>
+              <div><dt>rendu</dt><dd id="fx-ms">—</dd></div>
+            </dl>
+            <button class="btn small" id="fx-reset" type="button">Revenir à la vue de départ</button>
+            <p class="proof" id="fractal-proof"></p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="colophon"><span class="n">11.6</span>Le colophon : les binaires du site</h2>
+        <p>Votre navigateur exécute ces fichiers exactement tels que <code>vg build --target wasm32-wasip1</code> les a
+          écrits. Pour chacun : le nœud racine, le nombre de nœuds qu'il appelle, les obligations prouvées sur tout cet
+          ensemble, l'empreinte BLAKE3 du binaire, sa taille et le nombre de vérifications restées à l'exécution.</p>
+        <div class="table-wrap"><table class="bins" id="builds"><thead><tr><th>binaire</th><th>nœud</th><th>nœuds</th><th>obligations</th><th>blake3</th><th>taille</th><th>gardes</th></tr></thead><tbody></tbody></table></div>
+        <p>Le binaire <code>knee_draft.wasm</code> fait exception, volontairement : c'est le brouillon fautif du
+          chapitre 6, construit avec <code>--unverified</code> pour que vous puissiez voir son défaut en direct.</p>
+        <div class="table-wrap"><table class="bins" id="modules"><thead><tr><th>module</th><th>nœuds</th><th>obligations prouvées</th><th>temps de solveur</th></tr></thead><tbody></tbody></table></div>
+      </section>
+
+      <section>
+        <h2 id="reconstruire"><span class="n">11.7</span>Reconstruire et vérifier le site</h2>
+        <ol class="steps">
+          <li><b>Construire</b><code>site/build.sh</code> prouve chaque module dont la page exécute des nœuds, vérifie que les
+            copies de nœuds ont l'empreinte de leurs originaux, compile chaque racine en WebAssembly et écrit tous les
+            fichiers de données.</li>
+          <li><b>Tester</b><code>node site/test.mjs</code> exécute chaque binaire sous l'hôte de la page et compare sa
+            sortie, bit pour bit, à celle de l'interpréteur de référence (<code>vg run</code>) ; il vérifie aussi que les
+            entrées hors PRE sont refusées, que l'empreinte du limiteur est bien le SHA-256 de sa sortie, et les valeurs
+            de référence de SHA-256 et de CRC-32.</li>
+          <li><b>Servir</b><code>python3 -m http.server 8765 --directory site</code>, puis ouvrir
+            <code>http://127.0.0.1:8765</code>.</li>
+        </ol>
+        <div class="quiz">
+          <span class="label">Question</span>
+          <p class="q">Le contrat de <code>@zoom</code> promet que la vue qu'il renvoie satisfait la précondition de
+            <code>@render</code>. Que se passe-t-il si l'on appelle <code>render.wasm</code> directement avec une échelle de 0,05 ?</p>
+          <ol>
+            <li><button class="choice">L'image est floue mais s'affiche.</button></li>
+            <li><button class="choice" data-right>Le binaire refuse l'entrée : son point d'entrée vérifie PRE et sort avec le code 1.</button></li>
+            <li><button class="choice">Le navigateur plante.</button></li>
+          </ol>
+          <p class="why" hidden>Un nœud exporté a une entrée vérifiée : à la frontière de confiance, le binaire teste la
+            précondition avant de calculer. <code>site/test.mjs</code> le vérifie à chaque construction.</p>
+        </div>
+        <aside class="note note-key"><b>À retenir</b><p>Construire un site avec VeriGraph, c'est déplacer la confiance :
+          on ne fait plus confiance à une bibliothèque parce qu'elle est populaire, mais parce qu'un solveur a vérifié son
+          contrat pour toutes les entrées, et parce qu'un test compare le binaire à l'interpréteur de référence.</p></aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/ce-site.js"></script>

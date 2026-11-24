@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>OmniLift : importer l'existant · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment vg-omnilift importe des fonctions C et Rust existantes (zlib crc32_z et adler32_z, SHA-256) vers VG-IR, guérit les comportements indéfinis, valide avec Alive2 et recompile vers WebAssembly.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/omnilift.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 10 · vg-omnilift</p>
+    <h1>OmniLift, <em>importer l'existant sans réécrire.</em></h1>
+    <p class="lede">Les bibliothèques éprouvées en C et en Rust représentent des décennies de travail. OmniLift les élève depuis LLVM IR vers VG-IR, guérit leurs comportements indéfinis, vérifie le raffinement par Alive2 et fuzzing différentiel, puis les recompile comme des nœuds VeriGraph natifs.</p>
+    <ul class="crates"><li><code>vg-omnilift</code></li><li><code>vg-smt</code></li><li><code>vg-mesh</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 14 min</span><span>Prérequis : chapitres 5, 7 et 9</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="pourquoi"><span class="n">10.1</span>Pourquoi élever plutôt que réécrire</h2>
+        <p>Personne ne veut réécrire à la main l'ensemble de <code>zlib</code>, de Mbed TLS ou de la crate Rust <code>sha2</code> simplement pour changer d'écosystème. Chaque réécriture manuelle introduit de subtiles erreurs aux bornes, sur les tables de correspondance ou sur l'ordre des octets. <dfn>OmniLift</dfn> (<code>vg-omnilift</code>, spécifié dans <code>docs/08-omnilift.md</code>) prend le parti inverse : partir du code compilé existant, l'élever mécaniquement en graphes VG-IR, le rendre sûr là où le C permettrait un comportement indéfini (<dfn>UB</dfn>), et démontrer qu'il coïncide avec l'original partout où celui-ci est bien défini.</p>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>Réécrire un moteur ancien de mémoire risque d'oublier un joint d'étanchéité. OmniLift scanne la pièce réelle à la cote exacte, ajoute des butées de sécurité aux endroits où le métal pourrait céder (la guérison d'UB), puis teste sur banc que le moteur modernisé tourne exactement comme l'original sur toute sa plage normale.</p>
+        </aside>
+
+        <p>Plutôt que d'analyser directement toute la syntaxe du C ou de Rust (macros, préprocesseur, sucre syntaxique, particularités d'ABI), OmniLift laisse <code>clang</code> ou <code>rustc</code> abaisser le code en LLVM IR normalisé à <code>-O1</code>, sans déroulage de boucle ni vectorisation automatique (<code>-fno-unroll-loops -fno-vectorize -fno-slp-vectorize</code>). Pourquoi ce niveau d'optimisation précis ? À <code>-O0</code>, le code déborde d'allocations sur la pile (<code>alloca</code>) qui masquent le flot de données ; à <code>-O2</code> ou <code>-O3</code>, le compilateur vectorise ou déroule les boucles et rend leur structure difficile à reconnaître. À <code>-O1</code> sans vectorisation, les boucles comptées et les tables de constantes restent parfaitement lisibles.</p>
+
+        <p>Cette stratégie évite également un écueil classique : prétendre que deux implémentations issues de langages différents devraient produire le même graphe canonique. Une fonction C de <code>zlib</code> et une fonction Rust de <code>sha2</code> organisent leurs registres et leurs tables différemment ; elles gardent donc des empreintes <code>node_hash</code> distinctes, tout en prouvant leur conformité à une même spécification dans VG-Mesh.</p>
+      </section>
+
+      <section id="sec-pipeline">
+        <h2 id="pipeline"><span class="n">10.2</span>Le pipeline en sept étapes</h2>
+        <p>Chaque invocation de <code>vg lift FILE FUNCTION --lang c|rust</code> exécute un pipeline déterministe allant du fichier source d'origine jusqu'au nœud VG-IR vérifiable et prêt à être publié avec sa provenance complète :</p>
+
+        <figure class="fig" id="fig-omnilift-pipe-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-omnilift-pipe" role="img" aria-label="Pipeline OmniLift de C ou Rust jusqu'au binaire recompilé en passant par LLVM IR, guérison d'UB, Alive2, fuzzing et vg verify"></svg></div>
+          <div class="fig-controls">
+            <button class="btn small" type="button" id="btn-pipe-walk">Parcourir les étapes</button>
+            <span class="readout" id="pipe-status">Cliquez pour suivre une fonction à travers OmniLift.</span>
+          </div>
+          <figcaption><b>Figure 10.1</b> De la source C ou Rust aux binaires vérifiés : chaque boucle comptée devient un <code>FOLD_BOUNDED</code>, chaque pointeur une paire <code>(tampon, décalage)</code>, et deux contrôles indépendants (Alive2 et fuzzing différentiel) valident l'élévation. <span class="proof" id="fig-omnilift-pipe-proof"></span></figcaption>
+        </figure>
+
+        <ol class="steps">
+          <li><b>Ingérer à <code>-O1</code> sans vectorisation</b><p><code>clang</code> (ou <code>rustc</code>) compile vers LLVM IR avec <code>-O1 -fno-unroll-loops -fno-vectorize -fno-slp-vectorize</code> (<code>docs/08-omnilift.md</code>) afin de simplifier la pile tout en préservant la structure des boucles.</p></li>
+          <li><b>Normaliser avec <code>opt</code></b><p>Les passes <code>mem2reg</code>, simplification de boucle, LCSSA et variables d'induction mettent le graphe de contrôle sous forme régulière.</p></li>
+          <li><b>Élever mécaniquement en VG-IR</b><p>Chaque boucle comptée devient un <code>FOLD_BOUNDED</code> sur l'ensemble de son état mutable, les pointeurs deviennent des couples <code>(Slice, offset)</code> bornés, et les tables globales (comme <code>crc_table</code>) deviennent des constantes tableaux <code>Array&lt;u32, 256&gt;</code>.</p></li>
+          <li><b>Guérir les comportements indéfinis</b><p>Là où le code original présente un UB potentiel (pointeur nul, débordement de tampon, dépassement signé, division par zéro), OmniLift renforce <code>PRE</code> ou insère une garde.</p></li>
+          <li><b>Valider par Alive2 et fuzzing différentiel</b><p>Le nœud élevé est rabaissé vers LLVM IR via un adaptateur et comparé à l'original par <code>alive-tv</code> (<code>unroll = 8</code>), complété par 1 000 000 de cas de fuzzing différentiel.</p></li>
+          <li><b>Vérifier et recompiler en interne</b><p><code>vg verify</code> prouve les obligations de sûreté internes du graphe élevé, puis <code>vg build</code> le compile vers Apple Silicon, Linux x86_64 ou WebAssembly.</p></li>
+        </ol>
+      </section>
+
+      <section id="sec-crc32">
+        <h2 id="crc32"><span class="n">10.3</span>Du C de <code>zlib</code> au VG-Sym vérifié</h2>
+        <p>Pour éprouver la chaîne sur du code réel, le dépôt embarque les sources inchangées de <code>zlib 1.4</code> dans <code>tests/lift/zlib/</code> (<code>tests/lift/README.md</code>). Lors de la génération de cette page, <code>site/build/omnilift.sh</code> a élevé deux fonctions fondamentales de cette bibliothèque : <code>crc32_z</code> (10 nœuds générés, 59 obligations sur 59 prouvées) et <code>adler32_z</code> (30 nœuds générés, 97 obligations sur 97 prouvées), toutes deux validées par <code>alive-tv</code> à <code>unroll = 8</code> et par un million de tests différentiels.</p>
+
+        <p>Examinez comment la représentation C se transforme : le pointeur brut <code>const unsigned char *buf</code> et la longueur <code>z_size_t len</code> fusionnent en un unique paramètre sûr <code>p1_1: Slice&lt;u8&gt;</code>, dont <code>LEN(p1_1)</code> fournit la taille exacte. La table de recherche globale de 256 entrées devient une constante tableau immuable <code>Array&lt;u32, 256&gt;</code>, tandis que chaque boucle de lecture par blocs ou octet par octet devient un nœud auxiliaire appelé par <code>FOLD_BOUNDED</code> ou sélectionné via <code>ASSERT_GUARD.branch</code>. Aucune arithmétique de pointeur brute ne subsiste dans le graphe final.</p>
+
+        <div class="stats" id="lift-stats"></div>
+
+        <p>Voici côte à côte un extrait de la source C originale de <code>tests/lift/zlib/crc32.c</code> (avec sa notice de licence zlib) et la fin du VG-Sym élevé produit par <code>vg lift</code> (les nœuds <code>@else_8</code> et <code>@crc32_z</code> extraits de <code>site/data/omnilift.json</code>) :</p>
+
+        <div class="compare-grid">
+<pre class="code" data-file="tests/lift/zlib/crc32.c (extrait, licence zlib)"><code>/* crc32.c -- compute the CRC-32 of a data stream
+ * Copyright (C) 1995-2026 Mark Adler
+ * For conditions of distribution and use, see copyright notice in zlib.h
+ */
+uLong ZEXPORT crc32_z(uLong crc, const unsigned char FAR *buf, z_size_t len) {
+    /* Return initial CRC, if requested. */
+    if (buf == Z_NULL) return 0;
+
+    /* Pre-condition the CRC */
+    crc = (~crc) &amp; 0xffffffff;
+    ...
+    /* Complete the computation of the CRC on any remaining bytes. */
+    while (len) {
+        len--;
+        crc = (crc &gt;&gt; 8) ^ crc_table[(crc ^ *buf++) &amp; 0xff];
+    }
+
+    /* Return the CRC, post-conditioned. */
+    return crc ^ 0xffffffff;
+}</code></pre>
+<pre class="code vgs" data-file="crc32_lifted.vgs (extrait réel de vg lift)"><code id="lifted-vgsym"></code></pre>
+        </div>
+
+        <div class="term" id="term-lift"></div>
+      </section>
+
+      <section id="sec-ub">
+        <h2 id="ub"><span class="n">10.4</span>Guérison d'UB et validation par Alive2</h2>
+        <p>Regardez attentivement le rapport JSON de <code>vg lift</code> sur <code>crc32_z</code> et <code>adler32_z</code> : dans les deux cas, le champ <code>ub_found</code> signale un cas concret <code>{"kind": "null_pointer", "input": ["0", []]}</code>. En C, passer un pointeur nul avec une longueur 0 à une fonction qui manipule des pointeurs ou effectue de l'arithmétique d'adresse déclenche un comportement indéfini ou une branche spéciale <code>if (buf == Z_NULL) return 0;</code> que le type <code>Slice&lt;u8&gt;</code> de VG-IR n'a plus à redouter.</p>
+
+        <p>Comment vérifier qu'une telle <dfn>guérison d'UB</dfn> ne trahit pas la fonction C originale ? OmniLift applique la technique de l'adaptateur décrite dans <code>docs/08-omnilift.md</code> : le graphe élevé est rabaissé en LLVM IR avec la même signature C, où chaque clause <code>PRE</code> devient <code>llvm.assume</code> et chaque branche <code>Result::Err</code> devient <code>unreachable</code>. Ensuite, <dfn>Alive2</dfn> (<code>alive-tv original.ll lowered.ll</code>, avec déroulement borné <code>unroll = 8</code>) contrôle le raffinement :</p>
+
+        <ul>
+          <li>Si une entrée est bien définie en C, <code>alive-tv</code> exige que la version abaissée renvoie la valeur bit pour bit identique : toute guérison trop stricte qui rejetterait une entrée C valide fait échouer Alive2 (code <code>VG-L0002</code>).</li>
+          <li>Là où le C original présentait un UB, <code>unreachable</code> côté VeriGraph est accepté comme un raffinement licite — et dans le binaire final VeriGraph, cette entrée est attrapée proprement par <code>PRE</code> ou <code>Result::Err</code> sans jamais corrompre la mémoire.</li>
+          <li>En complément, un million d'entrées de <dfn>fuzzing différentiel</dfn> comparent l'exécution compilée de l'original (sous sanitizer, sans UB) et du graphe élevé (rejet en cas d'écart : <code>VG-L0003</code>). La suite <code>g8_rejects_mutated_lift_with_vg_l0002_and_vg_l0003</code> confirme qu'un SHA-256 muté est rejeté par les deux verrous (<code>reports/gate-g8.md</code>).</li>
+        </ul>
+
+        <p>À l'issue de l'élévation, chaque nœud conserve sa fiche de <dfn>provenance</dfn> : le chemin du fichier source, le nom de la fonction d'origine, le langage (<code>c</code> ou <code>rust</code>), le chemin exact du compilateur utilisé et les options de compilation exactes. Lors de la publication dans VG-Mesh, cette provenance accompagne les octets <code>.vgir</code> pour permettre à tout auditeur de reproduire exactement l'élévation hors ligne.</p>
+      </section>
+
+      <section id="sec-sha-class">
+        <h2 id="spec-class"><span class="n">10.5</span>Une classe de spécification pour deux langages</h2>
+        <p>En plus de <code>zlib</code>, le jalon G8 (<code>reports/gate-g8.md</code> et <code>PROGRESS.md</code>, 2026-11-23) démontre l'élévation de deux implémentations indépendantes de la compression SHA-256 : <code>mbedtls_sha256_compress</code> en C (Mbed TLS 4.3.0, licence Apache-2.0) et <code>compress256</code> en Rust (crate <code>sha2 0.10.9</code>, backend portable). Parce qu'elles proviennent de deux langages et compilateurs différents, leurs graphes canoniques ont des empreintes <code>node_hash</code> distinctes (<code>assert_ne!(mbed.node_hash, rsha.node_hash)</code> dans <code>crates/vg-omnilift/tests/g8.rs</code>).</p>
+
+        <figure class="fig" id="fig-sha-class-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-sha-class" role="img" aria-label="Deux implémentations C et Rust de SHA-256 rejoignant la même classe de spécification @sha256_compress avec preuve bounded(8)"></svg></div>
+          <figcaption><b>Figure 10.2</b> Convergence par spécification : C et Rust conservent des empreintes structurelles différentes, mais partagent la classe <code>SPEC @sha256_compress</code> dans VG-Mesh grâce aux attestations signées <code>bounded(8)</code>. <span class="proof" id="fig-sha-class-proof"></span></figcaption>
+        </figure>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Soyons précis sur la force des garanties : dans l'état actuel du MVP (<code>reports/gate-g8.md</code>, <code>docs/08-omnilift.md</code>), Alive2 valide le raffinement sur un déroulement borné de <b>8 itérations</b> (<code>bounded(8)</code>), complété par 1 000 000 de cas de fuzzing, et non par une preuve universelle <code>proved</code> pour toute taille d'entrée (qui demanderait des invariants de boucle complets). De plus, OmniLift v0 se limite aux fonctions C et Rust sans E/S, sans récursion, sans pointeur vers pointeur, et à boucles bornées calculables ; les boucles non bornées relèvent des pistes de recherche <code>[R-03]</code> et <code>[R-04]</code>. Tous les critères de G8 sont satisfaits et en attente d'approbation par le propriétaire.</p>
+        </aside>
+      </section>
+
+      <section id="demo-crc">
+        <h2 id="demo"><span class="n">10.6</span>Démo en direct : <code>crc32.wasm</code> dans votre navigateur</h2>
+        <p>Le nœud <code>@crc32_z</code> élevé depuis le C de <code>zlib</code> a été vérifié puis compilé vers WebAssembly (<code>site/wasm/crc32.wasm</code>). Saisissez n'importe quel texte ci-dessous : le navigateur encode les octets en UTF-8, appelle le module WASM selon le format binaire <code>docs/13</code> (<code>u64</code> graine <code>0</code> puis <code>Slice&lt;u8&gt;</code>), et affiche directement les 32 bits calculés par le binaire à côté de la valeur de contrôle standard de <code>"123456789"</code>.</p>
+
+        <div class="demo-box">
+          <div class="demo-row">
+            <div>
+              <label class="label" for="crc-input">Entrée UTF-8 transmise à <code>crc32.wasm</code></label>
+              <input id="crc-input" type="text" value="123456789" spellcheck="false">
+            </div>
+            <button class="btn primary small" type="button" id="crc-run-btn">Calculer</button>
+          </div>
+          <div class="demo-presets">
+            <button class="btn small crc-preset" type="button" data-val="123456789">« 123456789 »</button>
+            <button class="btn small crc-preset" type="button" data-val="">Chaîne vide</button>
+            <button class="btn small crc-preset" type="button" data-val="VeriGraph">« VeriGraph »</button>
+          </div>
+          <div class="demo-out">
+            <div class="demo-kv">
+              <span class="label">CRC-32 calculé par <code>crc32.wasm</code></span>
+              <code id="crc-got">—</code>
+            </div>
+            <div class="demo-kv">
+              <span class="label">Référence standard pour « 123456789 »</span>
+              <code class="ref">cbf43926</code>
+            </div>
+            <div class="demo-kv">
+              <span class="label">Longueur envoyée</span>
+              <code id="crc-len">—</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">10.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Pourquoi OmniLift transforme-t-il les clauses <code>PRE</code> en <code>llvm.assume</code> et <code>Result::Err</code> en <code>unreachable</code> dans l'adaptateur passé à Alive2 ?</p>
+          <ol>
+            <li><button class="choice">Pour accélérer la compilation en désactivant tous les contrôles d'Alive2.</button></li>
+            <li><button class="choice" data-right>Parce qu'Alive2 n'accepte <code>unreachable</code> dans le programme abaissé que là où le programme C original possède déjà un comportement indéfini, empêchant ainsi une guérison d'UB d'exclure des entrées C valides.</button></li>
+            <li><button class="choice">Parce que WebAssembly ne supporte pas le type <code>Result</code>.</button></li>
+          </ol>
+          <p class="why" hidden>C'est la règle de raffinement de <code>docs/08-omnilift.md</code> : si la guérison d'UB rejetait une entrée sur laquelle le C était parfaitement défini, Alive2 détecterait un échec de raffinement et rejetterait l'élévation (<code>VG-L0002</code>).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Après avoir élevé <code>mbedtls_sha256_compress</code> (C) et <code>compress256</code> (Rust) avec OmniLift, les deux nœuds obtiennent-ils le même <code>node_hash</code> ?</p>
+          <ol>
+            <li><button class="choice">Oui, la canonicalisation ramène toujours deux langages au même hachage BLAKE3.</button></li>
+            <li><button class="choice" data-right>Non, leurs structures restent distinctes, mais ils sont rattachés à la même classe de spécification <code>@sha256_compress</code> dans VG-Mesh avec une attestation <code>bounded(8)</code>.</button></li>
+          </ol>
+          <p class="why" hidden>L'équivalence sémantique générale étant indécidable, C et Rust conservent des empreintes distinctes et convergent par classe de spécification (<code>docs/09-vg-mesh.md</code>, <code>crates/vg-omnilift/tests/g8.rs</code>).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Que garantit l'étiquette <code>bounded(8)</code> obtenue dans le jalon G8 ?</p>
+          <ol>
+            <li><button class="choice">Que la fonction élevée est prouvée équivalente à l'original pour des entrées de taille arbitraire jusqu'à l'infini.</button></li>
+            <li><button class="choice" data-right>Que le raffinement est vérifié par Alive2 jusqu'à 8 déroulements de boucle et complété par 1 000 000 de cas de fuzzing différentiel, ce qui est plus faible qu'une preuve universelle <code>proved</code>.</button></li>
+          </ol>
+          <p class="why" hidden>VeriGraph distingue toujours <code>proved</code> (preuve universelle par invariant) de <code>bounded(n)</code> (preuve bornée à <code>n</code> tours), afin qu'aucun appelant ne surestime la portée d'une attestation.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>OmniLift importe des fonctions C et Rust éprouvées en les élevant depuis LLVM IR vers VG-IR, en guérissant leurs comportements indéfinis, et en validant l'élévation par Alive2 et fuzzing différentiel. Ce qui provenait d'une base C héritée — comme <code>crc32_z</code> de <code>zlib</code> — devient un nœud vérifié par <code>vg verify</code> et exécutable partout, y compris ici même dans votre navigateur en WebAssembly.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/omnilift.js"></script>

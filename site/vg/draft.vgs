@@ -1,0 +1,43 @@
+// expect: reject @soft_knee/POST.0
+// The first draft of @soft_knee, kept to show its bug live. The node is examples/soft_knee_draft.vgs's,
+// character for character (same node hash: site/build.sh checks it), and @draft_curve maps it over
+// 256 samples. It does not verify, so site/build.sh builds it with --unverified: the checked entry
+// still refuses inputs that break PRE, but nothing proves the result, and for huge inputs it is NaN.
+module draft;
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1], first draft"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);                // t; overflows to +inf for huge x
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(%4, %5);                // BUG: inf / inf is NaN
+    %7  = FMIN(%6, 1.0:f32);           // does not help: IEEE minimum propagates NaN
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}
+
+NODE @draft_curve [intent: "The draft soft-knee applied to 256 samples", export] {
+  SIGNATURE: (xs: Array<f32, 256>, knee: f32) -> (Array<f32, 256>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: knee >= 0.5 && knee <= 0.99 && forall(i in 0..256) { is_finite(xs[i]) };
+  }
+  BODY {
+    %0 = SIMD_MAP(@soft_knee, xs, knee);
+    RETURN(%0);
+  }
+}

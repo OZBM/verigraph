@@ -1,0 +1,472 @@
+// expect: verify
+// Verified graph-layout engine for every diagram on the VeriGraph site: layered longest-path
+// placement with tie-broken ordering, box-clamped coordinates, and cubic Bezier edge routing.
+module diagram;
+
+// A step of a fixed-length loop: the loop walks a small array, one element per step, so its
+// bound is visible to the verifier; the element itself carries nothing.
+NODE @tick [intent: "One step of a fixed-length loop"] {
+  SIGNATURE: (k: u64) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(0:u8);
+  }
+}
+
+NODE @id_u32 [intent: "Index k as a u32 in 0..32"] {
+  SIGNATURE: (k: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: k < 32;
+    POST: result < 32 && result == k;
+  }
+  BODY {
+    %0 = CAST.u32(k);
+    RETURN(%0);
+  }
+}
+
+// Clamped with comparisons so NaN cannot pass: a value outside [lo, hi] or NaN becomes lo or hi.
+NODE @clamp_to [intent: "x limited to [lo, hi], NaN sent to lo"] {
+  SIGNATURE: (x: f32, lo: f32, hi: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lo <= hi;
+    POST: result >= lo && result <= hi;
+  }
+  BODY {
+    %0 = GE.f(x, lo);
+    %1 = SELECT(%0, x, lo);
+    %2 = LE.f(%1, hi);
+    %3 = SELECT(%2, %1, hi);
+    RETURN(%3);
+  }
+}
+
+// Clamp x to [0, lim - b], stepping back by 2^-9 if float rounding pushes (lim - b) + b past lim.
+NODE @clamp_box [intent: "Top-left coordinate clamped so x >= 0 and x + b <= lim"] {
+  SIGNATURE: (x: f32, b: f32, lim: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: b >= 10.0 && b <= lim && lim <= 13000.0;
+    POST: result >= 0.0 && result + b <= lim;
+  }
+  BODY {
+    %0 = FSUB(lim, b);
+    %1 = GE.f(x, 0.0:f32);
+    %2 = SELECT(%1, x, 0.0:f32);
+    %3 = LE.f(%2, %0);
+    %4 = SELECT(%3, %2, %0);
+    %5 = FADD(%4, b);
+    %6 = LE.f(%5, lim);
+    %7 = FSUB(%4, 0.001953125:f32);
+    %8 = GE.f(%7, 0.0:f32);
+    %9 = SELECT(%8, %7, 0.0:f32);
+    %10 = FADD(%9, b);
+    %11 = LE.f(%10, lim);
+    %12 = SELECT(%11, %9, 0.0:f32);
+    %13 = SELECT(%6, %4, %12);
+    RETURN(%13);
+  }
+}
+
+NODE @init_layer [intent: "Initial node layer capped at 15"] {
+  SIGNATURE: (m: u32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result <= 15;
+  }
+  BODY {
+    %0 = LE.u(m, 15:u32);
+    %1 = SELECT(%0, m, 15:u32);
+    RETURN(%1);
+  }
+}
+
+// Relax one edge slot if it is a valid forward edge (flags == 0, src < n, dst < n).
+// Cap the read layer at 15 locally so the relaxation loop needs no quantified array invariant.
+NODE @relax_edge [intent: "Relax one edge slot into the node layer array"] {
+  SIGNATURE: (layers: Array<u32, 32>, e_val: u32, n: u32) -> (Array<u32, 32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n >= 1 && n <= 32;
+  }
+  BODY {
+    %0 = SHR.checked(e_val, 8:u32);
+    %1 = AND(%0, 255:u32);
+    %2 = AND(e_val, 255:u32);
+    %3 = LT.u(e_val, 65536:u32);
+    %4 = LT.u(%1, n);
+    %5 = LT.u(%2, n);
+    %6 = BAND(%3, %4);
+    %7 = BAND(%6, %5);
+    %8 = SELECT(%7, %1, 0:u32);
+    %9 = SELECT(%7, %2, 0:u32);
+    %10 = CAST.u64(%8);
+    %11 = CAST.u64(%9);
+    %12 = INDEX(layers, %10);
+    %13 = INDEX(layers, %11);
+    %14 = LE.u(%12, 15:u32);
+    %15 = SELECT(%14, %12, 15:u32);
+    %16 = ADD.checked(%15, 1:u32);
+    %17 = LE.u(%16, 15:u32);
+    %18 = SELECT(%17, %16, 15:u32);
+    %19 = GT.u(%18, %13);
+    %20 = SELECT(%19, %18, %13);
+    %21 = SELECT(%7, %20, %13);
+    %22 = UPDATE(layers, %11, %21);
+    RETURN(%22);
+  }
+}
+
+NODE @relax_round [intent: "One pass relaxing all 64 edge slots"] {
+  SIGNATURE: (layers: Array<u32, 32>, t: u8, es: Array<u32, 64>, n: u32) -> (Array<u32, 32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n >= 1 && n <= 32;
+    INVARIANT @layers_bounded(k, acc): true;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@relax_edge, es, n, init=layers, invariant=@layers_bounded);
+    RETURN(%0);
+  }
+}
+
+NODE @max_layer_step [intent: "Fold step computing maximum layer across active nodes"] {
+  SIGNATURE: (acc: u32, j: u32, n: u32, layers: Array<u32, 32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc <= 15 && j < 32;
+    POST: result <= 15;
+  }
+  BODY {
+    %0 = CAST.u64(j);
+    %1 = INDEX(layers, %0);
+    %2 = LE.u(%1, 15:u32);
+    %3 = SELECT(%2, %1, 15:u32);
+    %4 = LT.u(j, n);
+    %5 = GT.u(%3, acc);
+    %6 = BAND(%4, %5);
+    %7 = SELECT(%6, %3, acc);
+    RETURN(%7);
+  }
+}
+
+NODE @count_step [intent: "Fold step counting active nodes in target_layer"] {
+  SIGNATURE: (acc: u32, j: u32, target_layer: u32, n: u32, layers: Array<u32, 32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc < 32 && j < 32;
+    POST: result <= acc + 1;
+  }
+  BODY {
+    %0 = CAST.u64(j);
+    %1 = INDEX(layers, %0);
+    %2 = LT.u(j, n);
+    %3 = EQ(%1, target_layer);
+    %4 = BAND(%2, %3);
+    %5 = SELECT(%4, 1:u32, 0:u32);
+    %6 = ADD.checked(acc, %5);
+    RETURN(%6);
+  }
+}
+
+NODE @node_count [intent: "Number of active nodes sharing node i's layer"] {
+  SIGNATURE: (i: u64, n: u32, layers: Array<u32, 32>, idx32: Array<u32, 32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 32;
+    PRE: forall(j in 0..32) { idx32[j] < 32 };
+    POST: result <= 32;
+    INVARIANT @cnt_inv(k, acc): acc <= k;
+  }
+  BODY {
+    %0 = INDEX(layers, i);
+    %1 = FOLD_BOUNDED(@count_step, idx32, %0, n, layers, init=0:u32, invariant=@cnt_inv);
+    RETURN(%1);
+  }
+}
+
+NODE @rank_step [intent: "Fold step counting active nodes preceding i in the same layer"] {
+  SIGNATURE: (acc: u32, j: u32, i: u32, i_layer: u32, i_key: f32, n: u32, layers: Array<u32, 32>, key: Array<f32, 32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc < 32 && j < 32;
+    POST: result <= acc + 1;
+  }
+  BODY {
+    %0 = CAST.u64(j);
+    %1 = INDEX(layers, %0);
+    %2 = INDEX(key, %0);
+    %3 = LT.u(j, n);
+    %4 = EQ(%1, i_layer);
+    %5 = BAND(%3, %4);
+    %6 = LT.f(%2, i_key);
+    %7 = EQ(%2, i_key);
+    %8 = LT.u(j, i);
+    %9 = BAND(%7, %8);
+    %10 = BOR(%6, %9);
+    %11 = BAND(%5, %10);
+    %12 = SELECT(%11, 1:u32, 0:u32);
+    %13 = ADD.checked(acc, %12);
+    RETURN(%13);
+  }
+}
+
+NODE @node_rank [intent: "Rank of node i within its layer by key ascending, ties broken by index"] {
+  SIGNATURE: (i: u64, n: u32, layers: Array<u32, 32>, key: Array<f32, 32>, idx32: Array<u32, 32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 32;
+    PRE: forall(j in 0..32) { idx32[j] < 32 };
+    POST: result <= 32;
+    INVARIANT @rnk_inv(k, acc): acc <= k;
+  }
+  BODY {
+    %0 = CAST.u32(i);
+    %1 = INDEX(layers, i);
+    %2 = INDEX(key, i);
+    %3 = FOLD_BOUNDED(@rank_step, idx32, %0, %1, %2, n, layers, key, init=0:u32, invariant=@rnk_inv);
+    RETURN(%3);
+  }
+}
+
+NODE @max_count_step [intent: "Fold step computing maximum layer occupancy across active nodes"] {
+  SIGNATURE: (acc: u32, j: u32, n: u32, counts: Array<u32, 32>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc >= 1 && acc <= 32 && j < 32;
+    PRE: forall(i in 0..32) { counts[i] <= 32 };
+    POST: result >= 1 && result <= 32;
+  }
+  BODY {
+    %0 = CAST.u64(j);
+    %1 = INDEX(counts, %0);
+    %2 = LT.u(j, n);
+    %3 = GT.u(%1, acc);
+    %4 = BAND(%2, %3);
+    %5 = SELECT(%4, %1, acc);
+    RETURN(%5);
+  }
+}
+
+NODE @compute_size [intent: "Diagram canvas [W, H] including back-edge lane"] {
+  SIGNATURE: (l: u32, r: u32, dx: f32, dy: f32, vert: Bool) -> (Tuple<f32, f32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: l >= 1 && l <= 16 && r >= 1 && r <= 32;
+    PRE: dx >= 40.0 && dx <= 400.0 && dy >= 20.0 && dy <= 300.0;
+    POST: result.0 >= dx && result.0 <= 13000.0 && result.1 >= dy && result.1 <= 9750.0;
+  }
+  BODY {
+    %0 = CAST.f32(l);
+    %1 = CAST.f32(r);
+    %2 = FMUL(dx, %0);
+    %3 = FMUL(dy, %1);
+    %4 = FMUL(dy, 0.5:f32);
+    %5 = FADD(%3, %4);
+    %6 = FMUL(dx, %1);
+    %7 = FMUL(dx, 0.5:f32);
+    %8 = FADD(%6, %7);
+    %9 = FMUL(dy, %0);
+    %10 = SELECT(vert, %8, %2);
+    %11 = SELECT(vert, %9, %5);
+    %12 = TUPLE(%10, %11);
+    RETURN(%12);
+  }
+}
+
+NODE @center_coord [intent: "Coordinate k (cx or cy) of node centers"] {
+  SIGNATURE: (k: u64, layers: Array<u32, 32>, ranks: Array<u32, 32>, counts: Array<u32, 32>, r_max: u32, dx: f32, dy: f32, vert: Bool) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: k < 64;
+  }
+  BODY {
+    %0 = DIV.checked(k, 2:u64);
+    %1 = MOD.checked(k, 2:u64);
+    %2 = EQ(%1, 0:u64);
+    %3 = INDEX(layers, %0);
+    %4 = INDEX(ranks, %0);
+    %5 = INDEX(counts, %0);
+    %6 = CAST.f32(%3);
+    %7 = FADD(%6, 0.5:f32);
+    %8 = CAST.f32(r_max);
+    %9 = CAST.f32(%5);
+    %10 = FSUB(%8, %9);
+    %11 = FMUL(%10, 0.5:f32);
+    %12 = CAST.f32(%4);
+    %13 = FADD(%12, 0.5:f32);
+    %14 = FADD(%13, %11);
+    %15 = BNOT(vert);
+    %16 = SELECT(%2, %15, vert);
+    %17 = SELECT(%2, dx, dy);
+    %18 = SELECT(%16, %7, %14);
+    %19 = FMUL(%17, %18);
+    RETURN(%19);
+  }
+}
+
+NODE @pos_coord [intent: "Top-left coordinate k of node boxes, clamped inside canvas and zeroed for unused slots"] {
+  SIGNATURE: (k: u64, n: u32, centers: Array<f32, 64>, bw: f32, bh: f32, w: f32, h: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: k < 64 && n >= 1 && n <= 32;
+    PRE: bw >= 10.0 && bw <= w && w <= 13000.0;
+    PRE: bh >= 10.0 && bh <= h && h <= 9750.0;
+    POST: k % 2 == 0 ==> result >= 0.0 && result + bw <= w;
+    POST: k % 2 == 1 ==> result >= 0.0 && result + bh <= h;
+    POST: k / 2 >= n ==> result == 0.0;
+  }
+  BODY {
+    %0 = DIV.checked(k, 2:u64);
+    %1 = MOD.checked(k, 2:u64);
+    %2 = EQ(%1, 0:u64);
+    %3 = INDEX(centers, k);
+    %4 = SELECT(%2, bw, bh);
+    %5 = SELECT(%2, w, h);
+    %6 = FMUL(%4, 0.5:f32);
+    %7 = FSUB(%3, %6);
+    %8 = CALL_HASH(@clamp_box, %7, %4, %5);
+    %9 = CAST.u64(n);
+    %10 = LT.u(%0, %9);
+    %11 = SELECT(%10, %8, 0.0:f32);
+    RETURN(%11);
+  }
+}
+
+NODE @edge_axis_coord [intent: "One axis coordinate of Bezier control point p in [0, lim]"] {
+  SIGNATURE: (p: u64, au: f32, av: f32, d: f32, b: f32, is_layer_axis: Bool, back: Bool, lim: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: p < 4 && lim > 0.0;
+    POST: result >= 0.0 && result <= lim;
+  }
+  BODY {
+    %0 = FMUL(b, 0.5:f32);
+    %1 = FMUL(d, 0.5:f32);
+    %2 = FADD(au, %0);
+    %3 = FSUB(av, %0);
+    %4 = FADD(%2, %3);
+    %5 = FMUL(%4, 0.5:f32);
+    %6 = EQ(p, 0:u64);
+    %7 = EQ(p, 3:u64);
+    %8 = SELECT(%7, %3, %5);
+    %9 = SELECT(%6, %2, %8);
+    %10 = LE.u(p, 1:u64);
+    %11 = SELECT(%10, au, av);
+    %12 = FADD(av, %0);
+    %13 = FMAX(au, av);
+    %14 = FADD(%13, %0);
+    %15 = FADD(%14, %1);
+    %16 = SELECT(%7, %12, %15);
+    %17 = SELECT(%6, %2, %16);
+    %18 = SELECT(is_layer_axis, %9, %11);
+    %19 = SELECT(is_layer_axis, %11, %17);
+    %20 = SELECT(back, %19, %18);
+    %21 = CALL_HASH(@clamp_to, %20, 0.0:f32, lim);
+    RETURN(%21);
+  }
+}
+
+NODE @path_coord [intent: "Coordinate k of the 64 cubic Bezier edge paths, clamped to canvas bounds"] {
+  SIGNATURE: (k: u64, n: u32, es: Array<u32, 64>, centers: Array<f32, 64>, g: Array<f32, 4>, vert: Bool, w: f32, h: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: k < 512 && n >= 1 && n <= 32 && w > 0.0 && h > 0.0;
+    POST: k % 2 == 0 ==> result >= 0.0 && result <= w;
+    POST: k % 2 == 1 ==> result >= 0.0 && result <= h;
+  }
+  BODY {
+    %0 = DIV.checked(k, 8:u64);
+    %1 = MOD.checked(k, 8:u64);
+    %2 = DIV.checked(%1, 2:u64);
+    %3 = MOD.checked(k, 2:u64);
+    %4 = EQ(%3, 0:u64);
+    %5 = INDEX(es, %0);
+    %6 = LT.u(%5, 131072:u32);
+    %7 = SHR.checked(%5, 16:u32);
+    %8 = EQ(%7, 1:u32);
+    %9 = SHR.checked(%5, 8:u32);
+    %10 = AND(%9, 255:u32);
+    %11 = AND(%5, 255:u32);
+    %12 = LT.u(%10, n);
+    %13 = LT.u(%11, n);
+    %14 = BAND(%6, %12);
+    %15 = BAND(%14, %13);
+    %16 = SELECT(%15, %10, 0:u32);
+    %17 = SELECT(%15, %11, 0:u32);
+    %18 = SELECT(%4, 0:u64, 1:u64);
+    %19 = CAST.u64(%16);
+    %20 = MUL.checked(%19, 2:u64);
+    %21 = ADD.checked(%20, %18);
+    %22 = CAST.u64(%17);
+    %23 = MUL.checked(%22, 2:u64);
+    %24 = ADD.checked(%23, %18);
+    %25 = INDEX(centers, %21);
+    %26 = INDEX(centers, %24);
+    %27 = INDEX(g, 0:u64);
+    %28 = INDEX(g, 1:u64);
+    %29 = INDEX(g, 2:u64);
+    %30 = INDEX(g, 3:u64);
+    %31 = SELECT(%4, %27, %28);
+    %32 = SELECT(%4, %29, %30);
+    %33 = SELECT(%4, w, h);
+    %34 = BNOT(vert);
+    %35 = SELECT(%4, %34, vert);
+    %36 = CALL_HASH(@edge_axis_coord, %2, %25, %26, %31, %32, %35, %8, %33);
+    %37 = SELECT(%15, %36, 0.0:f32);
+    RETURN(%37);
+  }
+}
+
+NODE @layout [intent: "Lay out a directed graph of up to 32 nodes and 64 edges into box positions, Bezier paths and canvas size", export] {
+  SIGNATURE: (n: u32, es: Array<u32, 64>, key: Array<f32, 32>, minl: Array<u32, 32>, g: Array<f32, 4>, vert: Bool) -> (Array<f32, 64>, Array<f32, 512>, Array<f32, 2>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n >= 1 && n <= 32;
+    PRE: g[0] >= 40.0 && g[0] <= 400.0 && g[1] >= 20.0 && g[1] <= 300.0;
+    PRE: g[2] >= 10.0 && g[2] <= g[0] && g[3] >= 10.0 && g[3] <= g[1];
+    PRE: forall(i in 0..32) { is_finite(key[i]) };
+    PRE: forall(i in 0..32) { minl[i] <= 15 };
+    POST: result.2[0] > 0.0 && result.2[1] > 0.0;
+    POST: forall(i in 0..32) {
+      result.0[2 * i] >= 0.0 && result.0[2 * i] + g[2] <= result.2[0]
+      && result.0[2 * i + 1] >= 0.0 && result.0[2 * i + 1] + g[3] <= result.2[1]
+    };
+    POST: forall(i in 0..32) { i >= n ==> result.0[2 * i] == 0.0 && result.0[2 * i + 1] == 0.0 };
+    POST: forall(p in 0..256) {
+      result.1[2 * p] >= 0.0 && result.1[2 * p] <= result.2[0]
+      && result.1[2 * p + 1] >= 0.0 && result.1[2 * p + 1] <= result.2[1]
+    };
+    INVARIANT @layers_ok(k, acc): true;
+    INVARIANT @max_l_ok(k, acc): acc <= 15;
+    INVARIANT @max_r_ok(k, acc): acc >= 1 && acc <= 32;
+  }
+  BODY {
+    %0 = GENERATE(@tick, 32:u64);
+    %1 = GENERATE(@id_u32, 32:u64);
+    %2 = SIMD_MAP(@init_layer, minl);
+    %3 = FOLD_BOUNDED(@relax_round, %0, es, n, init=%2, invariant=@layers_ok);
+    %4 = FOLD_BOUNDED(@max_layer_step, %1, n, %3, init=0:u32, invariant=@max_l_ok);
+    %5 = ADD.checked(%4, 1:u32);
+    %6 = GENERATE(@node_count, 32:u64, n, %3, %1);
+    %7 = GENERATE(@node_rank, 32:u64, n, %3, key, %1);
+    %8 = FOLD_BOUNDED(@max_count_step, %1, n, %6, init=1:u32, invariant=@max_r_ok);
+    %9 = INDEX(g, 0:u64);
+    %10 = INDEX(g, 1:u64);
+    %11 = INDEX(g, 2:u64);
+    %12 = INDEX(g, 3:u64);
+    %13 = CALL_HASH(@compute_size, %5, %8, %9, %10, vert);
+    %14 = PROJ(%13, 0:u32);
+    %15 = PROJ(%13, 1:u32);
+    %16 = IDENTITY([0.0, 0.0]:Array<f32, 2>);
+    %17 = UPDATE(%16, 0:u64, %14);
+    %18 = UPDATE(%17, 1:u64, %15);
+    %19 = GENERATE(@center_coord, 64:u64, %3, %7, %6, %8, %9, %10, vert);
+    %20 = GENERATE(@pos_coord, 64:u64, n, %19, %11, %12, %14, %15);
+    %21 = GENERATE(@path_coord, 512:u64, n, es, %19, g, vert, %14, %15);
+    RETURN(%20, %21, %18);
+  }
+}

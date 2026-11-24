@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Utiliser VeriGraph · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Installer VeriGraph, vérifier et compiler un premier nœud, brancher un agent IA via vg mcp et Antigravity IDE, diagnostiquer les erreurs et connaître l'état réel du projet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/utiliser.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 12 · Prise en main</p>
+    <h1>Utiliser VeriGraph, <em>de zéro au binaire prouvé.</em></h1>
+    <p class="lede">Comment installer la chaîne d'outils sur votre machine, écrire et prouver un premier nœud, provoquer volontairement un contre-exemple, brancher un agent IA par <code>vg mcp</code> ou Antigravity IDE, et situer honnêtement ce qui fonctionne aujourd'hui.</p>
+    <ul class="crates"><li><code>vg-cli</code></li><li><code>vg-smt</code></li><li><code>vg-codegen</code></li><li><code>editors/antigravity</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 14 min</span><span>Prérequis : chapitres 3 à 8</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="installer"><span class="n">12.1</span>Installer la chaîne d'outils</h2>
+        <p>Vous voulez passer des principes à la pratique sur votre propre machine ? VeriGraph s'articule autour d'un seul exécutable, <code>vg</code>, compilé en Rust, qui pilote ensuite des solveurs SMT externes et un compilateur C/LLVM. Aucun démon caché ne tourne en permanence : <code>vg</code> lance Z3, Bitwuzla, cvc5 ou <code>clang</code> comme des sous-processus isolés dont les versions sont consignées dans <code>rust-toolchain.toml</code> et <code>toolchain.lock</code>.</p>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>Voyez <code>vg</code> comme un chef d'atelier : il lit votre plan en VG-Sym, fait inspecter chaque pièce par un ou deux vérificateurs indépendants (les solveurs SMT), puis confie la fabrication à <code>clang</code> seulement lorsque tous les tampons de conformité sont réunis.</p>
+        </aside>
+
+        <p>Dans la version actuelle (<code>docs/guide/install.md</code> et <code>toolchain.lock</code>), l'outil principal est développé et testé en priorité sur macOS Apple Silicon (<code>aarch64-apple-darwin</code>). Sur Linux <code>x86_64</code>, l'analyse (<code>vg check</code>), la preuve (<code>vg verify</code>), l'interpréteur (<code>vg run</code>) et le serveur MCP (<code>vg mcp</code>) fonctionnent également, et <code>vg build</code> lie les binaires natifs dès que <code>zig</code> est présent.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Outil</th><th>Version épinglée</th><th>Rôle dans <code>vg</code></th><th>Obligatoire ?</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>rustc</code></td><td>1.90.0 (<code>rust-toolchain.toml</code>)</td><td>Compiler <code>vg</code> et le workspace</td><td>Oui</td></tr>
+              <tr><td><code>z3</code></td><td>5.4.1 (<code>toolchain.lock</code>)</td><td>Solveur SMT principal (<code>vg verify</code>, <code>vg build</code>)</td><td>Oui pour prouver</td></tr>
+              <tr><td><code>clang</code></td><td>Apple 21 / LLVM 23.1.6</td><td>Lier les binaires natifs et <code>wasm32-wasip1</code></td><td>Oui pour compiler</td></tr>
+              <tr><td><code>bitwuzla</code></td><td>0.11.0 (<code>toolchain.lock</code>)</td><td>Requêtes flottantes et mode <code>release</code></td><td>Optionnel (recommandé)</td></tr>
+              <tr><td><code>cvc5</code></td><td>1.4.2 (<code>toolchain.lock</code>)</td><td>Second solveur pour <code>--mode release</code></td><td>Optionnel</td></tr>
+              <tr><td><code>zig</code></td><td>0.17.1 (<code>toolchain.lock</code>)</td><td>Édition de liens croisée <code>x86_64-unknown-linux-gnu</code></td><td>Optionnel</td></tr>
+              <tr><td><code>wasi-libc</code> / <code>wasi-runtimes</code></td><td>34 / 23.1.6</td><td>Sysroot WebAssembly pour <code>wasm32-wasip1</code></td><td>Optionnel</td></tr>
+              <tr><td><code>wasmtime</code></td><td>51.0.0</td><td>Exécuter les binaires WASI en ligne de commande</td><td>Optionnel</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Choisissez votre système ci-dessous pour installer les dépendances, compiler <code>vg</code> et vérifier que la chaîne répond :</p>
+
+        <div class="tabs">
+          <div class="tablist">
+            <button aria-controls="tab-macos">macOS (Apple Silicon)</button>
+            <button aria-controls="tab-linux">Linux (x86_64)</button>
+          </div>
+          <div class="tabpanel" id="tab-macos">
+            <p>Installez d'abord les outils en ligne de commande Xcode (<code>xcode-select --install</code>) et Rust via <code>rustup</code>, puis les solveurs et cibles WebAssembly via Homebrew :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>brew install z3 bitwuzla llvm wasi-libc wasi-runtimes wasmtime zig</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+            <p>Notez que sur macOS antérieur à Xcode 27, le compilateur <code>clang</code> d'Apple ne contient pas la cible <code>wasm32</code> ; <code>vg</code> détecte alors automatiquement le <code>clang</code> de Homebrew LLVM (<code>docs/guide/install.md</code>). Pour compiler et installer <code>vg</code> dans <code>~/.cargo/bin</code> depuis la racine du dépôt :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>cargo install --path crates/vg-cli --locked</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+            <p>Si vous travaillez directement dans le dépôt sans installer globalement, compilez le binaire de publication et vérifiez le premier exemple :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>cargo build --release -p vg-cli
+./target/release/vg check examples/quickstart.vgs
+./target/release/vg verify examples/quickstart.vgs</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+          </div>
+          <div class="tabpanel" id="tab-linux">
+            <p>Installez Rust 1.90.0 avec <code>rustup</code> (qui lit <code>rust-toolchain.toml</code> automatiquement), puis récupérez l'archive officielle de Z3 5.4.1 depuis les sorties GitHub de Z3 (comme le fait la CI dans <code>.github/workflows/ci.yml</code>) et placez <code>z3</code> dans <code>/usr/local/bin</code> ou sur votre <code>PATH</code>.</p>
+            <div class="cmd-block">
+              <pre class="code"><code>curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+cargo install --path crates/vg-cli --locked</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+            <p><code>vg</code> cherche chaque solveur dans <code>/opt/homebrew/bin</code>, puis <code>/usr/local/bin</code>, puis sur <code>PATH</code>. Vérifiez votre installation avec :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>vg check examples/quickstart.vgs
+vg verify examples/quickstart.vgs</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="premier-noeud"><span class="n">12.2</span>Votre premier nœud pas à pas</h2>
+        <p>Le tutoriel officiel (<code>docs/guide/tutorial.md</code>) propose de partir d'un petit module, de le contrôler, de le prouver, de l'exécuter puis de le compiler — avant d'observer ce qui se passe lorsqu'un contrat est violé. Nous rejouons ici exactement ce parcours sur deux fichiers du dépôt : <code>examples/quickstart.vgs</code> (sain) et <code>examples/soft_knee_draft.vgs</code> (boggué).</p>
+
+        <p>Voici deux nœuds extraits mot pour mot de <code>examples/quickstart.vgs</code> : <code>@add_sat</code> additionne deux octets avec saturation, et <code>@soft_knee</code> compresse en douceur un échantillon audio flottant dans <code>[-1, 1]</code>.</p>
+
+<pre class="code vgs" data-file="examples/quickstart.vgs"><code>NODE @add_sat [intent: "Add two bytes, saturating at 255"] {
+  SIGNATURE: (a: u8, b: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= a && result >= b && (a + b <= 255 ==> result == a + b);
+  }
+  BODY {
+    %0 = ADD.sat(a, b);
+    RETURN(%0);
+  }
+}
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}</code></pre>
+
+        <ol class="steps">
+          <li>
+            <b>Contrôler la syntaxe, les types et les empreintes (<code>vg check</code>)</b>
+            <p><code>vg check</code> analyse le texte VG-Sym, met chaque graphe sous forme canonique, calcule son empreinte BLAKE3 (<code>node_hash</code>) et vérifie les types et effets. À ce stade, rien n'est encore prouvé mathématiquement.</p>
+          </li>
+          <li>
+            <b>Prouver toutes les obligations (<code>vg verify</code>)</b>
+            <p><code>vg verify</code> décompose chaque nœud en <dfn>obligations de preuve</dfn> : non-vacuité de <code>PRE</code>, sûreté des opérations partielles (<code>ADD.no_overflow</code>, <code>FCOPYSIGN.sign</code>, <code>FCLAMP.bounds</code>…), et chaque conjonction de <code>POST</code>. Un solveur doit répondre <code>unsat</code> à la négation de l'objectif.</p>
+          </li>
+          <li>
+            <b>Tester concrètement dans l'interpréteur (<code>vg run</code>)</b>
+            <p><code>vg run</code> exécute le nœud dans l'interpréteur de référence <code>vg-interp</code>. Les flottants et entiers 64 bits sont passés entre guillemets (<code>"3e38"</code>, <code>"0.5"</code>) pour ne perdre aucun bit en JSON. La réponse indique <code>pre</code>, <code>post</code> et les sorties.</p>
+          </li>
+          <li>
+            <b>Compiler en binaire natif sans gardes (<code>vg build</code>)</b>
+            <p><code>vg build</code> re-vérifie le nœud et ses dépendances (en réutilisant le cache dans <code>.vg/proofs</code>), efface les assertions prouvées et génère un exécutable via <code>clang</code>. Comme toutes les obligations sont prouvées, le champ <code>residual_guards</code> vaut 0.</p>
+          </li>
+        </ol>
+
+        <div class="stats" id="quickstart-stats"></div>
+
+        <div class="term" id="term-quickstart"></div>
+
+        <h3>Provoquer un bogue et lire le contre-exemple</h3>
+        <p>Que se passe-t-il si le corps contient une erreur subtile ? Dans <code>examples/soft_knee_draft.vgs</code>, l'auteur a calculé <code>%6 = FDIV(%4, %5)</code> c'est-à-dire <code>t / (1 + t)</code>. Sur les valeurs courantes, tout semble parfait. Mais dès que <code>x</code> approche la limite des flottants 32 bits (<code>-3.4028235e38</code>), <code>t</code> déborde vers <code>+inf</code>, puis <code>inf / inf</code> produit <code>NaN</code> — et <code>FCLAMP</code> propage <code>NaN</code> au lieu de borner à <code>[-1, 1]</code>.</p>
+
+        <p><code>vg verify</code> rejette ce brouillon avec le code de sortie <code>1</code>, puis <code>vg explain</code> fournit la tranche causale minimale (<dfn>slice</dfn>) et la condition la plus faible (<dfn>diff</dfn>) qui réparerait l'obligation :</p>
+
+        <div class="term" id="term-bug"></div>
+      </section>
+
+      <section id="sec-boucle">
+        <h2 id="boucle"><span class="n">12.3</span>La boucle de travail au quotidien</h2>
+        <p>En pratique, travailler avec VeriGraph suit un cycle court et déterministe. Tant qu'une preuve échoue, vous ne compilez pas à l'aveugle : vous inspectez le contre-exemple concret fourni par <code>vg explain</code> ou l'extrait de code dans votre éditeur, vous corrigez soit le corps (bogue d'implémentation), soit <code>PRE</code> (hypothèse manquante aux frontières), soit le contrat d'un nœud appelé (<dfn>contract gap</dfn>).</p>
+
+        <figure class="fig" id="fig-workflow-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-workflow" role="img" aria-label="Boucle quotidienne d'édition, vérification, explication et compilation dans VeriGraph"></svg></div>
+          <div class="fig-controls">
+            <button class="btn small" type="button" id="btn-sim-loop">Simuler un cycle échec → réparation</button>
+            <span class="readout" id="loop-status">Prêt : cliquez pour animer un tour complet.</span>
+          </div>
+          <figcaption><b>Figure 12.1</b> Cycle de travail quotidien avec <code>vg</code>. L'arête en pointillés orange figure la boucle de réparation déclenchée lorsqu'une obligation est réfutée. <span class="proof" id="fig-workflow-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="avec-ia"><span class="n">12.4</span>Utiliser VeriGraph avec un agent IA</h2>
+        <p>Plutôt que de taper chaque nœud à la main, vous pouvez confier la rédaction à un assistant IA tout en gardant la même barrière mathématique : l'agent s'adresse à la chaîne d'outils via le protocole <dfn>MCP</dfn> (<i>Model Context Protocol</i>) lancé par <code>vg mcp</code> sur entrée/sortie standard, et s'appuie sur le skill <code>skills/verigraph-synthesis/SKILL.md</code> pour suivre la méthode « contrat d'abord, puis preuve et réparation ».</p>
+
+        <div class="tabs">
+          <div class="tablist">
+            <button aria-controls="tab-agy">Antigravity IDE</button>
+            <button aria-controls="tab-claude">Claude Code</button>
+            <button aria-controls="tab-other-mcp">Tout client MCP</button>
+          </div>
+          <div class="tabpanel" id="tab-agy">
+            <p>Le dépôt fournit un installateur complet dans <code>editors/antigravity/install.sh</code>. En une commande, il compile et installe <code>vg</code> dans <code>~/.cargo/bin</code>, empaquette l'extension reproductible <code>target/antigravity/verigraph-0.1.0.vsix</code>, l'installe dans Antigravity IDE, et déploie le plugin dans <code>~/.gemini/config/plugins/verigraph</code> (avec le skill et la configuration MCP) :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>editors/antigravity/install.sh</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+            <p>Si vous préférez déclarer uniquement le serveur MCP manuellement dans <code>~/.gemini/config/mcp_config.json</code> :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>{ "mcpServers": { "verigraph": { "command": "/Users/you/.cargo/bin/vg", "args": ["mcp"] } } }</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+          </div>
+          <div class="tabpanel" id="tab-claude">
+            <p>Ajoutez un fichier <code>.mcp.json</code> à la racine de votre projet contenant des sources <code>.vgs</code>, en donnant le chemin absolu vers <code>vg</code> (un client lancé depuis une interface graphique n'hérite pas toujours du <code>PATH</code> de votre shell) :</p>
+            <div class="cmd-block">
+              <pre class="code"><code>{ "mcpServers": { "verigraph": { "command": "/Users/you/.cargo/bin/vg", "args": ["mcp"] } } }</code></pre>
+              <button class="copy-btn" type="button">Copier</button>
+            </div>
+            <p>Chargez également <code>skills/verigraph-synthesis/SKILL.md</code> dans les instructions du projet pour que le modèle sache lire les codes <code>VG-…</code> et ne livre jamais un nœud non prouvé.</p>
+          </div>
+          <div class="tabpanel" id="tab-other-mcp">
+            <p>Tout client compatible avec la spécification MCP <code>2025-06-18</code> sur transport <code>stdio</code> peut démarrer <code>vg mcp</code>. Le serveur expose les huit outils décrits dans <code>docs/15-agent-interface.md</code> (<code>vg_check</code>, <code>vg_verify</code>, <code>vg_explain</code>, <code>vg_mesh_query</code>, <code>vg_mesh_publish</code>, <code>vg_run</code>, <code>vg_build</code> et <code>vg_lift</code>) ; le chapitre 8 détaille chacun de leurs schémas.</p>
+          </div>
+        </div>
+
+        <figure class="fig" id="fig-ide-arch-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-ide-arch" role="img" aria-label="Intégration dans Antigravity IDE entre l'extension d'édition, le plugin d'agent et vg"></svg></div>
+          <figcaption><b>Figure 12.2</b> Architecture de l'intégration Antigravity IDE (<code>editors/antigravity/</code>) : l'extension et le plugin appellent le même binaire <code>vg</code>. <span class="proof" id="fig-ide-arch-proof"></span></figcaption>
+        </figure>
+
+        <p>Dans Antigravity IDE (et tout éditeur compatible VS Code), l'extension <code>verigraph.verigraph</code> (version 0.1.0, déclarée dans <code>editors/antigravity/extension/package.json</code>) active la coloration syntaxique sur les fichiers <code>.vgs</code>, lance <code>vg check</code> à l'ouverture et à chaque sauvegarde, et ajoute trois boutons dans la barre de titre de l'éditeur : <b>Verify File</b> (✓), <b>Run Node…</b> (▶) et <b>Build Node…</b> (paquet). Cinq réglages permettent d'ajuster le chemin de <code>vg</code> (<code>verigraph.vgPath</code>), la vérification automatique à l'enregistrement (<code>checkOnSave</code> par défaut à <code>true</code>, <code>verifyOnSave</code> à <code>false</code>), le délai d'attente du solveur (<code>verifyTimeoutMs</code>, 10 000 ms par défaut) et le dossier de sortie (<code>buildOutputDir</code>, <code>target/vg</code>).</p>
+
+        <aside class="note note-warn">
+          <b>Attention</b>
+          <p>Contrairement à la ligne de commande qui propose l'échappatoire explicite <code>--unverified</code> pour un humain, l'outil MCP <code>vg_build</code> refuse toujours de compiler un nœud dont une obligation reste non prouvée. De plus, lors de l'appel par un agent, fournissez un chemin <code>out_dir</code> absolu (<code>docs/guide/mcp.md</code>).</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="cli"><span class="n">12.5</span>Référence des commandes <code>vg</code></h2>
+        <p>Le tableau suivant est généré directement à partir de l'aide réelle imprimée par <code>./target/release/vg</code> sans argument (enregistrée dans <code>site/data/utiliser.json</code>) :</p>
+
+        <div class="table-wrap">
+          <table class="cli-ref">
+            <thead>
+              <tr><th>Commande</th><th>Effet</th></tr>
+            </thead>
+            <tbody id="cli-table"></tbody>
+          </table>
+        </div>
+
+        <p>Les commandes JSON (<code>check</code>, <code>verify</code>, <code>run</code>, <code>build</code>) partagent les codes de sortie suivants : <code>0</code> lorsque <code>"ok": true</code>, <code>1</code> lorsque <code>"ok": false</code> (le JSON explique pourquoi), et <code>2</code> si les arguments sont invalides. Les binaires compilés par <code>vg build</code> utilisent quant à eux six codes précis (<code>docs/guide/cli.md</code>) :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Code du binaire compilé</th><th>Signification</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>0</code></td><td>Succès ; les résultats sérialisés (<code>docs/13</code>) sont écrits sur <code>stdout</code>.</td></tr>
+              <tr><td><code>1</code></td><td>Les entrées violent la précondition <code>PRE</code> à l'entrée vérifiée (<i>checked entry</i>).</td></tr>
+              <tr><td><code>2</code></td><td>Les octets d'entrée sont mal formés : trop courts, ou <code>NaN</code> non canonique.</td></tr>
+              <tr><td><code>3</code></td><td>L'arène mémoire allouée au nœud est épuisée.</td></tr>
+              <tr><td><code>4</code></td><td>Échec d'une garde à l'exécution (uniquement dans un binaire compilé avec <code>--unverified</code>).</td></tr>
+              <tr><td><code>5</code></td><td>Argument de handle manquant ou impossible à ouvrir, ou échec d'application du bac à sable OS (ex. noyau Linux sans Landlock).</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="etat"><span class="n">12.6</span>Dépannage et état du projet</h2>
+        <p>Voici les sept situations les plus fréquentes recensées dans <code>docs/guide/troubleshooting.md</code> lorsque vous commencez à utiliser VeriGraph :</p>
+
+        <details class="deep">
+          <summary><code>vg verify</code> répond <code>error</code> ou <code>unknown</code> pour chaque obligation</summary>
+          <div><p>Z3 est introuvable ou ne se lance pas. <code>vg</code> cherche successivement <code>/opt/homebrew/bin/z3</code>, <code>/usr/local/bin/z3</code> puis <code>z3</code> dans <code>PATH</code>. Vérifiez <code>z3 --version</code> (version attendue : 5.4.1).</p></div>
+        </details>
+
+        <details class="deep">
+          <summary>Une obligation revient <code>unknown</code> avec le code <code>VG-V0004</code></summary>
+          <div><p>Le solveur a dépassé son budget de temps. L'arithmétique entière non linéaire (produit ou division de deux variables, comme <code>result == a / b</code> sur des <code>u32</code>) en est la cause habituelle. Énoncez une propriété plus faible mais suffisante pour les appelants (comme <code>result &lt;= a &amp;&amp; (b == 1 ==&gt; result == a)</code> dans <code>docs/guide/tutorial.md</code>), découpez la conjonction en clauses plus petites, ou augmentez <code>--timeout</code>.</p></div>
+        </details>
+
+        <details class="deep">
+          <summary>Un contre-exemple affiche <code>3e38</code>, <code>-3.4028235e38</code> ou <code>nan</code></summary>
+          <div><p>Le domaine <code>f32</code> inclut les infinis, <code>NaN</code> et les nombres proches de <code>±3.4e38</code>, et le solveur les essaie tous. Ajoutez explicitement <code>is_finite(x)</code> et les bornes utiles dans <code>PRE</code> aux frontières, et privilégiez des formules qui restent finies aux extrêmes.</p></div>
+        </details>
+
+        <details class="deep">
+          <summary><code>vg check</code> signale <code>VG-P0001</code> près de <code>%</code> ou sur un accès imbriqué</summary>
+          <div><p>L'analyseur lexical interprète <code>x%2</code> comme l'identifiant <code>x</code> suivi du port <code>%2</code> : écrivez <code>x % 2</code> avec des espaces. De même, <code>t.0.1</code> est découpé en <code>t</code>, <code>.</code> et <code>0.1</code> : écrivez <code>(t.0).1</code>.</p></div>
+        </details>
+
+        <details class="deep">
+          <summary>Erreurs statiques <code>VG-S0102</code> ou <code>VG-S0004</code></summary>
+          <div><p><code>VG-S0102</code> signifie qu'un mode manque sur une opération entière ou une comparaison ordonnée : il n'y a aucune valeur par défaut, écrivez explicitement <code>ADD.checked</code>, <code>ADD.wrap</code> ou <code>ADD.sat</code>, et <code>LT.s</code>, <code>LT.u</code> ou <code>LT.f</code>. <code>VG-S0004</code> indique qu'un label est appelé avant sa définition : placez les noyaux et fonctions appelées au-dessus de leurs appelants.</p></div>
+        </details>
+
+        <details class="deep">
+          <summary><code>vg build</code> produit <code>"linked": false</code> ou le binaire quitte avec le code 5</summary>
+          <div><p>Pour <code>x86_64-unknown-linux-gnu</code> ou <code>wasm32-wasip1</code>, <code>"linked": false</code> indique que l'éditeur de liens cible (<code>zig</code>, ou Homebrew <code>llvm</code> + <code>wasi-libc</code> + <code>wasi-runtimes</code>) est absent ; le fichier objet est tout de même émis. À l'exécution, le code de sortie 5 signifie qu'un argument de handle manque ou qu'un bac à sable OS (Landlock sous Linux 5.13+, <code>sandbox_init</code> sur macOS) n'a pas pu être appliqué : un programme VeriGraph ne s'exécute jamais sans confinement.</p></div>
+        </details>
+
+        <details class="deep">
+          <summary>L'identifiant d'obligation cite un port <code>%10</code> qui n'est pas le même que dans mon fichier</summary>
+          <div><p>La canonicalisation trie, renumérote les opérations et supprime les nœuds morts (<code>VG-W0001</code>). Utilisez <code>vg disasm &lt;HASH&gt;</code> après <code>vg asm</code> pour inspecter la numérotation canonique exacte.</p></div>
+        </details>
+
+        <h3>Où en est le projet</h3>
+        <p>D'après le journal de bord <code>PROGRESS.md</code> (entrées jusqu'au 2026-11-24) et les rapports de jalons <code>reports/gate-g0.md</code> à <code>reports/gate-g8.md</code>, le cœur du système — IR canonique, typage, interpréteur de référence, solveurs SMT (Z3, Bitwuzla, cvc5), serveur MCP, télémétrie, registre VG-Mesh et import OmniLift — est implémenté et testé sur <code>aarch64-apple-darwin</code> (51 suites de tests workspace, 230 tests réussis, 1 ignoré <code>g7_bench_100k</code> lors de l'exécution du 2026-11-24). En vertu de <code>AGENTS.md</code> section 2, un jalon (<i>gate</i>) n'est validé qu'après approbation explicite du propriétaire :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Jalon</th><th>Portée</th><th>État rapporté (<code>reports/gate-g*.md</code>)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>G0 · Scaffold</td><td>Workspace 12 crates, CI, docs</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+              <tr><td>G1 · Core IR</td><td>Aller-retour <code>.vgir</code>, 56 familles alpha, fuzzing 1 h</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+              <tr><td>G2 · Types &amp; interp</td><td>87 erreurs négatives, 28 398 vecteurs conformes</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+              <tr><td>G3 · Verification</td><td>14 bons, 21 mauvais, 0 mutant accepté, audio limiter</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+              <tr><td>G4 · Codegen &amp; RT</td><td>1 000 programmes diff., 5 noyaux vs <code>clang -O2</code>, sandbox</td><td><span class="gate-badge fail">Non atteint (3 ratios &gt; 1,20 ; x86_64 non exécuté)</span></td></tr>
+              <tr><td>G5 · Agent loop</td><td>Boucle hébergée sur 30 tâches de synthèse</td><td><span class="gate-badge fail">Non atteint (boucle payante non lancée)</span></td></tr>
+              <tr><td>G6 · Telemetry</td><td>Tranches ≤ 5 ops sur 60/60 bogues injectés</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+              <tr><td>G7 · VG-Mesh</td><td>p99 421 µs sur 100 000 nœuds, rejet falsifications</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+              <tr><td>G8 · OmniLift</td><td>crc32, adler32, SHA-256 C &amp; Rust, Alive2 + 10⁶ fuzz</td><td><span class="gate-badge wait">Critères tenus · en attente d'approbation</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Trois manques majeurs subsistent avant la validation du jalon M1 : (1) sur G4, le ratio de latence ≤ 1,20 par rapport à <code>clang -O2</code> n'est pas atteint sur trois des cinq noyaux sur Apple M3 Max (<code>matmul</code> : 1,378 ; <code>sha256</code> : 2,640 ; <code>mandelbrot</code> : 4,477, tandis que <code>blend</code> est à 0,783 et <code>crc32</code> à 1,000), et aucun binaire <code>x86_64-unknown-linux-gnu</code> n'a été exécuté sur cet hôte macOS ; (2) sur G5, le harnais <code>vg loop</code> a été testé avec <code>--replay</code>, mais n'a pas encore été lancé contre un modèle API payant sur les 30 tâches (<code>no reports/g5/results.json</code>) ; (3) aucune des portes G0–G3 et G6–G8 n'est encore marquée approuvée par le propriétaire.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">12.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Vous venez d'écrire un nœud et vous lancez <code>vg check fichier.vgs</code>, qui renvoie <code>"ok": true</code>. Que pouvez-vous affirmer ?</p>
+          <ol>
+            <li><button class="choice">Le contrat <code>POST</code> du nœud est mathématiquement démontré pour toutes les entrées.</button></li>
+            <li><button class="choice" data-right>La syntaxe, la forme canonique, le typage, les effets et l'empreinte BLAKE3 sont valides, mais aucune obligation de preuve n'a encore été vérifiée.</button></li>
+            <li><button class="choice">Le binaire natif a été compilé dans <code>target/vg</code> sans garde à l'exécution.</button></li>
+          </ol>
+          <p class="why" hidden><code>vg check</code> ne lance aucun solveur SMT : seule la commande <code>vg verify</code> (ou <code>vg build</code>, qui l'appelle) prouve les obligations.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Un agent connecté à <code>vg mcp</code> tente d'appeler <code>vg_build</code> sur un nœud qui comporte une obligation <code>unknown</code>. Que fait le serveur MCP ?</p>
+          <ol>
+            <li><button class="choice">Il compile le binaire en activant automatiquement <code>--unverified</code> avec des gardes à l'exécution.</button></li>
+            <li><button class="choice" data-right>Il refuse de compiler et retourne l'erreur ; l'option <code>--unverified</code> n'existe qu'en ligne de commande pour un humain.</button></li>
+            <li><button class="choice">Il considère <code>unknown</code> comme un succès si le pré-criblage n'a rien trouvé.</button></li>
+          </ol>
+          <p class="why" hidden>Règle fondamentale de VeriGraph : <code>unknown</code> n'est jamais une preuve, et <code>vg_build</code> via MCP ne livre jamais un nœud non prouvé (<code>docs/guide/mcp.md</code>).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Quelle différence existe-t-il entre l'état des jalons G3 et G4 au 2026-11-24 ?</p>
+          <ol>
+            <li><button class="choice">G3 est déjà approuvé par le propriétaire et G4 a dépassé l'objectif de performance sur les cinq noyaux.</button></li>
+            <li><button class="choice" data-right>Tous les critères de G3 sont satisfaits (en attente d'approbation par le propriétaire), alors que G4 échoue sur le ratio de trois noyaux et n'a pas exécuté de binaire Linux x86_64 sur ce Mac.</button></li>
+            <li><button class="choice">G4 n'a pas de suite différentielle alors que G3 n'a pas de solveurs installés.</button></li>
+          </ol>
+          <p class="why" hidden>D'après <code>reports/gate-g3.md</code> et <code>reports/gate-g4.md</code>, G3 satisfait ses critères et attend la revue du propriétaire, tandis que G4 échoue sur <code>matmul</code> (1,378), <code>sha256</code> (2,640) et <code>mandelbrot</code> (4,477) ainsi que sur l'absence de mesures <code>x86_64</code>.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>La chaîne d'outils VeriGraph tient dans un binaire unique (<code>vg</code>) qui vérifie statiquement (<code>check</code>), prouve par solveurs SMT (<code>verify</code>), explique les réfutations par tranches causales (<code>explain</code>), interprète (<code>run</code>), compile sans gardes résiduelles (<code>build</code>) et s'ouvre aux agents via <code>vg mcp</code> et Antigravity IDE. Chaque chiffre publié reste traçable : ce qui est prouvé est prouvé, et ce qui ne l'est pas encore (G4, G5) est assumé explicitement.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/utiliser.js"></script>

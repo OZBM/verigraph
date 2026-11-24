@@ -1,0 +1,94 @@
+/* Styles propres au chapitre 3 (vg-sym.html). */
+
+.op-card-code {
+  margin-top: .6rem;
+  font: .78rem/1.45 var(--mono);
+  color: var(--ink);
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: .4rem .55rem;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.decode-box {
+  padding: 1.1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: var(--deep);
+}
+
+.decode-line {
+  font: .92rem/1.7 var(--mono);
+  padding: .7rem .85rem;
+  border-radius: 9px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  align-items: center;
+}
+
+.decode-tok {
+  padding: .12rem .34rem;
+  border-radius: 5px;
+  color: var(--faint);
+  border: 1px solid transparent;
+  transition: background .25s var(--vg-out), color .25s var(--vg-out);
+}
+
+.decode-tok.done {
+  color: var(--ink);
+}
+
+.decode-tok.cur {
+  color: var(--night);
+  background: var(--proven);
+  font-weight: 600;
+}
+
+.decode-lists {
+  display: grid;
+  gap: .8rem;
+  margin-top: .95rem;
+}
+
+.decode-group .label {
+  display: block;
+  margin-bottom: .4rem;
+  color: var(--faint);
+}
+
+.tok-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.tok-pill {
+  font: .76rem/1.3 var(--mono);
+  padding: .22rem .5rem;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+}
+
+.tok-pill.allow {
+  color: var(--proven);
+  border-color: color-mix(in srgb, var(--proven) 45%, transparent);
+  background: color-mix(in srgb, var(--proven) 8%, transparent);
+}
+
+.tok-pill.block {
+  color: var(--coral);
+  border-color: color-mix(in srgb, var(--coral) 45%, transparent);
+  background: color-mix(in srgb, var(--coral) 8%, transparent);
+  text-decoration: line-through;
+}
+
+.decode-note {
+  margin: .9rem 0 0;
+  font-size: .9rem;
+  color: var(--ink-2);
+}

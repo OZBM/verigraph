@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Chapitre 4 · Types, effets et capacités · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment vg-types contrôle les raffinements, le jeton linéaire Eff, les poignées de capacité, l'arène mémoire et le bac à sable système.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/types.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 4 · vg-types</p>
+    <h1>Types, effets <em>et capacités.</em></h1>
+    <p class="lede">Avant qu'un solveur SMT n'ouvre le moindre fichier de preuve, <code>vg-types</code> répond à trois questions : de quelles données parle-t-on, dans quel ordre les effets de bord surviennent-ils, et quelles ressources externes le programme a-t-il le droit de toucher ?</p>
+    <ul class="crates">
+      <li><code>vg-types</code></li>
+      <li><code>vg-rt</code></li>
+    </ul>
+    <div class="ch-meta">
+      <span>Lecture : 15 min</span>
+      <span>Prérequis : chapitre 3</span>
+    </div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="raffinements"><span class="n">4.1</span>Types scalaires, composés et raffinements</h2>
+        <p>Dans VeriGraph, le <dfn>typage local</dfn> garantit qu'une opération déduit ses résultats uniquement de son opcode, de son mode et des types de ses opérandes — jamais du contexte d'appel ou d'une inférence globale. Aucune conversion implicite n'existe : additionner un <code>u32</code> et un <code>u64</code> est immédiatement rejeté (<code>VG-T0102</code>), et une comparaison ordonnée doit porter le suffixe exact de ses opérandes (<code>.s</code>, <code>.u</code> ou <code>.f</code>, sinon <code>VG-T0103</code>). Les seules annotations demandées dans le corps concernent les constructeurs <code>OK</code> et <code>ERR</code> de <code>Result&lt;T, E&gt;</code>, car chaque branche ne connaît qu'une moitié du type somme (ADR 0004, sinon <code>VG-T0115</code>).</p>
+        <p>Au-delà des scalaires et collections, la signature accepte un <dfn>type de raffinement</dfn> écrit <code>{x: T | φ}</code>. Dans le MVP, un raffinement ne peut apparaître qu'au sommet de <code>SIGNATURE</code> (jamais imbriqué dans un tableau ou un tuple, sinon <code>VG-T0116</code>) : placé sur un paramètre, le prédicat <code>φ</code> s'ajoute automatiquement à <code>PRE</code> ; placé sur un résultat, il s'ajoute à <code>POST</code>. Selon <code>docs/adr/0001-format-encodings.md</code>, les deux écritures produisent exactement le même nœud canonique et la même empreinte.</p>
+      </section>
+
+      <section>
+        <h2 id="effets"><span class="n">4.2</span>Les effets et le jeton linéaire <code>Eff</code></h2>
+        <p>Un graphe de flot de données pur n'a ni horloge ni notion d'« avant » et d'« après » : si deux instructions ne dépendent pas l'une de l'autre, le moteur d'exécution peut les évaluer dans n'importe quel ordre, et la canonicalisation fusionne les copies identiques. Pour les entrées/sorties, c'est inacceptable : lire un fichier puis écrire le résultat doit suivre un ordre unique, et deux écritures identiques ne doivent jamais fusionner.</p>
+        <p>VeriGraph résout ce problème grâce à un <dfn>jeton d'effet linéaire</dfn> de type <code>Eff</code>. Chaque nœud dont le masque <code>EFFECTS</code> contient autre chose que <code>ARENA</code> reçoit <code>Eff</code> comme premier paramètre et retourne un nouveau jeton <code>Eff</code> comme premier résultat (<code>VG-E0103</code>). Chaque valeur <code>Eff</code> doit être consommée <strong>exactement une fois</strong> (<code>VG-E0102</code>) : la lâcher ou la passer à deux opérations en parallèle est une erreur de compilation immédiate.</p>
+        <p>Quant au masque <code>EFFECTS</code> lui-même, c'est un ensemble sur 32 bits (<code>docs/04-types-effects.md</code>). L'ensemble vide <code>[]</code> signifie <code>PURE</code>, et l'absence du bit <code>NONDET</code> garantit le déterminisme. Lorsqu'un nœud appelle un autre nœud, son masque doit contenir tous les bits de l'appelé (transitivité vérifiée par <code>VG-E0101</code>).</p>
+
+        <aside class="note note-warn">
+          <b>Attention — Pourquoi <code>PURE</code> et <code>SIMD</code> ne sont pas des bits (E-09)</b>
+          <p>La spécification d'origine traitait <code>PURE</code> comme la valeur <code>0x0000</code> listée à côté d'autres bits et rangeait <code>SIMD</code> dans les effets. L'erratum <code>E-09</code> corrige les deux : <code>PURE</code> est simplement l'ensemble vide <code>[]</code>, et <code>SIMD</code> est un choix de génération de code (un appelant scalaire peut appeler un noyau vectorisé sans déclarer d'effet).</p>
+        </aside>
+
+        <p>Le module réel <code>tests/corpus/alpha/a45_file_read_write_chain/01.vgs</code> montre comment le jeton <code>e0: Eff</code> traverse <code>@read_header</code> puis <code>@write_payload</code> avant de ressortir en <code>%902</code> :</p>
+
+<pre class="code vgs" data-file="tests/corpus/alpha/a45_file_read_write_chain/01.vgs"><code>module a45_file_read_write_chain;
+
+NODE @read_header [intent: "Read header slice from file"] {
+  SIGNATURE: (e: Eff, fin: FileIn) -&gt; (Eff, Result&lt;Slice&lt;u8&gt;, u32&gt;);
+  EFFECTS: [ARENA, FILE_READ];
+  CONTRACT {
+    COST: arena_bytes &lt;= 16;
+  }
+  BODY {
+    %0, %1 = FILE_READ(e, fin, 16:u64);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @write_payload [intent: "Write byte slice to file"] {
+  SIGNATURE: (e: Eff, fout: FileOut, bytes: Slice&lt;u8&gt;) -&gt; (Eff, Result&lt;u64, u32&gt;);
+  EFFECTS: [FILE_WRITE];
+  CONTRACT {
+    COST: ops &lt;= 2;
+  }
+  BODY {
+    %0, %1 = FILE_WRITE(e, fout, bytes);
+    RETURN(%0, %1);
+  }
+}
+
+NODE @relay_block [intent: "Read and write chain"] {
+  SIGNATURE: (e0: Eff, fin: FileIn, fout: FileOut) -&gt; (Eff, Result&lt;u64, u32&gt;);
+  EFFECTS: [ARENA, FILE_READ, FILE_WRITE];
+  CONTRACT {
+    COST: arena_bytes &lt;= 16;
+  }
+  BODY {
+    %900 = IDENTITY([65, 66]:Array&lt;u8, 2&gt;);
+    %905 = SLICE(%900, 0:u64, 2:u64);
+    %901, %903 = CALL_HASH(@read_header, e0, fin);
+    %902, %904 = CALL_HASH(@write_payload, %901, fout, %905);
+    RETURN(%902, %904);
+  }
+}</code></pre>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-eff" role="img" aria-label="Chaîne linéaire du jeton Eff dans @relay_block entre @read_header et @write_payload"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="btn-eff">Suivre le jeton Eff</button>
+            </div>
+          </div>
+          <figcaption><b>Figure 4.1</b> Fil unique du jeton <code>Eff</code> dans <code>@relay_block</code> : <code>e0 → %901 → %902 → RETURN</code>. Aucune branche ne duplique ni n'abandonne le jeton. <span class="proof" id="fig-eff-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="capacites"><span class="n">4.3</span>Capacités et bac à sable système</h2>
+        <p>Déclarer <code>FILE_READ</code> dans <code>EFFECTS</code> ne donne accès à aucun chemin du disque. Pour lire un fichier, un nœud doit recevoir une <dfn>poignée de capacité</dfn> (<code>FileIn</code>, <code>FileOut</code> ou <code>Clock</code> dans le MVP) transmise explicitement depuis la racine du programme. Un bit d'effet sans poignée n'accorde aucun droit ; à l'inverse, accepter une poignée sans déclarer le bit d'effet correspondant est refusé par <code>vg-types</code> (<code>VG-E0104</code>). De plus, <code>Eff</code> et les poignées ne peuvent jamais être rangés dans un tableau, un tuple ou un <code>Result</code>, ni passés à un noyau de boucle (<code>VG-T0119</code>).</p>
+        <p>Pour que cette discipline tienne aussi à l'échelle du processus compilé (<code>E-19</code>), <code>vg build</code> émet un <dfn>manifeste de bac à sable</dfn> (<code>&lt;label&gt;.manifest.toml</code>) et le runtime C <code>vg-rt</code> applique une règle stricte décrite dans <code>docs/adr/0011-os-sandbox.md</code> : <strong>ouvrir d'abord les descripteurs autorisés, puis verrouiller le processus</strong> avant d'appeler la racine.</p>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-sandbox" role="img" aria-label="Séquence d'ouverture des poignées puis verrouillage OS par vg_rt_sandbox()"></svg>
+          </div>
+          <figcaption><b>Figure 4.2</b> Séquence de confinement au démarrage d'un exécutable VeriGraph (<code>docs/adr/0011-os-sandbox.md</code>). <span class="proof" id="fig-sb-proof"></span></figcaption>
+        </figure>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>C'est le principe d'une salle blanche : l'intendant dépose sur la table les deux classeurs autorisés par le bon de commande (<code>argv</code>), puis verrouille définitivement toutes les portes menant aux archives avant que l'opérateur n'entre en scène.</p>
+        </aside>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Selon <code>docs/adr/0011-os-sandbox.md</code> (proposé le 2026-11-24), le confinement utilise <code>sandbox_init</code> sur macOS, <code>Landlock</code> + <code>seccomp</code> sur Linux, et les pré-ouvertures WASI sur WASM ; si <code>sandbox_init</code> venait à être retiré par Apple ou si un noyau Linux n'avait pas <code>Landlock</code>, le binaire quitterait avec le code <code>5</code> plutôt que de tourner sans bac à sable. Par ailleurs, <code>vg build</code> génère aujourd'hui les liaisons <code>argv</code> (pas encore les chemins <code>fixed</code> ni <code>stdin</code> nommé), et les effets réseau (<code>NET_READ</code>, <code>NET_WRITE</code>) restent hors MVP.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="ressources"><span class="n">4.4</span>Arène d'appel et comptage <code>COST</code></h2>
+        <p>Dans le MVP (ADR 0003), les types à taille fixe (scalaires, <code>Array</code>, <code>Tensor</code>) vivent sur la pile et n'allouent jamais de tas. Seules les tranches <code>Slice&lt;T&gt;</code> de longueur dynamique — produites par <code>FILE_READ</code>, <code>CONCAT</code> de tranches, <code>SIMD_MAP</code> ou <code>GENERATE</code> sur une taille non littérale — allouent dans une unique <dfn>arène d'appel</dfn> fournie au point d'entrée et libérée à la sortie. Toute opération de ce type exige le bit <code>ARENA</code> (<code>VG-E0106</code>), mais sans nécessiter de jeton <code>Eff</code> car l'ordre des allocations est invisible.</p>
+        <p><code>vg-types</code> calcule symboliquement les expressions exactes d'<code>ops</code> et d'<code>arena_bytes</code> (<code>COST</code>), tandis que <code>BUDGET</code> (comme <code>latency_p99_us</code>) reste une cible mesurée et interdite dans <code>COST</code> (<code>VG-C0106</code>, errata <code>E-10</code> et <code>E-15</code>).</p>
+
+        <details class="deep">
+          <summary>Pour aller plus loin : mise à jour en place et règle d'échappement VG-T0120</summary>
+          <div>
+            <p>Un <code>UPDATE(xs, i, v)</code> sur une tranche s'effectue en place (zéro copie) uniquement si <code>xs</code> provient d'une opération allouante possédant une seule utilisation ; toute autre tranche (vue <code>SLICE</code>, <code>AS_BYTES</code> ou paramètre d'entrée) est copiée dans l'arène. De plus, comme une valeur fixe locale disparaît au retour du nœud, <code>vg-types</code> interdit qu'une vue retournée puisse pointer vers une donnée locale (<code>VG-T0120</code>) : pour renvoyer les octets d'un tableau local, renvoyez directement le tableau à taille fixe.</p>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="exercice"><span class="n">4.5</span>Atelier : trouvez l'erreur</h2>
+        <p>Le jeu d'essai négatif du dépôt compte <span id="err-count">—</span> programmes invalides dans <code>tests/corpus/errors/</code>. Voici six cas réels issus de cette suite. Pour chacun, lisez le code <code>VG-Sym</code>, choisissez le diagnostic que <code>vg check</code> doit émettre, puis inspectez la sortie JSON exacte enregistrée lors de la construction du site.</p>
+
+        <figure class="fig" id="fig-err-lab">
+          <div class="fig-stage">
+            <div class="err-tabs" role="group" aria-label="Choisir un exercice d'erreur de type ou d'effet"></div>
+            <pre class="code vgs" id="err-code"><code></code></pre>
+            <ol class="err-choices" id="err-choices"></ol>
+            <div class="err-diag" id="err-diag" hidden>
+              <span class="label" id="err-verdict"></span>
+              <p id="err-explain"></p>
+              <pre id="err-json"></pre>
+              <p class="readout" id="err-fix"></p>
+            </div>
+          </div>
+          <figcaption><b>Figure 4.3</b> Six diagnostics réels de <code>vg check</code> enregistrés dans <code>site/data/types.json</code> depuis <code>tests/corpus/errors/</code>.</figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="entree-verifiee"><span class="n">4.6</span>La frontière de confiance : tester <code>zoom.wasm</code> en direct</h2>
+        <p>Une preuve ne vaut que si ses hypothèses tiennent. Or un programme appelant un binaire compilé depuis l'extérieur (JavaScript, un shell ou du code C) n'est pas vérifié par VeriGraph. Pour éviter qu'une entrée invalide ne pénètre dans le code optimisé, <code>vg-codegen</code> génère pour chaque nœud exporté une <dfn>entrée vérifiée</dfn> (ADR 0009).</p>
+        <p>Avant d'appeler le corps interne, cette entrée vérifiée contrôle que les octets booléens valent <code>0</code> ou <code>1</code>, normalise tout <code>NaN</code>, installe l'environnement d'arrondi IEEE 754 par défaut, et évalue <code>PRE</code>. Si une seule condition échoue, le binaire s'interrompt immédiatement avec le code de sortie <code>1</code> sans exécuter le corps.</p>
+        <p>Testez ci-dessous le vrai module WebAssembly <code>site/wasm/zoom.wasm</code> (compilé depuis <code>@zoom</code> dans <code>site/vg/weblib.vgs</code>), dont la précondition impose <code>cx ∈ [-2.5, 1.5]</code>, <code>cy ∈ [-1.5, 1.5]</code>, <code>scale ∈ (0.0, 0.02]</code>, <code>px &lt; 256</code> et <code>py &lt; 192</code>.</p>
+
+        <figure class="fig" id="entry-demo">
+          <div class="fig-stage">
+            <div class="entry-presets" role="group" aria-label="Jeux de paramètres préremplis pour zoom.wasm">
+              <button class="btn small" type="button" id="pre-ok">Entrée valide (scale = 0.0125)</button>
+              <button class="btn small" type="button" id="pre-scale">Hors PRE (scale = 0.05)</button>
+              <button class="btn small" type="button" id="pre-px">Hors PRE (px = 300)</button>
+            </div>
+            <div class="entry-grid">
+              <div class="entry-field"><label for="in-cx">cx (f32)</label><input id="in-cx" type="text" value="-0.5"></div>
+              <div class="entry-field"><label for="in-cy">cy (f32)</label><input id="in-cy" type="text" value="0"></div>
+              <div class="entry-field"><label for="in-scale">scale (f32)</label><input id="in-scale" type="text" value="0.0125"></div>
+              <div class="entry-field"><label for="in-px">px (u32)</label><input id="in-px" type="text" value="128"></div>
+              <div class="entry-field"><label for="in-py">py (u32)</label><input id="in-py" type="text" value="96"></div>
+              <div class="entry-field"><label for="in-zin">zin (Bool)</label><select id="in-zin"><option value="1" selected>true (zoom +)</option><option value="0">false (zoom −)</option></select></div>
+            </div>
+            <button class="btn primary small" type="button" id="run-zoom">Exécuter zoom.wasm</button>
+            <div class="entry-out" id="zoom-out" aria-live="polite">Cliquez sur un préréglage ou sur « Exécuter zoom.wasm » pour appeler le binaire WebAssembly.</div>
+          </div>
+          <figcaption><b>Figure 4.4</b> Contrôle à la frontière de confiance sur le binaire réel <code>site/wasm/zoom.wasm</code>. <span class="proof" id="fig-zoom-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">4.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Un nœud pur (<code>EFFECTS: []</code>) reçoit un paramètre <code>fin: FileIn</code> et le retourne sans jamais appeler <code>FILE_READ</code>. Que fait <code>vg check</code> ?</p>
+          <ol>
+            <li><button class="choice">Il l'accepte car aucune opération d'entrée/sortie n'est exécutée.</button></li>
+            <li><button class="choice" data-right>Il le rejette avec <code>VG-E0104</code> car une poignée <code>FileIn</code> exige <code>FILE_READ</code> dans <code>EFFECTS</code> (et <code>Eff</code> dans la signature).</button></li>
+            <li><button class="choice">Il ajoute automatiquement <code>FILE_READ</code> dans le fichier source.</button></li>
+          </ol>
+          <p class="why" hidden>Comme le montre le cas <code>e0104_file_in_without_bit.vgs</code> dans l'atelier ci-dessus, déclarer une poignée sans son bit d'effet correspondant est toujours rejeté par <code>vg-types</code> (<code>VG-E0104</code>).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Dans quel ordre <code>vg-rt</code> configure-t-il les accès fichiers et le bac à sable d'un exécutable compilé ?</p>
+          <ol>
+            <li><button class="choice">Il active d'abord le bac à sable système, puis il ouvre les chemins donnés sur la ligne de commande.</button></li>
+            <li><button class="choice" data-right>Il ouvre d'abord uniquement les descripteurs nommés par le manifeste et <code>argv</code>, puis appelle <code>vg_rt_sandbox()</code> pour interdire toute nouvelle ouverture.</button></li>
+            <li><button class="choice">Il laisse <code>vg-types</code> verrouiller le système de fichiers à la compilation.</button></li>
+          </ol>
+          <p class="why" hidden>Une fois le bac à sable activé (<code>sandbox_init</code> ou <code>Landlock</code>), aucun nouveau fichier ne peut plus être ouvert. <code>vg-rt</code> ouvre donc les descripteurs autorisés d'abord, puis droppe tous les autres droits avant d'appeler le nœud racine (ADR 0011).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Que renvoie <code>site/wasm/zoom.wasm</code> si un appelant JavaScript non vérifié lui passe <code>scale = 0.05</code> (alors que <code>PRE</code> impose <code>scale &lt;= 0.02</code>) ?</p>
+          <ol>
+            <li><button class="choice">Il calcule silencieusement une nouvelle vue hors bornes.</button></li>
+            <li><button class="choice">Il sature <code>scale</code> à <code>0.02</code> avant d'entrer dans le calcul.</button></li>
+            <li><button class="choice" data-right>Son entrée vérifiée rejette l'appel et quitte immédiatement avec le code de sortie <code>1</code>.</button></li>
+          </ol>
+          <p class="why" hidden>L'entrée vérifiée (ADR 0009) contrôle <code>PRE</code> à la frontière de confiance. Dès qu'une entrée viole <code>PRE</code>, le binaire sort avec le code <code>1</code>, comme vérifié dans <code>site/test.mjs</code>.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p><code>vg-types</code> garantit avant toute preuve que chaque opération est bien typée, que les effets suivent une chaîne linéaire unique sur <code>Eff</code>, que l'autorité reste confinée aux poignées transmises jusqu'au bac à sable OS, et que les entrées externes sont contrôlées à la frontière. Dans le chapitre suivant, nous entrons au cœur des preuves formelles avec <code>vg-smt</code>.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/types.js"></script>

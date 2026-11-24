@@ -1,0 +1,80 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "oversized-h1",
+        "value": "*",
+        "files": [
+          "docs/brochure/brochure.html"
+        ],
+        "createdAt": "2026-10-30T13:10:45.608Z",
+        "reason": "Claude decided: A4 print brochure, not a web viewport; 27pt page headlines and the 45pt two-line cover title are editorial print sizes, checked in page renders"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "site/*.html"
+        ],
+        "createdAt": "2026-11-24T12:45:05.994Z",
+        "reason": "Claude decided: the static scan does not apply site/css/site.css and reads body text as default black (#000000); in Chrome the computed text is rgb(232,237,246) on #01050f and a computed-contrast audit of the site's pages found no text under WCAG AA"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "site/*.html"
+        ],
+        "createdAt": "2026-11-24T12:45:06.012Z",
+        "reason": "Claude decided: the static scan sees h1, h2 and body all at 16px because it does not apply site/css/site.css; computed sizes in Chrome are h1 57px, h2 33px, h3 19px, body 17px"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "site/*.html"
+        ],
+        "createdAt": "2026-11-24T12:45:23.198Z",
+        "reason": "Claude decided: every finding is a .fig-stage (1-1.8rem padding) or a .table-wrap (cells padded 0.6rem 0.8rem), verified computed in Chrome (24.6px, 9.6px 12.8px); the static scan does not apply site/css/site.css"
+      },
+      {
+        "rule": "repeated-container-text",
+        "value": "*",
+        "files": [
+          "site/vg-sym.html"
+        ],
+        "createdAt": "2026-11-24T12:45:31.151Z",
+        "reason": "Claude decided: the repeats are a quiz's answer choices or a details block comparing the same code term (.checked, @palette_entry, fold:, spec:, unknown) on purpose"
+      },
+      {
+        "rule": "repeated-container-text",
+        "value": "*",
+        "files": [
+          "site/graphe.html"
+        ],
+        "createdAt": "2026-11-24T12:45:31.168Z",
+        "reason": "Claude decided: the repeats are a quiz's answer choices or a details block comparing the same code term (.checked, @palette_entry, fold:, spec:, unknown) on purpose"
+      },
+      {
+        "rule": "repeated-container-text",
+        "value": "*",
+        "files": [
+          "site/preuves.html"
+        ],
+        "createdAt": "2026-11-24T12:45:31.185Z",
+        "reason": "Claude decided: the repeats are a quiz's answer choices or a details block comparing the same code term (.checked, @palette_entry, fold:, spec:, unknown) on purpose"
+      },
+      {
+        "rule": "repeated-container-text",
+        "value": "*",
+        "files": [
+          "site/utiliser.html"
+        ],
+        "createdAt": "2026-11-24T12:45:31.200Z",
+        "reason": "Claude decided: the repeats are a quiz's answer choices or a details block comparing the same code term (.checked, @palette_entry, fold:, spec:, unknown) on purpose"
+      }
+    ]
+  }
+}

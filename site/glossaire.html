@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Glossaire · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Définitions de 62 termes essentiels de VeriGraph (VG-IR, VG-Sym, contrats, solveurs SMT, effets, compilation, boucle agent, VG-Mesh et OmniLift), avec renvois vers chaque chapitre.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/glossaire.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Référence · Glossaire</p>
+    <h1>Glossaire, <em>tous les termes de VeriGraph.</em></h1>
+    <p class="lede">Soixante-deux notions clés du système — du graphe canonique aux contrats, aux solveurs SMT, à la boucle agent, à VG-Mesh et à OmniLift — classées par ordre alphabétique avec un lien vers le chapitre qui les approfondit.</p>
+    <div class="ch-meta"><span>62 entrées</span><span>A à V</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Index alphabétique"></aside>
+    <article class="prose">
+
+      <div class="gloss-controls">
+        <label class="label" for="gloss-filter">Filtrer les termes</label>
+        <div class="gloss-search">
+          <input id="gloss-filter" type="text" placeholder="Ex. : contrat, BLAKE3, Mesh, NaN, FOLD_BOUNDED…" autocomplete="off">
+          <button class="btn small" type="button" id="gloss-clear">Effacer</button>
+        </div>
+        <nav class="alpha-nav" aria-label="Aller à une lettre">
+          <a href="#lettre-a">A</a>
+          <a href="#lettre-b">B</a>
+          <a href="#lettre-c">C</a>
+          <a href="#lettre-d">D</a>
+          <a href="#lettre-e">E</a>
+          <a href="#lettre-f">F</a>
+          <a href="#lettre-g">G</a>
+          <a href="#lettre-h">H</a>
+          <a href="#lettre-i">I</a>
+          <a href="#lettre-j">J</a>
+          <a href="#lettre-l">L</a>
+          <a href="#lettre-m">M</a>
+          <a href="#lettre-n">N</a>
+          <a href="#lettre-o">O</a>
+          <a href="#lettre-p">P</a>
+          <a href="#lettre-s">S</a>
+          <a href="#lettre-t">T</a>
+          <a href="#lettre-u">U</a>
+          <a href="#lettre-v">V</a>
+        </nav>
+      </div>
+
+      <aside class="note note-warn" id="gloss-empty" hidden>
+        <b>Aucun terme trouvé</b>
+        <p>Aucun terme du glossaire ne correspond à ce filtre. Effacez ou élargissez votre recherche.</p>
+      </aside>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-a" data-toc="A"><span class="n">A</span>A</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-alive2"><span>Alive2</span><a class="ch-link" href="omnilift.html#ub">Chapitre 10</a></dt>
+            <dd>Outil de validation de traduction bornée (<code>alive-tv</code>) sur LLVM IR. OmniLift l'utilise jusqu'à <code>unroll = 8</code> pour prouver qu'un nœud élevé et guéri raffine bien la fonction C ou Rust originale.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-arene"><span>Arène (<i>arena</i>)</span><a class="ch-link" href="types.html">Chapitre 4</a></dt>
+            <dd>Zone mémoire bornée allouée par appel exporté (ADR 0003) pour les nœuds qui construisent des tranches dynamiques avec l'effet <code>ARENA</code>. Libérée d'un seul bloc à la sortie du nœud.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-assert-guard"><span><code>ASSERT_GUARD</code></span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Opération de garde explicite dans le graphe. En mode <code>.branch</code>, elle n'exécute que le noyau correspondant à la condition ; en mode simple, son échec constitue une garde résiduelle à l'exécution.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-b" data-toc="B"><span class="n">B</span>B</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-blake3"><span>BLAKE3</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Fonction de hachage cryptographique utilisée en mode dérivation de clef avec des contextes versionnés (<code>docs/02</code>) pour calculer les empreintes d'opérations, de corps, de contrats, de nœuds et d'obligations.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-boucle-hebergee"><span>Boucle hébergée</span><a class="ch-link" href="agent.html#boucle-hebergee">Chapitre 8</a></dt>
+            <dd>Mode d'interaction de <code>vg loop</code> pour les modèles API sans accès aux logits : le modèle rédige, appelle <code>vg_check</code> et <code>vg_verify</code>, répare à partir des contre-exemples puis soumet au correcteur.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-budget"><span><code>BUDGET</code></span><a class="ch-link" href="agent.html#m1">Chapitre 8</a></dt>
+            <dd>Clause déclarant un objectif mesuré (comme <code>latency_p99_us &lt;= 500</code>) vérifié par banc d'essai sur cible réelle. Contrairement à <code>COST</code>, un <code>BUDGET</code> n'est jamais présenté comme une preuve mathématique.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-c" data-toc="C"><span class="n">C</span>C</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-cache-preuves"><span>Cache de preuves</span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Enregistrements stockés dans <code>&lt;root&gt;/.vg/proofs</code>, indexés par l'empreinte de l'obligation. Réutilisés (<code>"evidence": "cached"</code>) uniquement tant que les versions exactes des solveurs concordent.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-call-hash"><span><code>CALL_HASH</code></span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Opération d'appel d'un autre nœud (ou d'un <code>@MESH_QUERY</code> résolu). Dans le graphe binaire <code>.vgir</code>, elle désigne l'appelé par son empreinte immuable et vérifie sa précondition à l'appel.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-canonicalisation"><span>Canonicalisation</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Transformation déterministe en 7 étapes (<code>docs/02</code>) qui élimine le code mort (<code>VG-W0001</code>), trie les opérations topologiquement et renumérote ports et paramètres afin que deux graphes alpha-équivalents aient les mêmes octets.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-capacite"><span>Capacité</span><a class="ch-link" href="types.html">Chapitre 4</a></dt>
+            <dd>Droit d'accès explicite transmis uniquement par un handle en paramètre du nœud racine (<code>FileIn</code>, <code>FileOut</code>, <code>Clock</code>) et confiné au démarrage par le bac à sable du système d'exploitation.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-spec-class"><span>Classe de spécification (<i>spec class</i>)</span><a class="ch-link" href="mesh.html#pourquoi">Chapitre 9</a></dt>
+            <dd>Ensemble des implémentations distinctes (en VG-Sym, C ou Rust) rattachées à un même nœud <code>SPEC</code> canonique par une attestation de raffinement (<code>proved</code> ou <code>bounded(n)</code>).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-combinateur"><span>Combinateur</span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Opération de haut niveau sans boucle arbitraire (<code>SIMD_MAP</code>, <code>FOLD_BOUNDED</code>, <code>GENERATE</code>) appliquant un noyau pur à une collection de taille bornée, ce qui garantit la terminaison.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-contrat"><span>Contrat (<code>CONTRACT</code>)</span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Bloc d'un nœud regroupant ses préconditions (<code>PRE</code>), postconditions (<code>POST</code>), invariants de pliage (<code>INVARIANT</code>), coûts statiques (<code>COST</code>) et cibles mesurées (<code>BUDGET</code>).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-contract-gap"><span><i>Contract gap</i> (écart de contrat)</span><a class="ch-link" href="contre-exemple.html">Chapitre 6</a></dt>
+            <dd>Verdict <code>VG-V0002</code> lorsque la preuve échoue avec une valeur autorisée par le contrat d'un appelé, mais impossible dans le corps réel de cet appelé. La correction consiste à renforcer le <code>POST</code> de l'appelé.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-contre-exemple"><span>Contre-exemple</span><a class="ch-link" href="contre-exemple.html">Chapitre 6</a></dt>
+            <dd>Jeu concret d'entrées satisfaisant <code>PRE</code> qui fait échouer une obligation (<code>VG-V0001</code>), systématiquement rejoué et confirmé dans l'interpréteur <code>vg-interp</code> (<code>"reproduced": "concrete"</code>).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-cost"><span><code>COST</code></span><a class="ch-link" href="types.html">Chapitre 4</a></dt>
+            <dd>Clause de contrat bornant des ressources statiquement prouvables (<code>ops</code>, <code>heap_bytes</code>, <code>arena_bytes</code>, <code>stack_bytes</code>). En version 0, les obligations <code>COST</code> dépendant d'un appelé restent <code>unknown</code>.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-d" data-toc="D"><span class="n">D</span>D</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-decodage-contraint"><span>Décodage contraint</span><a class="ch-link" href="agent.html#boucle-hebergee">Chapitre 8</a></dt>
+            <dd>Mode pour modèles locaux ouverts (<code>[R-01]</code>, <code>vg-decode</code>) masquant les jetons invalides durant la génération selon trois paliers : grammaire (palier 1), types/ports/effets (palier 2) et requêtes SMT aux liaisons (palier 3).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-determinisme"><span>Déterminisme</span><a class="ch-link" href="idee.html">Chapitre 1</a></dt>
+            <dd>Propriété imposant qu'à entrée identique correspondent exactement les mêmes octets : empreintes, diagnostics, journaux, binaires natifs sur trois cibles et représentation canonique de <code>NaN</code>.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-e" data-toc="E"><span class="n">E</span>E</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-effet"><span>Effet (<code>EFFECTS</code>)</span><a class="ch-link" href="types.html">Chapitre 4</a></dt>
+            <dd>Masque déclarant tout ce qu'un nœud peut toucher à l'extérieur (fichiers, horloge, arène). Un masque vide <code>[]</code> signifie que le nœud est pur ; l'effet est transitif sur les appels.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-empreinte"><span>Empreinte (<i>hash</i>)</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Condensat BLAKE3 sur 256 bits (64 chiffres hexadécimaux) calculé uniquement par la chaîne d'outils à partir du graphe canonique, formant la véritable identité d'un nœud.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-entree-verifiee"><span>Entrée vérifiée (<i>checked entry</i>)</span><a class="ch-link" href="compilation.html">Chapitre 7</a></dt>
+            <dd>Enveloppe générée pour chaque nœud exporté (ADR 0009) qui configure l'environnement flottant par défaut, décode les octets d'entrée et contrôle <code>PRE</code> à la frontière (code de sortie 1 si violé).</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-f" data-toc="F"><span class="n">F</span>F</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-fold-bounded"><span><code>FOLD_BOUNDED</code></span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Combinateur de réduction bornée sur un tableau ou une tranche. Chaque invocation exige un <code>INVARIANT</code> explicite vérifié à l'initialisation, à chaque appel du noyau et à la conservation du pas.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-fuzzing-differentiel"><span>Fuzzing différentiel</span><a class="ch-link" href="omnilift.html#ub">Chapitre 10</a></dt>
+            <dd>Exécution comparée d'un million d'entrées aléatoires entre la référence (interpréteur <code>vg-interp</code> ou binaire C d'origine sous sanitizer) et le programme compilé ou élevé, pour détecter toute divergence (<code>VG-L0003</code>).</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-g" data-toc="G"><span class="n">G</span>G</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-garde-residuelle"><span>Garde résiduelle</span><a class="ch-link" href="compilation.html">Chapitre 7</a></dt>
+            <dd>Vérification conservée dans le binaire compilé lorsqu'une condition n'a pas été effacée par preuve (par exemple un <code>ASSERT_GUARD</code> non prouvé ou un binaire compilé avec <code>--unverified</code>).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-gate"><span>Gate (jalon)</span><a class="ch-link" href="utiliser.html#etat">Chapitre 12</a></dt>
+            <dd>Porte de phase vérifiée automatiquement par <code>make gate-gN</code> dans <code>reports/gate-gN.md</code>. Un jalon ne passe qu'après succès du script <strong>et</strong> approbation explicite du propriétaire.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-generate"><span><code>GENERATE</code></span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Combinateur construisant un tableau de taille statique connue en appelant un noyau pur sur chaque indice de <code>0</code> à <code>N - 1</code>, comme dans le rendu Mandelbrot.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-guerison-ub"><span>Guérison d'UB</span><a class="ch-link" href="omnilift.html#ub">Chapitre 10</a></dt>
+            <dd>Étape d'OmniLift transformant un comportement indéfini C/Rust (pointeur nul, débordement, hors bornes) en précondition <code>PRE</code> ou garde retournant <code>Result::Err</code>, vérifiée contre l'original par Alive2.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-h" data-toc="H"><span class="n">H</span>H</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-handle"><span>Handle</span><a class="ch-link" href="types.html">Chapitre 4</a></dt>
+            <dd>Valeur opaque représentant une capacité externe (<code>FileIn</code>, <code>FileOut</code>, <code>Clock</code>). Un handle ne peut être forgé ni dupliqué, et ne se lie qu'au nœud racine via le manifeste de compilation.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-i" data-toc="I"><span class="n">I</span>I</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-intent"><span><code>intent</code></span><a class="ch-link" href="mesh.html#pipeline">Chapitre 9</a></dt>
+            <dd>Métadonnée en langue naturelle attachée à un nœud ou à un <code>@MESH_QUERY</code>. Elle n'entre pas dans le calcul ni la preuve, mais sert au classement sémantique dans l'index de VG-Mesh.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-invariant"><span><code>INVARIANT</code></span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Propriété inductive nommée (<code>INVARIANT @nom(k, acc): …</code>) exigée par <code>FOLD_BOUNDED</code> pour relier l'état accumulateur <code>acc</code> au compteur d'étapes <code>k</code>.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-j" data-toc="J"><span class="n">J</span>J</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-jeton-eff"><span>Jeton <code>Eff</code></span><a class="ch-link" href="types.html">Chapitre 4</a></dt>
+            <dd>Paramètre et résultat linéaire porté par tout nœud ayant des effets non vides. En imposant que chaque jeton soit consommé exactement une fois (<code>VG-E0102</code>), il ordonne strictement les opérations d'E/S.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-journal-transparence"><span>Journal de transparence</span><a class="ch-link" href="mesh.html#merkle">Chapitre 9</a></dt>
+            <dd>Registre en ajout seul fondé sur un arbre de Merkle RFC 6962 et des notes signées C2SP, garantissant qu'aucune publication passée dans VG-Mesh ne peut être effacée ni modifiée.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-l" data-toc="L"><span class="n">L</span>L</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-label"><span>Label (<code>@nom</code>)</span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Nom local lisible attribué dans un fichier <code>.vgs</code> à un nœud, un <code>SPEC</code> ou un <code>@MESH_QUERY</code>. La chaîne d'outils le résout et l'épingle vers son empreinte BLAKE3 dans <code>vg.lock</code>.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-learnable"><span><code>LEARNABLE</code></span><a class="ch-link" href="agent.html#m1">Chapitre 8</a></dt>
+            <dd>Bloc déclarant un paramètre flottant ajustable dans une boîte fermée <code>[lo, hi]</code> (comme <code>knee: f32 in [0.5, 0.99]</code> dans <code>audio_limiter.vgs</code>), prouvé sur toute la boîte et figé en compilation MVP.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-m" data-toc="M"><span class="n">M</span>M</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-mcp"><span>MCP (<code>vg mcp</code>)</span><a class="ch-link" href="agent.html#mcp">Chapitre 8</a></dt>
+            <dd>Serveur sur entrée/sortie standard parlant le <i>Model Context Protocol</i> (<code>2025-06-18</code>) et exposant les huit outils de la chaîne (<code>vg_check</code>, <code>vg_verify</code>, <code>vg_explain</code>, <code>vg_mesh_query</code>, <code>vg_mesh_publish</code>, <code>vg_run</code>, <code>vg_build</code>, <code>vg_lift</code>).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-merkle"><span>Arbre de Merkle</span><a class="ch-link" href="mesh.html#merkle">Chapitre 9</a></dt>
+            <dd>Structure d'arbre binaire de hachages utilisée à deux endroits : dans les empreintes structurelles de graphes et dans le journal de transparence C2SP/RFC 6962 de VG-Mesh.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-n" data-toc="N"><span class="n">N</span>N</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-nan-canonique"><span>NaN canonique</span><a class="ch-link" href="compilation.html">Chapitre 7</a></dt>
+            <dd>Motif binaire unique (<code>0x7fc00000</code> pour <code>f32</code>, <code>0x7ff8000000000000</code> pour <code>f64</code>, ADR 0002) auquel toute valeur NaN produite ou stockée est normalisée afin de garantir l'accord bit à bit entre cibles.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-noeud"><span>Nœud (<code>NODE</code>)</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Unité de programme et de preuve dans VeriGraph : une signature typée, un masque d'effets, un contrat et un graphe acyclique d'opérations adressé par son empreinte BLAKE3.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-noyau"><span>Noyau (<i>kernel</i>)</span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Nœud pur (<code>EFFECTS: []</code>), sans captures implicites et à types de taille fixe, appelé élément par élément par un combinateur (<code>SIMD_MAP</code>, <code>FOLD_BOUNDED</code>, <code>GENERATE</code>).</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-o" data-toc="O"><span class="n">O</span>O</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-obligation"><span>Obligation</span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>But de preuve atomique généré pour un nœud : conjonction de <code>POST</code>, non-vacuité de <code>PRE</code>, sûreté d'une opération partielle (<code>DIV.nonzero</code>…), précondition d'appel, invariant de pliage ou bonne définition (<code>.wd</code>).</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-omnilift"><span>OmniLift</span><a class="ch-link" href="omnilift.html">Chapitre 10</a></dt>
+            <dd>Sous-système (<code>vg-omnilift</code>, <code>vg lift</code>) élevant des fonctions C et Rust compilées à <code>-O1</code> vers VG-IR, avec guérison des comportements indéfinis, validation Alive2 et fuzzing différentiel.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-op"><span>Op (opération)</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Sommet élémentaire du graphe de flot de données (ex. <code>ADD.checked</code>, <code>FDIV</code>, <code>SELECT</code>, <code>INDEX</code>), toujours doté d'un mode explicite pour l'arithmétique entière et les comparaisons ordonnées.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-operande"><span>Opérande</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Entrée lue par une opération : un paramètre du nœud, un port <code>%i</code> défini par une instruction précédente, une constante typée (<code>1.0:f32</code>) ou un label de nœud.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-p" data-toc="P"><span class="n">P</span>P</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-port"><span>Port (<code>%0</code>, <code>%1</code>…)</span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Nom de valeur en assignation unique produit par une opération du corps d'un nœud. Doit être défini avant son premier usage (ADR 0005) et ne peut être réassigné.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-porte-ingestion"><span>Porte d'ingestion</span><a class="ch-link" href="mesh.html#pipeline">Chapitre 9</a></dt>
+            <dd>Barrière à six vérifications de VG-Mesh (hachage, types, re-vérification SMT, transitivité d'effets, signature Ed25519 et ajout au journal Merkle) qu'aucun nœud non prouvé ou falsifié ne peut franchir.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-post"><span><code>POST</code></span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Postcondition du contrat liant les paramètres d'entrée et <code>result</code>. Chaque conjonction de haut niveau devient une obligation <code>@noeud/POST.i</code> distincte.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-pre"><span><code>PRE</code></span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Précondition exprimant les hypothèses requises sur les entrées. Elle est supposée vraie lors de la preuve interne du nœud, prouvée aux sites d'appel et vérifiée à l'exécution à l'entrée du binaire exporté.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-pre-criblage"><span>Pré-criblage (<i>pre-screen</i>)</span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Évaluation rapide dans <code>vg-interp</code> avant tout appel SMT, testant valeurs limites et 256 combinaisons déterministes dérivées du <code>node_hash</code> pour capturer les bugs évidents en moins d'une milliseconde.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-preuve-bornee"><span>Preuve bornée (<code>bounded(n)</code>)</span><a class="ch-link" href="omnilift.html#spec-class">Chapitre 10</a></dt>
+            <dd>Attestation indiquant que l'équivalence d'un nœud face à un <code>SPEC</code> a été établie jusqu'à une borne fixe <code>n</code> (ex. 8 déroulements sous Alive2), distinguée explicitement d'une preuve universelle <code>proved</code>.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-s" data-toc="S"><span class="n">S</span>S</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-simd-map"><span><code>SIMD_MAP</code></span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Combinateur appliquant un noyau pur élément par élément à un tableau ou tenseur (comme <code>@soft_knee</code> sur un tampon stéréo <code>Tensor&lt;f32, [512, 2]&gt;</code>), parallélisable sans risque d'état partagé.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-skill"><span>Skill (<code>verigraph-synthesis</code>)</span><a class="ch-link" href="agent.html#skill">Chapitre 8</a></dt>
+            <dd>Mode d'emploi structuré (<code>skills/verigraph-synthesis/SKILL.md</code>) guidant les agents IA : carte de contrat d'abord, recherche VG-Mesh, idiomes qui prouvent, traitement de chaque verdict et interdiction de livrer sans preuve.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-smt"><span>SMT (solveur)</span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Solveur logique (<code>z3</code>, <code>Bitwuzla</code>, <code>cvc5</code>) invoqué comme processus externe via SMT-LIB2 sur tubes. En mode <code>release</code>, deux solveurs distincts doivent confirmer chaque preuve.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-spec"><span><code>SPEC</code></span><a class="ch-link" href="mesh.html#pourquoi">Chapitre 9</a></dt>
+            <dd>Nœud de spécification de référence (ex. <code>SPEC @sha256</code>) appelé uniquement dans les formules via le préfixe <code>spec:</code> (ADR 0008), jamais directement dans un corps d'exécution.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-t" data-toc="T"><span class="n">T</span>T</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-tcb"><span>TCB (Base de confiance)</span><a class="ch-link" href="idee.html">Chapitre 1</a></dt>
+            <dd>Ensemble minimal de composants devant être corrects pour que les garanties tiennent : vérificateur statique, traducteur SMT, solveurs externes, générateur LLVM, runtime <code>vg-rt</code> et compilateur hôte.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-tranche"><span>Tranche (<i>slice</i>)</span><a class="ch-link" href="contre-exemple.html">Chapitre 6</a></dt>
+            <dd>Sous-graphe causal arrière produit par <code>vg-telemetry</code> à partir d'une obligation réfutée, élagué aux seules opérations qui causent l'échec (≤ 5 ops sur 60/60 bogues en G6) avec sa condition <code>diff</code>.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-u" data-toc="U"><span class="n">U</span>U</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-unsat"><span><code>UNSAT</code></span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Réponse d'un solveur SMT prouvant que la négation d'une obligation n'a aucun modèle satisfaisant : c'est la seule preuve acceptée par VeriGraph (<code>unknown</code> et dépassement de délai ne prouvent jamais rien).</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gloss-letter">
+        <h2 id="lettre-v" data-toc="V"><span class="n">V</span>V</h2>
+        <dl class="gloss-list">
+          <div class="gloss-item">
+            <dt id="terme-vacuite"><span>Vacuité (<code>VG-V0003</code>)</span><a class="ch-link" href="preuves.html">Chapitre 5</a></dt>
+            <dd>Défaut d'un contrat dont la précondition <code>PRE</code> n'est satisfaite par aucune entrée : toute postcondition deviendrait trivialement vraie. L'obligation <code>NONVACUOUS</code> bloque ce cas.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-vg-ir"><span>VG-IR</span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Représentation intermédiaire canonique et adressée par contenu de VeriGraph : un graphe dirigé acyclique typé de flot de données accompagné de ses contrats et effets.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-vg-mesh"><span>VG-Mesh</span><a class="ch-link" href="mesh.html">Chapitre 9</a></dt>
+            <dd>Registre de nœuds vérifiés indexé par signature, effets, intention et classe de spécification, protégé par une porte d'ingestion et un journal de transparence Merkle.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-vg-sym"><span>VG-Sym (<code>.vgs</code>)</span><a class="ch-link" href="vg-sym.html">Chapitre 3</a></dt>
+            <dd>Projection textuelle de VG-IR conçue pour être générée par des agents IA et relue par des humains : assignation unique, définition avant usage, aucune expression imbriquée ni conversion implicite.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-vgir"><span><code>.vgir</code></span><a class="ch-link" href="graphe.html">Chapitre 2</a></dt>
+            <dd>Format binaire canonique (en-tête 128 octets et annuaire de sections, ADR 0001) dans lequel chaque nœud assemblé est stocké sous <code>.vg/objects/</code> et haché par BLAKE3.</dd>
+          </div>
+          <div class="gloss-item">
+            <dt id="terme-vglock"><span><code>vg.lock</code></span><a class="ch-link" href="mesh.html#pratique">Chapitre 9</a></dt>
+            <dd>Fichier TOML d'un projet épinglant chaque label local (ou bloc <code>@MESH_QUERY</code> résolu par <code>vg mesh resolve</code>) vers l'empreinte exacte de son nœud et de son <code>SPEC</code>.</dd>
+          </div>
+        </dl>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/glossaire.js"></script>

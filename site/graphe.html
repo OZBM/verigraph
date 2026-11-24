@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Chapitre 2 · Un programme est un graphe · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment VG-IR représente chaque fonction comme un graphe canonique adressé par son contenu BLAKE3, avec vg-core et vg-store.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/graphe.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 2 · VG-IR · vg-core · vg-store</p>
+    <h1>Un programme est un graphe, <em>identifié par son contenu.</em></h1>
+    <p class="lede">Pour un éditeur de texte, renommer une variable ou inverser deux lignes indépendantes crée un fichier différent. Dans VeriGraph, la source de vérité est un graphe canonique binaire : deux écritures équivalentes se réduisent aux mêmes octets et portent exactement la même empreinte BLAKE3.</p>
+    <ul class="crates">
+      <li><code>vg-core</code></li>
+      <li><code>vg-store</code></li>
+    </ul>
+    <div class="ch-meta">
+      <span>Lecture : 14 min</span>
+      <span>Prérequis : chapitre 1</span>
+    </div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="noeud"><span class="n">2.1</span>Anatomie d'un nœud : opérations, ports et flux</h2>
+        <p>Dans VeriGraph, l'unité adressable s'appelle un <dfn>nœud</dfn> (<em>node</em>) : c'est l'équivalent d'une fonction autonome. Un nœud rassemble quatre blocs obligatoires : une signature (<code>SIGNATURE</code>), un masque d'effets (<code>EFFECTS</code>), un contrat (<code>CONTRACT</code>) et un corps (<code>BODY</code>). Entre le contrat et le corps peut figurer un bloc optionnel de paramètres ajustables (<code>LEARNABLE</code>).</p>
+        <p>À l'intérieur du corps, chaque instruction instancie une <dfn>opération</dfn> (<em>op</em>), c'est-à-dire un combinateur ou un calcul élémentaire comme <code>FABS</code> ou <code>FMA</code>. Chaque opération lit des <dfn>opérandes</dfn> — paramètres d'entrée, constantes typées, résultats d'opérations précédentes, nœuds appelés ou invariants — et produit un ou plusieurs <dfn>ports</dfn> nommés <code>%0</code>, <code>%1</code>, etc. Comme chaque port est assigné une seule fois et ne peut référencer qu'une opération définie plus haut, le corps forme toujours un <dfn>graphe acyclique dirigé (DAG)</dfn>.</p>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>Voyez le corps d'un nœud comme une carte électronique sans boucle de rétroaction : les bornes d'entrée (<code>x</code>, <code>knee</code>) injectent les signaux à gauche, chaque composant transforme les signaux qu'il reçoit sur ses broches, et chaque piste ne transporte qu'une seule valeur jusqu'aux broches de sortie <code>RETURN</code>.</p>
+        </aside>
+
+        <p>La figure ci-dessous trace le graphe réel du corps de <code>@soft_knee</code> dans <code>examples/audio_limiter.vgs</code>. Ses treize opérations (<code>%0</code> à <code>%12</code>) et ses opérandes ont été extraits directement du fichier source lors de la construction du site.</p>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-softknee" role="img" aria-label="Graphe de flot de données des treize opérations de @soft_knee"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="sk-flow">Faire circuler un échantillon</button>
+            </div>
+          </div>
+          <figcaption><b>Figure 2.1</b> Corps complet de <code>@soft_knee</code> (<code>examples/audio_limiter.vgs</code>) : deux entrées, treize opérations et une sortie <code>RETURN(%12)</code>. <span class="proof" id="fig-sk-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="canonicalisation"><span class="n">2.2</span>Canonicalisation et empreintes BLAKE3</h2>
+        <p>Comment deux agents travaillant chacun de leur côté peuvent-ils savoir qu'ils ont écrit la même fonction, même s'ils n'ont pas choisi les mêmes noms de paramètres ou le même ordre pour deux calculs indépendants ? VeriGraph répond par l'<dfn>adressage par le contenu</dfn> : l'identité d'un nœud est l'empreinte cryptographique de sa structure normalisée, jamais son nom ni son fichier d'origine.</p>
+        <p>La transformation qui amène n'importe quel nœud écrit en <code>VG-Sym</code> vers cette forme unique s'appelle la <dfn>canonicalisation</dfn>. Elle absorbe les différences purement syntaxiques — ce qu'on nomme l'<dfn>équivalence alpha</dfn> — en sept étapes déterministes décrites dans <code>docs/02-vg-ir-format.md</code> :</p>
+
+        <ol class="steps">
+          <li><b>Valider la structure</b>Vérifier que les indices sont dans les bornes, que les arités correspondent à la table des opcodes (<code>docs/14</code>) et qu'il n'existe aucun cycle.</li>
+          <li><b>Résoudre les étiquettes et supprimer l'accessoire</b>Remplacer les étiquettes (<code>@nom</code>) par leurs empreintes <code>node_hash</code>, effacer les opérations <code>IDENTITY</code> (qui ne servent qu'à lier un littéral dans le texte) et retirer la section non hachée <code>DEBUG</code>.</li>
+          <li><b>Hacher de bas en haut</b>Calculer l'empreinte de chaque opération à partir de son opcode, son mode, ses types de résultats et des empreintes de ses opérandes. Les entrées sont hachées par position et type, pas par nom.</li>
+          <li><b>Trier les opérandes commutatifs</b>Pour les quatorze opérations marquées commutatives dans <code>docs/14</code> (<code>ADD</code>, <code>MUL</code>, <code>AND</code>, <code>OR</code>, <code>XOR</code>, <code>EQ</code>, <code>NE</code>, <code>BAND</code>, <code>BOR</code>, <code>FADD</code>, <code>FMUL</code>, <code>FMIN</code>, <code>FMAX</code>, et les deux premiers opérandes de <code>FMA</code>), trier les opérandes par empreinte croissante.</li>
+          <li><b>Fusionner les doublons et supprimer le code mort</b>Les opérations pures ayant la même empreinte fusionnent ; toute opération dont aucune sortie, chaîne <code>Eff</code> ou <code>INVARIANT</code> actif ne dépend est éliminée (en émettant l'avertissement <code>VG-W0001</code>).</li>
+          <li><b>Numéroter par parcours post-ordre en profondeur</b>Parcourir le graphe en profondeur depuis les sorties, dans l'ordre des ports. Contrairement à un tri topologique quelconque, cet ordre est unique pour un graphe donné.</li>
+          <li><b>Sérialiser de façon déterministe</b>Numéroter types et constantes par premier usage lors du parcours canonique et calculer les empreintes finales depuis la structure (<code>docs/adr/0001-format-encodings.md</code>).</li>
+        </ol>
+
+        <p>Chaque empreinte utilise <code>BLAKE3</code> en mode <code>derive-key</code> avec une chaîne de contexte versionnée, afin qu'un hachage d'opération ne puisse jamais entrer en collision avec un hachage de corps ou de contrat :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Empreinte</th><th>Ce qu'elle couvre</th><th>Contexte BLAKE3</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>op hash</code></td><td>Opcode, mode, attributs, types résultats, empreintes des opérandes</td><td><code>VeriGraph 2026 op v2</code></td></tr>
+              <tr><td><code>body_hash</code></td><td>Empreintes de Merkle des sorties et du bloc <code>LEARNABLE</code></td><td><code>VeriGraph 2026 body v2</code></td></tr>
+              <tr><td><code>contract_hash</code></td><td>Clauses canoniques du contrat (formules avec indices de De Bruijn)</td><td><code>VeriGraph 2026 contract v2</code></td></tr>
+              <tr><td><code>node_hash</code></td><td><code>format_version</code>, <code>effect_mask</code>, types de signature, <code>body_hash</code>, <code>contract_hash</code></td><td><code>VeriGraph 2026 node v2</code></td></tr>
+              <tr><td><code>scc hash</code></td><td>Groupe de nœuds mutuellement récursifs (prévu en <code>[ALPHA]</code>)</td><td><code>VeriGraph 2026 scc v2</code></td></tr>
+              <tr><td><code>spec_hash</code></td><td>Nœud <code>SPEC</code> de référence, isolé des implémentations</td><td><code>VeriGraph 2026 spec v2</code></td></tr>
+              <tr><td><code>obligation hash</code></td><td>Requête SMT-LIB2 canonique (clé du cache de preuves)</td><td><code>VeriGraph 2026 obligation v2</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="note note-warn">
+          <b>Attention — Trois pièges corrigés par les errata (docs/11-errata.md)</b>
+          <ul>
+            <li><strong>Ordre topologique non unique (<code>E-02</code>) :</strong> la spécification initiale numérotait les ports « selon un ordre topologique », qui dépend de l'ordre d'écriture. Le parcours post-ordre depuis les sorties rend la numérotation canonique unique.</li>
+            <li><strong>Fusion d'effets (<code>E-03</code>) :</strong> si deux écritures fichier étaient pures, l'étape 5 les fusionnerait en une seule. Le jeton linéaire <code>Eff</code> rend chaque opération à effet distincte et empêche toute fusion.</li>
+            <li><strong>Texte d'intention (<code>E-06</code>) :</strong> l'attribut <code>intent: "…"</code> est stocké dans la section <code>DEBUG</code> (<code>0x7F</code>), jamais hachée ; les vecteurs d'intention vivent dans l'index de <code>VG-Mesh</code>, pas dans l'objet <code>.vgir</code>.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="variantes"><span class="n">2.3</span>Expérience : cinq variantes face à <code>vg hash</code></h2>
+        <p>Rien ne remplace l'observation directe sur le jeu d'essai du dépôt. Le sélecteur ci-dessous confronte quatre variantes équivalentes issues de la famille <code>tests/corpus/alpha/a01_add_sub_checked/</code> (plus une copie dont l'étiquette <code>@calc_checked</code> et l'attribut <code>intent</code> ont été changés par <code>sed</code>) à un nœud d'une autre famille en mode <code>.wrap</code>. Toutes les empreintes affichées proviennent directement de <code>vg hash</code>.</p>
+
+        <figure class="fig" id="fig-variants">
+          <div class="fig-stage">
+            <div class="variant-bar" role="group" aria-label="Choisir une variante de code VG-Sym"></div>
+            <div class="variant-meta">
+              <p class="variant-summary" id="var-summary"></p>
+              <span class="chip" id="var-badge"></span>
+            </div>
+            <pre class="code vgs" id="var-code"><code></code></pre>
+            <div class="hash-grid" id="var-hashes">
+              <div class="hash-row"><span>Étiquette</span><code id="var-label"></code></div>
+              <div class="hash-row"><span>node_hash</span><code id="var-node"></code></div>
+              <div class="hash-row"><span>body_hash</span><code id="var-body"></code></div>
+              <div class="hash-row"><span>contract_hash</span><code id="var-contract"></code></div>
+            </div>
+          </div>
+          <figcaption><b>Figure 2.2</b> Comparaison réelle de <code>vg hash</code> sur quatre variantes équivalentes et un programme distinct (<code>site/data/graphe.json</code>). Notez que <code>03.vgs</code> déclenche en plus l'avertissement <code>VG-W0001</code> lorsque <code>%5</code> est élagué.</figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="merkle"><span class="n">2.4</span>Composition en arbre de Merkle : <code>CALL_HASH</code></h2>
+        <p>Un nœud n'appelle jamais un autre nœud par son nom : une fois assemblé, <code>CALL_HASH</code>, <code>SIMD_MAP</code>, <code>FOLD_BOUNDED</code>, <code>GENERATE</code> et <code>ASSERT_GUARD</code> stockent l'empreinte <code>node_hash</code> de l'appelé dans la section <code>CALLS</code>. Comme l'empreinte d'un appelé entre dans le hachage de chaque opération qui l'invoque, le graphe d'appels entier forme un arbre de Merkle.</p>
+        <p>Conséquence immédiate : si vous modifiez une seule constante dans un petit noyau de feuille, son <code>node_hash</code> change, ce qui change automatiquement le <code>body_hash</code> et le <code>node_hash</code> de tous les appelants qui en dépendent jusqu'à la racine. Cliquez sur un nœud du graphe d'appels de <code>examples/mandelbrot.vgs</code> ci-dessous pour voir l'onde de propagation exacte.</p>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-mandelbrot" role="img" aria-label="Graphe d'appels de examples/mandelbrot.vgs avec les empreintes de chaque nœud"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" data-mandel="@tick">Modifier @tick</button>
+              <button class="btn small" type="button" data-mandel="@escape_step">Modifier @escape_step</button>
+              <button class="btn small" type="button" data-mandel="@palette_entry">Modifier @palette_entry</button>
+              <button class="btn small" type="button" data-mandel="@pixel">Modifier @pixel</button>
+              <button class="btn small" type="button" data-mandel="@render">Modifier @render</button>
+            </div>
+            <p class="mandel-status" id="mandel-status">Cliquez sur un nœud ou sur un bouton pour simuler sa modification.</p>
+          </div>
+          <figcaption><b>Figure 2.3</b> Arbre de Merkle de <code>examples/mandelbrot.vgs</code>. Les douze premiers chiffres hexadécimaux sous chaque nom sont extraits de <code>vg hash examples/mandelbrot.vgs</code>. <span class="proof" id="fig-mandel-proof"></span></figcaption>
+        </figure>
+
+        <aside class="note note-warn">
+          <b>Attention — Cycles et étiquettes courtes (E-04, E-05)</b>
+          <p>Un nœud ne peut pas contenir sa propre empreinte : la récursion directe ou mutuelle exige de hacher ensemble toute la composante fortement connexe (<code>scc hash</code>) et d'utiliser <code>REC_CALL(i)</code>, fonctionnalité réservée à la phase <code>[ALPHA]</code> (<code>VG-S0007</code> la rejette dans le MVP). Par ailleurs, les modèles ne doivent jamais écrire d'empreintes à la main (<code>E-05</code>) : ils écrivent des étiquettes <code>@nom</code>, et la chaîne affiche un préfixe de 12 chiffres hexadécimaux (<code>~20 millions</code> de nœuds avant 50 % de risque de collision, rallongé automatiquement en cas de choc).</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="vgir"><span class="n">2.5</span>Le format binaire <code>.vgir</code> et le dépôt <code>vg-store</code></h2>
+        <p>Sur disque, chaque nœud canonique est sérialisé dans un objet binaire <code>.vgir</code> en petit-boutiste (<em>little-endian</em>) composé d'un en-tête fixe de 128 octets, d'un répertoire de sections (16 octets par entrée) et de sections alignées sur des frontières de 16 octets. Le décodeur refuse tout octet non canonique : à la lecture, il reconstruit le nœud, le ré-encode et exige l'égalité octet pour octet (<code>VG-S0204</code>).</p>
+
+        <figure class="fig" id="fig-vgir">
+          <div class="fig-stage">
+            <div class="vgir-layout" role="group" aria-label="Disposition des octets d'un fichier .vgir">
+              <div class="vgir-block">
+                <div class="vgir-block-head"><b>En-tête fixe</b><span>128 octets (0x00 .. 0x7F)</span></div>
+                <div class="vgir-fields">
+                  <div class="vgir-cell"><small>0x00 · 4 o</small>magic <code>"VGIR"</code></div>
+                  <div class="vgir-cell"><small>0x04 · 2 o</small>version <code>0x0002</code></div>
+                  <div class="vgir-cell"><small>0x06 · 2 o</small>flags</div>
+                  <div class="vgir-cell"><small>0x08 · 4 o</small>effect_mask</div>
+                  <div class="vgir-cell"><small>0x0C · 4 o</small>section_count</div>
+                  <div class="vgir-cell"><small>0x10 · 32 o</small>node_hash</div>
+                  <div class="vgir-cell"><small>0x30 · 32 o</small>body_hash</div>
+                  <div class="vgir-cell"><small>0x50 · 32 o</small>contract_hash</div>
+                  <div class="vgir-cell"><small>0x70 · 16 o</small>reserved (0)</div>
+                </div>
+              </div>
+              <div class="vgir-block">
+                <div class="vgir-block-head"><b>Répertoire de sections</b><span>16 octets par section présente (ordre croissant de kind)</span></div>
+                <div class="vgir-fields">
+                  <div class="vgir-cell"><small>2 o</small>kind</div>
+                  <div class="vgir-cell"><small>2 o</small>flags (0)</div>
+                  <div class="vgir-cell"><small>4 o</small>count</div>
+                  <div class="vgir-cell"><small>4 o</small>offset (×16)</div>
+                  <div class="vgir-cell"><small>4 o</small>length</div>
+                </div>
+              </div>
+              <div class="vgir-block">
+                <div class="vgir-block-head"><b>Sections (alignées sur 16 octets, bourrage à zéro)</b><span>Les sections vides sont omises</span></div>
+                <div class="vgir-fields">
+                  <div class="vgir-cell"><small>0x01</small>TYPES</div>
+                  <div class="vgir-cell"><small>0x02</small>SIGNATURE</div>
+                  <div class="vgir-cell"><small>0x03</small>CONSTS</div>
+                  <div class="vgir-cell"><small>0x04</small>OPS</div>
+                  <div class="vgir-cell"><small>0x05</small>OPERANDS</div>
+                  <div class="vgir-cell"><small>0x06</small>RESULTS</div>
+                  <div class="vgir-cell"><small>0x07</small>CALLS</div>
+                  <div class="vgir-cell"><small>0x08</small>CONTRACT</div>
+                  <div class="vgir-cell"><small>0x09</small>LEARNABLE</div>
+                  <div class="vgir-cell unhashed"><small>0x7F · non hachée</small>DEBUG</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption><b>Figure 2.4</b> Agencement binaire d'un objet <code>.vgir</code> d'après <code>docs/02-vg-ir-format.md</code> et <code>docs/adr/0001-format-encodings.md</code>.</figcaption>
+        </figure>
+
+        <aside class="note note-warn">
+          <b>Attention — En-tête de 128 octets (E-01)</b>
+          <p>La spécification d'origine proposait un en-tête de 120 octets, non aligné sur 16 octets, sans répertoire d'offsets ni tables de types/constantes. L'alignement à 128 octets et le répertoire de sections permettent d'adresser directement chaque table et d'effectuer un mappage mémoire sans copie.</p>
+        </aside>
+
+        <details class="deep">
+          <summary>Pour aller plus loin : les 5 amendements d'ADR 0001 et l'objet minimal de 432 octets</summary>
+          <div>
+            <p>Lors de l'implémentation de <code>vg-core</code> (<code>docs/adr/0001-format-encodings.md</code>), cinq ajustements ont été formalisés pour préserver les lois sémantiques de <code>docs/13</code> : (1) les largeurs et dimensions dans <code>TYPES</code> sont des immédiats <code>u32</code> plutôt que des indices vers <code>CONSTS</code> ; (2) les types raffinés sont stockés sous leur type de base et leurs prédicats rejoignent <code>PRE</code> ou <code>POST</code> ; (3) les sorties du nœud (<code>RETURN</code>) suivent les opérandes des opérations dans <code>OPERANDS</code> ; (4) les sections vides sont omises ; (5) <code>body_hash</code>, <code>contract_hash</code> et <code>node_hash</code> hachent uniquement la structure et non les positions de table, afin qu'une constante utilisée seulement dans le contrat ne modifie jamais <code>body_hash</code>.</p>
+            <p>Un nœud minimal tel que <code>@inc</code> (<code>ADD.wrap(x, 1:u8)</code> avec <code>POST: result == x + 1</code>) occupe exactement <code>432</code> octets en <code>.vgir</code> sur disque (fichier témoin <code>tests/golden/minimal.inc.vgir</code>).</p>
+          </div>
+        </details>
+
+        <p>La commande <code>vg asm</code> assemble un module, écrit chaque objet canonique sous <code>.vg/objects/&lt;2 hex&gt;/&lt;62 hex&gt;.vgir</code>, met à jour l'index SQLite (<code>.vg/index.sqlite</code>, qui permet notamment de retrouver tous les nœuds partageant un même <code>body_hash</code> sous des contrats distincts) et fige les correspondances <code>@label → hash</code> dans <code>vg.lock</code>.</p>
+
+        <div class="term" id="term-store"></div>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Le format <code>.vgir</code> et les règles de canonicalisation gèlent au passage de la porte G1 ; le rapport <code>reports/gate-g1.md</code> est rédigé et en attente d'approbation par le propriétaire. Tout changement ultérieur exigera un ADR approuvé et un incrément de <code>format_version</code>.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">2.6</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Que se passe-t-il si vous renommez un paramètre (<code>x</code> → <code>sample</code>), inversez les opérandes de <code>ADD.checked(x, y)</code> et ajoutez une opération pure inutilisée ?</p>
+          <ol>
+            <li><button class="choice"><code>body_hash</code> change mais <code>contract_hash</code> reste identique.</button></li>
+            <li><button class="choice" data-right><code>node_hash</code>, <code>body_hash</code> et <code>contract_hash</code> restent strictement identiques.</button></li>
+            <li><button class="choice">Seul <code>vg.lock</code> reste identique.</button></li>
+          </ol>
+          <p class="why" hidden>Les paramètres sont hachés par position, les opérandes commutatifs de <code>ADD.checked</code> sont triés par empreinte à l'étape 4, et l'opération pure morte est éliminée à l'étape 5. La forme canonique ne change donc pas d'un octet.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Pourquoi deux opérations <code>FILE_WRITE</code> identiques dans un même nœud ne sont-elles jamais fusionnées par la canonicalisation ?</p>
+          <ol>
+            <li><button class="choice">Parce que l'étape 5 désactive toute déduplication dès qu'un nœud possède un contrat.</button></li>
+            <li><button class="choice" data-right>Parce que chaque opération à effet consomme et retourne un jeton linéaire <code>Eff</code> distinct, donc leurs empreintes d'opérandes diffèrent.</button></li>
+            <li><button class="choice">Parce que les opérations d'effet sont stockées uniquement dans la section <code>DEBUG</code>.</button></li>
+          </ol>
+          <p class="why" hidden>C'est la correction de l'erratum <code>E-03</code> : la seconde écriture lit le jeton <code>Eff</code> produit par la première, ce qui garantit des opérandes différents et préserve l'ordre exact des effets.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Dans <code>examples/mandelbrot.vgs</code>, si vous modifiez le corps de <code>@palette_entry</code> tout en gardant son contrat intact, quelles empreintes de nœuds changent ?</p>
+          <ol>
+            <li><button class="choice">Uniquement celle de <code>@palette_entry</code>, car <code>CALL_HASH</code> ne dépend que du contrat de l'appelé.</button></li>
+            <li><button class="choice" data-right>Celle de <code>@palette_entry</code> et celle de <code>@render</code>, car <code>GENERATE(@palette_entry, …)</code> incorpore le <code>node_hash</code> de l'appelé.</button></li>
+            <li><button class="choice">Celle de tous les nœuds du module, y compris <code>@tick</code>.</button></li>
+          </ol>
+          <p class="why" hidden>En vérification (<code>vg verify</code>), l'appelant ne voit que le contrat de l'appelé ; mais dans l'identité binaire (<code>CALLS</code>), c'est le <code>node_hash</code> complet de l'appelé qui est référencé. Ainsi <code>@render</code> (qui appelle <code>@palette_entry</code>) change d'empreinte, tandis que <code>@tick</code>, <code>@escape_step</code> et <code>@pixel</code> ne changent pas.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>Un programme VeriGraph est un graphe canonique contenu-adressé dont l'identité BLAKE3 ignore noms locaux, commentaires, ordre des instructions indépendantes et opérations mortes, mais se propage en arbre de Merkle le long des appels. Dans le prochain chapitre, nous apprenons à lire et écrire sa projection texte, <code>VG-Sym</code>.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/graphe.js"></script>

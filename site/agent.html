@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>La boucle agent · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment un agent IA écrit, vérifie et répare du VG-Sym grâce au serveur vg mcp, au skill verigraph-synthesis, au harnais vg loop et aux paliers de décodage contraint.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/agent.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 8 · La boucle agent</p>
+    <h1>La boucle agent, <em>prouver plutôt qu'espérer.</em></h1>
+    <p class="lede">Un modèle de langage ne devine pas si un programme est sans débordement ; il écrit une ébauche, lit les diagnostics typés et les contre-exemples reproductibles de <code>vg</code>, et répare jusqu'à ce que les solveurs prouvent chaque obligation.</p>
+    <ul class="crates"><li><code>vg-cli</code></li><li><code>vg-decode</code></li><li><code>skills/verigraph-synthesis</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 14 min</span><span>Prérequis : chapitres 3, 5 et 6</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="ai-native"><span class="n">8.1</span>Pourquoi VeriGraph est conçu pour les agents</h2>
+        <p>Dans un langage classique, le compilateur répond souvent par des lignes de texte ambiguës, et les tests ne couvrent que les cas imaginés par l'auteur ou le modèle. VeriGraph renverse ce rapport : chaque décision d'architecture de <code>docs/00-vision.md</code> et de <code>docs/15-agent-interface.md</code> est évaluée selon ce qu'elle permet à un agent autonome d'accomplir sans intervention humaine intermédiaire.</p>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>Travailler avec un langage textuel classique pour un modèle, c'est conduire dans le brouillard en espérant qu'aucun panneau ne manque. Avec VeriGraph, la route est bordée de capteurs précis : à la moindre sortie de voie, l'outil renvoie la coordonnée exacte du pneu qui mord la ligne (le contre-exemple et la tranche causale) et refuse tout simplement de livrer le véhicule tant que les capteurs ne sont pas au vert.</p>
+        </aside>
+
+        <p>Huit invariants fondent cette approche <dfn>IA-native</dfn> (<code>docs/00-vision.md</code>), traduits dans l'interface par sept règles strictes (<code>docs/15-agent-interface.md</code>) :</p>
+        <ul>
+          <li><strong>Tout jugement est une donnée JSON typée.</strong> Erreurs, verdicts, contre-exemples et coûts utilisent un schéma stable et des codes immuables (<code>VG-P…</code>, <code>VG-S…</code>, <code>VG-T…</code>, <code>VG-E…</code>, <code>VG-C…</code>, <code>VG-V…</code>), sans journaux bruts de solveur.</li>
+          <li><strong>Localisation dans les mots de l'agent.</strong> Chaque diagnostic cite le label du nœud (<code>@soft_knee</code>), le port tel qu'écrit (<code>%4</code>), le nom de paramètre, la ligne et la colonne — ainsi l'agent sait exactement quoi éditer.</li>
+          <li><strong>Raisonnement local par contrat.</strong> Les types se déduisent opérande par opérande, et un appelant est prouvé uniquement à partir du contrat de l'appelé, jamais de son corps. Un agent peut donc réparer un nœud à la fois.</li>
+          <li><strong>Texte vérifiable préfixe par préfixe.</strong> Chaque port et chaque label sont définis avant d'être utilisés (ADR 0005), ce qui autorise une validation incrémentale dès les premiers jetons générés.</li>
+          <li><strong>Labels locaux au lieu d'empreintes inventées.</strong> Un modèle de langage ne sait pas calculer un hachage BLAKE3 ; il écrit <code>@nom</code> et laisse la chaîne d'outils calculer et épingler les empreintes canoniques.</li>
+          <li><strong>Plus petite preuve suffisante et honnêteté des verdicts.</strong> En cas d'échec, un seul contre-exemple reproductible, une seule tranche élaguée et une condition <code>diff</code> sont renvoyés ; <code>unknown</code> reste toujours distinct de <code>proven</code> et de <code>counterexample</code>.</li>
+        </ul>
+      </section>
+
+      <section id="sec-boucle">
+        <h2 id="boucle-agent"><span class="n">8.2</span>La boucle générer → vérifier → réparer</h2>
+        <p>Pour un modèle hébergé (Claude, Gemini, GPT), le dialogue avec VeriGraph prend la forme d'une boucle outillée : formuler une <dfn>carte de contrat</dfn>, interroger le registre VG-Mesh pour réutiliser les briques existantes, rédiger un brouillon en VG-Sym, passer <code>vg_check</code> (gratuit et instantané), appeler <code>vg_verify</code> et réparer selon le verdict reçu, dans une limite de cinq tours sans progrès avant d'escalader ou de changer d'approche.</p>
+
+        <figure class="fig" id="fig-agent-loop-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-agent-loop" role="img" aria-label="Boucle agent : demande, requête Mesh, brouillon, vérification, contre-exemple, réparation et compilation"></svg></div>
+          <div class="fig-controls">
+            <button class="btn small" type="button" id="btn-round-fail">Rejouer le tour 1 (échec)</button>
+            <button class="btn small" type="button" id="btn-round-pass">Rejouer le tour 2 (preuve)</button>
+            <span class="readout" id="agent-loop-status">Cliquez sur un tour pour suivre le flux des données.</span>
+          </div>
+          <figcaption><b>Figure 8.1</b> La boucle hébergée en action. En cas de réfutation, <code>vg_verify</code> renvoie un contre-exemple concret vers l'étape de réparation (arête de retour orange) ; une fois toutes les obligations prouvées, <code>vg_build</code> produit les binaires. <span class="proof" id="fig-agent-loop-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section id="sec-mcp">
+        <h2 id="mcp"><span class="n">8.3</span>Les huit outils du serveur MCP (<code>vg mcp</code>)</h2>
+        <p>La commande <code>vg mcp</code> démarre un serveur conforme au protocole <dfn>MCP</dfn> (<i>Model Context Protocol</i>, version <code>2025-06-18</code> enregistrée dans nos données) sur entrée/sortie standard, construit avec le SDK officiel Rust <code>rmcp</code>. Les cartes ci-dessous ont été générées directement depuis la réponse réelle <code>tools/list</code> envoyée par <code>./target/release/vg mcp</code> lors de la construction de ce site :</p>
+
+        <div class="cards" id="mcp-tools"></div>
+
+        <p>Chaque outil accepte soit le texte complet du module (<code>source</code>), soit un chemin (<code>path</code>) ; si les deux sont présents, <code>source</code> l'emporte. Par mesure de sûreté, <code>vg_build</code> via MCP refuse de compiler tout nœud non entièrement prouvé, et une réfutation d'obligation laisse <code>isError</code> à <code>false</code> : un contre-exemple est une réponse valide du vérificateur, pas une panne du serveur (<code>docs/guide/mcp.md</code>).</p>
+
+        <details class="deep">
+          <summary>Voir un appel JSON-RPC réel à <code>vg_run</code> et sa réponse structurée</summary>
+          <div>
+            <p>Appel envoyé sur <code>stdin</code> pour exécuter <code>@soft_knee</code> de <code>examples/quickstart.vgs</code> avec <code>x = "3e38"</code> et <code>knee = "0.5"</code>, suivi du champ <code>structuredContent</code> réellement renvoyé par <code>vg mcp</code> :</p>
+            <pre class="code"><code id="mcp-sample-json"></code></pre>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="skill"><span class="n">8.4</span>Ce qu'enseigne le skill de synthèse</h2>
+        <p>Mettre des outils à disposition d'un modèle ne suffit pas : il doit savoir dans quel ordre les appeler et comment interpréter chaque verdict. C'est le rôle du fichier <code>skills/verigraph-synthesis/SKILL.md</code>, distribué automatiquement avec le plugin Antigravity et injecté dans le prompt système de <code>vg loop</code>.</p>
+
+        <ol class="steps">
+          <li>
+            <b>Carte de contrat d'abord</b>
+            <p>Avant d'écrire la moindre opération, l'agent rédige une carte résumant entrées, sorties, effets, <code>PRE</code>, <code>POST</code>, <code>COST</code>, <code>BUDGET</code>, paramètres <code>LEARNABLE</code> et requêtes Mesh. Il fait valider par l'humain le contrat lui-même (ou <code>contract_text</code> une fois pris en charge par <code>vg_check</code>), afin que ce qui est confirmé soit exactement ce qui sera prouvé.</p>
+          </li>
+          <li>
+            <b>Consulter VG-Mesh avant de réinventer</b>
+            <p>Pour le hachage, les codecs, le tri ou l'algèbre linéaire, le skill impose d'appeler <code>vg_mesh_query</code> et de lier les candidats existants par <code>@MESH_QUERY</code>.</p>
+          </li>
+          <li>
+            <b>Ébaucher des noyaux purs</b>
+            <p>Les calculs vivent dans des nœuds purs (<code>EFFECTS: []</code>) et de taille fixe ; les effets et handles restent confinés à un mince nœud racine.</p>
+          </li>
+          <li>
+            <b>Nettoyer avec <code>vg_check</code>, puis prouver avec <code>vg_verify</code></b>
+            <p>Une fois les erreurs statiques éliminées, l'agent suit une table de décision stricte par verdict : corriger le corps ou <code>PRE</code> sur <code>counterexample</code>, renforcer le <code>POST</code> d'un appelé sur <code>contract_gap</code>, découper ou ajouter un invariant sur <code>unknown</code>, affaiblir <code>PRE</code> sur <code>vacuous</code> — sans jamais affaiblir <code>POST</code> sans accord explicite.</p>
+          </li>
+        </ol>
+
+        <p>Le skill enseigne aussi les idiomes de VG-Sym qui passent le solveur du premier coup. Survolez ou sélectionnez les zones soulignées de ce motif tiré de <code>skills/verigraph-synthesis/SKILL.md</code> :</p>
+
+        <div class="annotated">
+<pre class="code vgs" data-file="skills/verigraph-synthesis/SKILL.md"><code><span data-note="Les nœuds déclarent explicitement SIGNATURE, EFFECTS et CONTRACT avant le BODY." data-title="En-tête">NODE @safe_div</span> {
+  SIGNATURE: (x: i32, d: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    <span data-note="Protège la division signée contre le seul débordement possible : INT32_MIN / -1." data-title="PRE">PRE:  !(x == -2147483648 && d == -1);</span>
+    <span data-note="Chaque terme potentiellement indéfini (x / d) est gardé par d != 0 ==> … pour satisfaire les obligations de bonne définition (.wd)." data-title="POST bien défini">POST: (d == 0 ==> result == 0) && (d != 0 ==> result == x / d);</span>
+  }
+  BODY {
+    %0 = NE(d, 0:i32);
+    <span data-note="Le graphe est strict : SELECT évalue ses deux branches. On fabrique d'abord un diviseur sûr (%1 vaut 1 si d == 0) avant d'appeler DIV.checked." data-title="Graphe strict"> %1 = SELECT(%0, d, 1:i32);</span>
+    <span data-note="Mode explicite obligatoire (.checked) : génère les obligations DIV.nonzero et débordement sur %1, pas sur d." data-title="Opération sûre">%2 = DIV.checked(x, %1);</span>
+    %3 = SELECT(%0, %2, 0:i32);
+    RETURN(%3);
+  }
+}</code></pre>
+          <aside class="panel annot-panel"><span class="label">Survolez le code</span><p>Passez le curseur (ou utilisez Tab) sur une expression soulignée pour lire la règle du skill qu'elle applique.</p></aside>
+        </div>
+      </section>
+
+      <section id="sec-loop">
+        <h2 id="boucle-hebergee"><span class="n">8.5</span>La boucle hébergée et les paliers de décodage</h2>
+        <p>Pour évaluer objectivement des modèles sur <code>benchmarks/synthesis</code>, VeriGraph intègre le harnais <dfn>boucle hébergée</dfn> <code>vg loop</code> (<code>crates/vg-cli/src/hosted.rs</code>). Le modèle reçoit trois outils : <code>vg_check</code> (gratuit), <code>vg_verify</code> (chaque appel compte pour un tour de réparation, jusqu'à <code>--rounds</code>) et <code>submit</code>. À la soumission, un correcteur indépendant (<i>grader</i>) ne fait aucune confiance aux affirmations du modèle : il re-vérifie le module, construit un nœud enveloppe <code>@vg_reference</code> qui appelle la soumission via <code>CALL_HASH</code> pour prouver qu'elle raffine le contrat de référence de la tâche (<code>PRE_ref ⇒ PRE_cand</code> et <code>PRE_ref ∧ POST_cand ⇒ POST_ref</code>), puis exécute les vecteurs de test dans <code>vg-interp</code>.</p>
+
+        <p>Afin de tester ce correcteur sans appel réseau payant, <code>vg loop</code> accepte l'option <code>--replay SCRIPT.json</code>. Nous l'avons exécuté lors de la génération des données de cette page sur les trois variantes du banc <code>03_midpoint_u32</code> (issues de <code>crates/vg-cli/tests/hosted_loop.rs</code>) :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Tâche simulée</th><th>Tours</th><th>Vérifié</th><th>Contrat de réf.</th><th>Tests</th><th>Acceptée ?</th></tr>
+            </thead>
+            <tbody id="loop-table"></tbody>
+          </table>
+        </div>
+
+        <div class="term" id="term-loop"></div>
+
+        <h3>Deux modes de génération : outils ou décodage contraint</h3>
+        <p>La boucle MCP et <code>vg loop</code> s'adressent aux modèles hébergés derrière une API qui n'expose pas les probabilités de sortie jeton par jeton. Pour les modèles ouverts exécutés localement (vLLM, SGLang, llama.cpp), la piste de recherche <code>[R-01]</code> étudie le <dfn>décodage contraint</dfn> à trois paliers dans <code>vg-decode</code> (<code>docs/07-generation-loop.md</code>) :</p>
+
+        <figure class="fig" id="fig-decoding-tiers-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-decoding-tiers" role="img" aria-label="Paliers 1, 2 et 3 du décodage contraint face à la boucle hébergée par outils MCP"></svg></div>
+          <figcaption><b>Figure 8.2</b> Comparaison entre la boucle par outils MCP (MVP) et les trois paliers de masquage local <code>[R-01]</code> dans <code>vg-decode</code>. <span class="proof" id="fig-decoding-tiers-proof"></span></figcaption>
+        </figure>
+
+        <p>Aujourd'hui, les paliers 1 (exports de grammaire GBNF, Lark et <code>llguidance</code>) et 2 (vérificateur incrémental <code>vg-decode::Prefix</code>, mesuré à <b>23 µs au p99</b> selon <code>PROGRESS.md</code>, 2026-11-23, bien en deçà du budget cible de 1 ms) sont implémentés. Le palier 3 (requêtes SMT aux points de liaison d'arêtes, avec règle stricte que <code>unknown</code> ne masque jamais un jeton) relève de la piste de recherche <code>[R-01]</code>.</p>
+      </section>
+
+      <section id="sec-m1">
+        <h2 id="m1"><span class="n">8.6</span>L'histoire M1 : du texte libre au limiteur audio</h2>
+        <p>Le jalon M1 repose sur un scénario concret décrit dans <code>examples/audio_limiter.prompt.md</code> : partir d'une demande en langage naturel, faire échouer une première ébauche avec un contre-exemple réel, puis prouver la version corrigée reliée à un SHA-256 issu de VG-Mesh. Voici la demande exacte du dépôt :</p>
+
+        <blockquote class="prompt-quote">
+          « Write a verified real-time audio limiter and packet integrity module that takes a 512-sample stereo FP32 audio buffer, clamps peaks smoothly using a learnable knee threshold so no sample ever exceeds [-1.0, 1.0], computes a SHA-256 integrity digest of the output frame, and runs in under 500 microseconds with zero heap allocation. »
+        </blockquote>
+
+        <p>Remarquez la précision importante de <code>examples/audio_limiter.prompt.md</code> : « <i>runs in under 500 microseconds</i> » plutôt que « <i>guarantees execution in under 500 microseconds</i> ». La latence mesurée relève d'un <code>BUDGET</code> (observé sur machine cible), jamais d'une preuve formelle, tandis que l'absence d'allocation dynamique relève du <code>COST</code> (<code>heap_bytes == 0 &amp;&amp; arena_bytes == 0</code>).</p>
+
+        <div class="stats" id="m1-stats"></div>
+
+        <p>Sur le brouillon initial <code>examples/soft_knee_draft.vgs</code>, l'agent reçoit ce rapport de défaillance exact de <code>vg explain</code> avant de remplacer <code>t / (1 + t)</code> par <code>1 - 1 / (1 + t)</code> :</p>
+
+        <pre class="code"><code id="m1-explain"></code></pre>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Bien que le harnais <code>vg loop</code>, les 30 tâches de référence dans <code>benchmarks/synthesis</code> et la preuve complète de <code>examples/audio_limiter.vgs</code> fonctionnent localement, le jalon <b>G5 est actuellement en échec</b> (<code>reports/gate-g5.md</code>) : la campagne sur les 30 tâches avec un modèle API payant n'a pas encore été lancée (<code>no reports/g5/results.json</code>). Par estimation — et non mesure — une exécution complète sur 30 tâches avec Claude Opus 5.5 consommerait environ 1,5 million de jetons en entrée et 150 000 en sortie, soit autour de 9 $ avant mise en cache du préfixe (<code>docs/guide/cli.md</code>).</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">8.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Dans <code>vg loop</code>, un modèle soumet une implémentation de <code>@midpoint_u32</code> avec <code>POST: true</code> qui vérifie sans erreur et réussit tous les tests unitaires. Que décide le correcteur ?</p>
+          <ol>
+            <li><button class="choice">Il l'accepte car <code>verified</code> et <code>tests_passed</code> valent tous deux <code>true</code>.</button></li>
+            <li><button class="choice" data-right>Il la rejette (<code>reference_contract: false</code>, <code>success: false</code>) parce que l'enveloppe <code>@vg_reference</code> ne parvient pas à prouver le contrat de référence de la tâche.</button></li>
+            <li><button class="choice">Il la marque comme une acceptation non saine (<code>unsound_accept: true</code>).</button></li>
+          </ol>
+          <p class="why" hidden>C'est exactement le cas <code>b_weak</code> de <code>crates/vg-cli/tests/hosted_loop.rs</code> (et de <code>site/data/agent.json</code>) : un contrat trop faible est vérifiable en lui-même, mais échoue au raffinement du contrat de référence. Une <code>unsound_accept</code> désignerait un nœud vérifié qui violerait son <em>propre</em> <code>POST</code> sur un test.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Pourquoi le vérificateur incrémental de <code>vg-decode</code> (palier 2) peut-il valider un préfixe de code VG-Sym au fil des jetons ?</p>
+          <ol>
+            <li><button class="choice">Parce qu'il exécute Z3 à chaque caractère généré par le modèle.</button></li>
+            <li><button class="choice" data-right>Parce que VG-Sym impose la définition avant usage des ports et des labels (ADR 0005), et que les types d'une opération se déduisent de ses opérandes.</button></li>
+            <li><button class="choice">Parce qu'il ignore les types et ne vérifie que les parenthèses.</button></li>
+          </ol>
+          <p class="why" hidden>Grâce à l'ADR 0005, <code>vg-decode::Prefix</code> connaît à tout instant l'ensemble des ports, labels et opcodes valides pour la suite immédiate, en 23 µs au p99 (<code>PROGRESS.md</code>, 2026-11-23).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Lorsqu'un appel <code>vg_verify</code> via MCP renvoie un contre-exemple, que vaut <code>isError</code> dans la réponse MCP ?</p>
+          <ol>
+            <li><button class="choice"><code>true</code>, afin de forcer le client à interrompre la session.</button></li>
+            <li><button class="choice" data-right><code>false</code>, car un contre-exemple est un verdict normal et exploitable du vérificateur, pas une erreur de transport ou d'outil.</button></li>
+          </ol>
+          <p class="why" hidden>Comme le précise <code>docs/guide/mcp.md</code>, <code>isError</code> reste à <code>false</code> même quand <code>"ok": false</code>, pour que l'agent lise le rapport structuré et passe au tour de réparation suivant.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>VeriGraph transforme le dialogue avec une IA en boucle fermée par la preuve : l'agent s'appuie sur huit outils MCP typés, un skill orienté contrat, des contre-exemples concrets avec tranche causale, et un correcteur indépendant qui vérifie chaque soumission face à un contrat de référence. Le décodage contraint (<code>vg-decode</code>) complète cette boucle côté modèles locaux.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/agent.js"></script>

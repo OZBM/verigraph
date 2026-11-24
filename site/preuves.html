@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Contrats et preuves · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment vg-smt transforme un graphe et son contrat en obligations de preuve vérifiées par Z3, cvc5 et Bitwuzla.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/preuves.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 5 · vg-smt</p>
+    <h1>Contrats et preuves, <em>sans exception.</em></h1>
+    <p class="lede">Un test vérifie quelques entrées choisies à la main ; une preuve vérifie toutes les entrées possibles à la fois. Ce chapitre montre comment <code>vg-smt</code> découpe un nœud en obligations élémentaires, les soumet aux solveurs SMT et distingue ce qui est prouvé de ce qui n'est que mesuré.</p>
+    <ul class="crates"><li><code>vg-smt</code></li><li><code>z3</code></li><li><code>cvc5</code></li><li><code>Bitwuzla</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 12 min</span><span>Prérequis : chapitre 4</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="contrats"><span class="n">5.1</span>Contrats : ce qui est prouvé et ce qui est mesuré</h2>
+        <p>Dans un nœud VG-Sym, le bloc <code>CONTRACT</code> énonce les règles du jeu avant la moindre ligne de calcul. Chaque clause joue un rôle précis : certaines décrivent la logique des valeurs et deviennent des preuves mathématiques, d'autres comptent les ressources statiques, et une seule reste une cible mesurée à l'exécution.</p>
+
+        <aside class="note note-info">
+          <b>Analogie · Le calcul de résistance d'un pont</b>
+          <p>Faire passer trois camions sur un pont ne prouve pas qu'il tiendra au quatrième. Un ingénieur démontre plutôt que pour toute charge inférieure à la limite annoncée (<code>PRE</code>), la contrainte sur chaque poutre reste sous le seuil de rupture (<code>POST</code>). Dans VeriGraph, c'est exactement le travail de <code>vg-smt</code>.</p>
+        </aside>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Clause</th><th>Ce qu'elle exprime</th><th>Statut</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>PRE</code></td><td>Ce que tout appelant doit garantir sur les entrées et paramètres <code>LEARNABLE</code></td><td>Prouvée à chaque site d'appel (<code>CALL.pre</code>, <code>MAP.pre</code>…)</td></tr>
+              <tr><td><code>POST</code></td><td>Ce que le nœud garantit sur ses sorties dès que <code>PRE</code> est vraie</td><td>Prouvée une fois sur le corps du nœud</td></tr>
+              <tr><td><code>INVARIANT</code></td><td>Propriété conservée à chaque tour d'une boucle <code>FOLD_BOUNDED</code></td><td>Prouvée par récurrence : base (<code>k = 0</code>) et pas inductif</td></tr>
+              <tr><td><code>DECREASES</code></td><td>Mesure entière positive décroissante pour <code>REC_CALL</code></td><td>Spécifiée pour <code>[ALPHA]</code> (<code>REC_CALL</code> rejeté en v0)</td></tr>
+              <tr><td><code>COST</code></td><td>Bornes statiques sur <code>ops</code>, <code>arena_bytes</code> et <code>heap_bytes</code></td><td>Prouvée dans le modèle de coût (en v0, un appelé sans borne laisse <code>COST</code> <code>unknown</code>)</td></tr>
+              <tr><td><code>BUDGET</code></td><td>Objectif mesuré sur cible réelle, tel que <code>latency_p99_us &lt;= 500</code></td><td><strong>Jamais prouvée</strong> : vérifiée par benchmark sur chaque cible</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Voici comment ces clauses s'articulent sur un exemple réel tiré de <code>examples/quickstart.vgs</code>, la somme bornée <code>@sum4</code>. Survolez les clauses et le combinateur pour voir les buts qu'ils engendrent :</p>
+
+        <div class="annotated">
+<pre class="code vgs" data-file="examples/quickstart.vgs"><code>NODE @sum4 [intent: "Sum four readings of at most 1000 each"] {
+  SIGNATURE: (xs: Array&lt;u32, 4&gt;) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    <span data-note="Quantificateur borné : grâce à la règle de l'élément frais (docs/05), vg-smt instancie cette hypothèse sans recherche de quantificateurs pour le solveur." data-title="PRE · forall borné">PRE:  forall(i in 0..4) { xs[i] &lt;= 1000 };</span>
+    <span data-note="Obligation @sum4/POST.0 : prouvée directement à partir de l'invariant à k = 4 (acc <= 1000 * 4)." data-title="POST · Somme bornée">POST: result &lt;= 4000;</span>
+    <span data-note="L'invariant nomme le compteur d'étape k et l'accumulateur acc. Il doit tenir à k = 0, impliquer la PRE de @add_step, et se conserver après chaque étape." data-title="INVARIANT · Récurrence">INVARIANT @bounded(k, acc): acc &lt;= 1000 * k;</span>
+  }
+  BODY {
+    <span data-note="Génère trois obligations : @sum4/%0/FOLD.base (0 <= 0), @sum4/%0/FOLD.pre.0/1 (acc <= 3000 et xs[k] <= 1000) et @sum4/%0/FOLD.step." data-title="FOLD_BOUNDED">%0 = FOLD_BOUNDED(@add_step, xs, init=0:u32, invariant=@bounded);</span>
+    RETURN(%0);
+  }
+}</code></pre>
+          <aside class="panel annot-panel">
+            <span class="label">Survolez le code</span>
+            <p>Sélectionnez une clause ou <code>FOLD_BOUNDED</code> pour voir quelles obligations <code>vg-smt</code> en déduit.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="obligations"><span class="n">5.2</span>Chaque opération risquée crée une obligation</h2>
+        <p>En VG-Sym, une <dfn>obligation de preuve</dfn> est un but logique unique identifié par un nom lisible (<code>docs/15-agent-interface.md</code>) et par une empreinte BLAKE3 canonique (<code>docs/02</code>). Les postconditions ne sont pas les seules obligations : toute opération partielle — une division, un décalage de bits, une lecture de tableau ou une conversion rétrécissante — engendre automatiquement sa propre obligation de sûreté.</p>
+        <p>Un point essentiel de cette architecture est la vérification modulaire : chaque nœud est prouvé isolément, en ne voyant que les contrats (<code>PRE</code> et <code>POST</code>) des fonctions qu'il appelle, jamais leur corps. Si l'implémentation d'un appelé change tout en respectant le même contrat, toutes les preuves de l'appelant restent valides sans avoir besoin d'être recalculées.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Forme d'identifiant</th><th>Signification</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>@n/NONVACUOUS</code></td><td>Il existe au moins une entrée satisfaisant <code>PRE</code>, les raffinements et la boîte <code>LEARNABLE</code> (sinon tout contrat serait trivialement vrai)</td></tr>
+              <tr><td><code>@n/POST.i</code></td><td>La <i>i</i>-ème conjonction de <code>POST</code> (numérotée depuis 0 après mise à plat des <code>&&</code>)</td></tr>
+              <tr><td><code>@n/%p/ADD.no_overflow</code></td><td><code>ADD.checked</code>, <code>SUB.checked</code>, <code>MUL.checked</code> ou <code>NEG.checked</code> ne déborde pas</td></tr>
+              <tr><td><code>@n/%p/DIV.nonzero</code></td><td>Le diviseur de <code>DIV</code> ou <code>MOD</code> est non nul (et pour les entiers signés, pas <code>MIN / -1</code>)</td></tr>
+              <tr><td><code>@n/%p/INDEX.in_bounds</code></td><td>L'indice d'un <code>INDEX</code>, <code>UPDATE</code> ou les bornes d'un <code>SLICE</code> restent dans <code>len(xs)</code></td></tr>
+              <tr><td><code>@n/%p/CAST.in_range</code></td><td>Une conversion avec perte (<code>f32 → u8</code> ou rétrécissement entier) tient dans le type cible et n'est ni <code>NaN</code> ni infinie</td></tr>
+              <tr><td><code>@n/%p/FOLD.base</code>, <code>FOLD.pre.i</code>, <code>FOLD.step</code></td><td>Les trois volets de la preuve par récurrence d'un <code>FOLD_BOUNDED</code></td></tr>
+              <tr><td><code>@n/%p/CALL.pre.i</code>, <code>MAP.pre.i</code>, <code>GEN.pre.i</code></td><td>La <i>i</i>-ème conjonction de la <code>PRE</code> du noyau ou de l'appelé est vraie au point d'appel</td></tr>
+              <tr><td><code>&lt;clause&gt;.wd.j</code></td><td>Bonne définition (ADR 0010) : aucun terme d'une formule ne lit d'indice hors bornes ni ne divise par zéro</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Explorateur d'obligations réel</h3>
+        <p>Choisissez un nœud issu de <code>examples/quickstart.vgs</code> ou <code>examples/mandelbrot.vgs</code>. Chaque boîte ambrée porte les obligations d'une opération dans le graphe canonique ; cliquez sur une boîte du graphe ou sur une obligation de la liste pour les mettre en correspondance (données enregistrées par <code>vg verify --mode edit --detail 1</code>).</p>
+
+        <figure class="fig" id="ob-explorer">
+          <div class="fig-stage">
+            <div class="explorer-bar" id="explorer-picker" role="group" aria-label="Choisir un nœud"></div>
+            <div class="explorer-meta" id="explorer-meta"></div>
+            <div class="explorer-grid">
+              <div>
+                <svg class="dg" id="explorer-fig" role="img" aria-label="Graphe des opérations et obligations du nœud sélectionné"></svg>
+              </div>
+              <div class="ob-list" id="explorer-obs" aria-label="Obligations du nœud"></div>
+            </div>
+          </div>
+          <figcaption><b>Figure 5.1</b> Correspondance entre opérations du graphe et obligations vérifiées. <span class="proof" id="explorer-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="mecanisme"><span class="n">5.3</span>Comment un solveur SMT prouve une obligation</h2>
+        <p>Pour démontrer qu'une obligation vaut pour <em>toutes</em> les entrées valides, <code>vg-smt</code> parcourt d'abord le graphe canonique en une seule passe afin d'associer un terme symbolique à chaque port. Il pose ensuite la question inverse au solveur : <em>« Existe-t-il au moins une entrée qui satisfait les hypothèses et qui contredit ce but ? »</em> Formuler <code>assumptions ∧ ¬goal</code> transforme une question universelle (« pour tout <i>x</i> ») en une recherche existentielle.</p>
+        <p>Les solveurs (Z3, Bitwuzla et cvc5) sont lancés comme des processus séparés communicant par tubes en SMT-LIB2 standard — sans aucune liaison C++ dans le binaire Rust. Chaque obligation indépendante repart d'un état propre via <code>(reset)</code>, avec uniquement les hypothèses qui partagent des symboles avec le but, de sorte qu'une modification ailleurs dans le nœud ne casse pas l'empreinte des autres requêtes.</p>
+
+        <figure class="fig" id="mecanisme-fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-pipeline" role="img" aria-label="Pipeline de résolution d'une obligation vers UNSAT, SAT ou UNKNOWN"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="sim-unsat">Simuler UNSAT</button>
+              <button class="btn small" type="button" id="sim-sat">Simuler SAT</button>
+              <button class="btn small" type="button" id="sim-unk">Simuler UNKNOWN</button>
+              <span class="readout" id="pipe-sim-status">Cliquez sur un verdict pour voir le trajet du paquet dans la chaîne.</span>
+            </div>
+          </div>
+          <figcaption><b>Figure 5.2</b> Trois issues possibles d'une requête SMT-LIB2. <span class="proof" id="pipeline-proof"></span></figcaption>
+        </figure>
+
+        <aside class="note note-warn">
+          <b>Attention · UNSAT est la seule preuve</b>
+          <p><code>UNSAT</code> signifie qu'aucun contre-exemple n'existe : l'obligation est prouvée. <code>SAT</code> signifie qu'un modèle existe : <code>vg-interp</code> le rejoue (chapitre 6). En revanche, <code>UNKNOWN</code> ou un dépassement de délai (timeout) ne constitue <strong>jamais</strong> une preuve : le nœud échoue, à moins de déplacer l'opération sous un <code>ASSERT_GUARD</code> explicite (qui reste alors compté comme garde à l'exécution).</p>
+        </aside>
+
+        <details class="deep">
+          <summary>Pourquoi les requêtes restent sans quantificateurs (QF_AUFBVFP)</summary>
+          <div>
+            <p>Les contrats VG-Sym autorisent des entiers mathématiques sans débordement, des flottants IEEE 754, des <code>forall</code> bornés, <code>fold:</code> et <code>spec:</code>. Pourtant, chaque requête envoyée à Z3, cvc5 ou Bitwuzla est <strong>sans quantificateurs</strong> (<code>docs/05-contracts-verification.md</code>) :</p>
+            <ul>
+              <li><strong>Entiers exacts sur vecteurs de bits :</strong> chaque terme entier reçoit une largeur en bits calculée statiquement (<code>N + 1</code> pour <code>uN</code>/<code>iN</code>, <code>max(wa, wb) + 1</code> pour <code>±</code>, <code>wa + wb</code> pour <code>×</code>) afin qu'aucune opération de formule ne déborde ni n'atteigne la valeur la plus négative.</li>
+              <li><strong>Règle de l'élément frais :</strong> un <code>forall</code> dans un but devient une constante fraîche <code>k0</code> dans les bornes ; dans <code>SIMD_MAP</code> ou <code>GENERATE</code>, la <code>PRE</code> du noyau est prouvée pour un élément ou indice arbitraire.</li>
+              <li><strong><code>fold:</code> et <code>spec:</code> (ADR 0008) :</strong> un terme <code>fold:</code> est une fonction non interprétée instanciée uniquement avec ses deux équations de définition au point <code>k</code>, et un <code>spec:</code> est déplié d'un niveau.</li>
+              <li><strong>Flottants IEEE et <code>FMIN</code>/<code>FMAX</code> :</strong> <code>FMIN</code> et <code>FMAX</code> sont codés explicitement par comparaisons afin de respecter <code>-0.0 &lt; +0.0</code> et la propagation de <code>NaN</code>, car SMT-LIB laisse <code>fp.min</code> ambigu sur les zéros signés (<code>docs/14</code>).</li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="modes"><span class="n">5.4</span>Pré-filtrage, modes, double solveur et cache</h2>
+        <p>Avant d'ouvrir un tuyau vers un solveur externe, <code>vg-smt</code> lance un <dfn>pré-filtrage concret</dfn> dans <code>vg-interp</code>. Sur des nœuds purs d'au plus 20 000 opérations statiques, il teste les valeurs limites (<code>0</code>, <code>±1</code>, <code>MIN</code>, <code>MAX</code>, <code>-0.0</code>, sous-normaux, plus grands flottants finis, littéraux extraits de <code>PRE</code>, longueurs de tranche <code>0..3</code> et <code>16</code>) puis 256 combinaisons aléatoires déterministes amorcées par BLAKE3 (<code>VeriGraph 2026 prescreen v1</code>) sur le hash du nœud.</p>
+        <p>Ce pré-filtrage ne prouve jamais un contrat, mais il attrape des bogues évidents en moins d'une milliseconde (comme le brouillon de <code>@soft_knee</code> au chapitre 6) et décharge directement <code>NONVACUOUS</code> dès qu'une entrée satisfait <code>PRE</code>.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Mode</th><th>Délai par requête</th><th>Solveurs requis</th><th>Preuve enregistrée</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>--mode edit</code></td><td>2 000 ms</td><td>1 solveur (<code>Bitwuzla</code> sur flottants supportés, sinon <code>z3</code>)</td><td><code>re-solved</code></td></tr>
+              <tr><td><code>--mode ci</code></td><td>60 000 ms</td><td>1 solveur</td><td><code>re-solved</code></td></tr>
+              <tr><td><code>--mode release</code></td><td>60 000 ms</td><td><strong>2 solveurs indépendants</strong> doivent répondre <code>UNSAT</code></td><td><code>two-solvers</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>En mode <code>release</code>, chaque obligation prouvée par un solveur doit être confirmée par un second solveur indépendant capable de traiter les mêmes formats flottants. Si le premier solveur répond <code>UNSAT</code> et que le second répond <code>SAT</code>, le verdict devient une erreur critique <code>VG-V0009</code> et la compilation s'arrête immédiatement. Le routage tient aussi compte des formats flottants : <code>Bitwuzla</code> gère <code>f16</code>, <code>f32</code> et <code>f64</code> mais pas <code>bf16</code>, et <code>cvc5</code> ne prend que <code>f32</code> et <code>f64</code> ; une preuve sur <code>bf16</code> en mode <code>release</code> reste donc <code>unknown</code> (<code>docs/guide/verification.md</code>).</p>
+
+        <p>Enfin, chaque requête SMT-LIB2 canonique est hachée et stockée sous <code>&lt;root&gt;/.vg/proofs</code> (<code>P3.5</code>). Un enregistrement n'est réutilisé (<code>evidence: "cached"</code>) que si le nom et la version exacte du solveur coïncident avec <code>toolchain.lock</code> — et, en mode <code>release</code>, uniquement s'il a été produit par deux solveurs. <span id="cache-summary"></span></p>
+
+        <div class="term" id="term-verify"></div>
+      </section>
+
+      <section>
+        <h2 id="chiffres"><span class="n">5.5</span>Répartition réelle des obligations et des solveurs</h2>
+        <p>Les deux graphiques ci-dessous sont calculés en WebAssembly par les nœuds vérifiés <code>@donut</code> (<code>donut.wasm</code>) et <code>@bar_chart</code> (<code>bar_chart.wasm</code>) à partir des données enregistrées dans <code>site/data/preuves.json</code> pour <code>examples/quickstart.vgs</code> et <code>examples/mandelbrot.vgs</code>.</p>
+
+        <figure class="fig" id="chiffres-fig">
+          <div class="fig-stage">
+            <div class="proof-grid">
+              <div class="panel donut-panel">
+                <div class="donut-stage">
+                  <svg id="donut-svg" viewBox="-1.12 -1.12 2.24 2.24" role="img" aria-label="Répartition des obligations par famille dans quickstart.vgs et mandelbrot.vgs"></svg>
+                  <div class="donut-center">
+                    <b id="donut-total">—</b>
+                    <span>obligations</span>
+                  </div>
+                </div>
+                <p class="proof" id="donut-proof"></p>
+              </div>
+              <div class="panel legend-panel">
+                <h3>Par famille d'obligation</h3>
+                <ul class="legend" id="donut-legend"></ul>
+                <h3 style="margin-top:.8rem">Par solveur (<code>mode edit</code>)</h3>
+                <div class="hbars" id="solver-bars"></div>
+                <p class="proof" id="solver-proof"></p>
+              </div>
+            </div>
+          </div>
+          <figcaption><b>Figure 5.3</b> Les 51 obligations prouvées sur les 10 nœuds de <code>examples/quickstart.vgs</code> et <code>examples/mandelbrot.vgs</code>.</figcaption>
+        </figure>
+
+        <p>À l'échelle du dépôt (<code>reports/gate-g3.md</code>), le jeu de test G3 vérifie 14 fichiers valides par deux solveurs en mode <code>release</code>, rejette 21 fichiers fautifs couvrant chaque famille d'obligation avec contre-exemple reproduit, tue les mutants cassant leur contrat sans aucun <code>VG-V0008</code> ni <code>VG-V0009</code>, et prouve <code>examples/audio_limiter.vgs</code> après résolution de <code>@sha256</code>. Tous les critères de la porte G3 sont satisfaits dans le rapport, en attente de validation du propriétaire.</p>
+      </section>
+
+      <section>
+        <h2 id="limites"><span class="n">5.6</span>Limites actuelles et vérifiez votre compréhension</h2>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle · Ce que le vérificateur v0 ne résout pas encore</b>
+          <ul>
+            <li><strong>Arithmétique entière non linéaire :</strong> une postcondition exacte comme <code>result == a / b</code> sur deux entiers <code>u32</code> peut dépasser le délai imparti (<code>VG-V0004</code>) ; une borne plus faible comme <code>result &lt;= a && (b == 1 ==&gt; result == a)</code> se prouve aussitôt (<code>docs/guide/verification.md</code>).</li>
+            <li><strong>Coût <code>ops</code> des appelés :</strong> en version 0, le coût en opérations d'un nœud appelé n'est pas encore modélisé dans <code>COST</code>, ce qui laisse la borne <code>unknown</code> (<code>VG-V0005</code>).</li>
+            <li><strong>Certificats vérifiables indépendamment :</strong> la confiance repose en v0 sur les versions épinglées et le double solveur (<code>two-solvers</code>) ; la vérification de certificats Alethe via Carcara relève de la piste de recherche <code>R-05</code>.</li>
+          </ul>
+        </aside>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Un solveur SMT dépasse son délai de 60 secondes sur une postcondition. Que décide VeriGraph ?</p>
+          <ol>
+            <li><button class="choice">Il considère l'obligation comme probablement vraie si le pré-filtrage a réussi.</button></li>
+            <li><button class="choice" data-right>Il rapporte unknown (VG-V0004), ne prouve rien et refuse de compiler le nœud sans --unverified.</button></li>
+            <li><button class="choice">Il relance le solveur jusqu'à obtenir SAT.</button></li>
+          </ol>
+          <p class="why" hidden>En VeriGraph, <code>UNKNOWN</code> ou un timeout n'est jamais une preuve. Seul <code>UNSAT</code> démontre qu'aucune entrée ne contredit le contrat.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">À quoi sert l'obligation automatique <code>@n/NONVACUOUS</code> ?</p>
+          <ol>
+            <li><button class="choice" data-right>À vérifier qu'il existe au moins une entrée satisfaisant PRE (et la boîte LEARNABLE), sans quoi toute POST serait prouvée par vacuité.</button></li>
+            <li><button class="choice">À mesurer la latence p99 du nœud.</button></li>
+            <li><button class="choice">À supprimer les commentaires du fichier VG-Sym.</button></li>
+          </ol>
+          <p class="why" hidden>Avec une <code>PRE</code> contradictoire (comme <code>x &gt; 10 && x &lt; 5</code>), <code>assumptions ∧ ¬goal</code> est toujours <code>UNSAT</code> même pour une postcondition absurde. <code>NONVACUOUS</code> bloque ce piège logique.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Que garantit une clause <code>BUDGET: latency_p99_us &lt;= 500;</code> ?</p>
+          <ol>
+            <li><button class="choice">Une preuve formelle de Z3 que le binaire s'exécutera sous 500 µs.</button></li>
+            <li><button class="choice" data-right>Un objectif mesuré par benchmark sur chaque cible ; BUDGET n'est jamais prouvé par vg-smt.</button></li>
+            <li><button class="choice">Un effacement automatique des boucles lors de la compilation.</button></li>
+          </ol>
+          <p class="why" hidden><code>COST</code> porte sur les ressources statiques modélisées (<code>ops</code>, <code>arena_bytes</code>, <code>heap_bytes</code>), tandis que <code>BUDGET</code> exprime une cible de temps réel qui dépend du matériel et n'est contrôlée que par mesure.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir · Chapitre 5</b>
+          <p><code>vg-smt</code> traduit chaque postcondition, invariant de boucle et opération partielle en une requête sans quantificateurs. Seul <code>UNSAT</code> prouve ; le pré-filtrage accélère la détection d'erreurs et le mode <code>release</code> exige l'accord de deux solveurs indépendants.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/preuves.js"></script>

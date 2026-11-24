@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Chapitre 1 · Pourquoi VeriGraph · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Pourquoi tester quelques entrées ne suffit plus à l'ère du code généré par IA, et comment VeriGraph prouve chaque contrat avant de compiler.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/idee.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 1 · Le problème et l'idée</p>
+    <h1>Du code plausible <em>au code prouvé.</em></h1>
+    <p class="lede">Une intelligence artificielle rédige une fonction en quelques secondes, mais elle peut glisser une défaillance sur un cas extrême invisible aux tests ordinaires. VeriGraph renverse l'ordre des choses : le programme est un graphe typé accompagné d'un contrat, et un solveur prouve ce contrat sur toutes les entrées admissibles avant qu'un seul octet natif soit compilé.</p>
+    <ul class="crates">
+      <li><code>vg-core</code></li>
+      <li><code>vg-smt</code></li>
+      <li><code>vg-codegen</code></li>
+      <li><code>vg-cli</code></li>
+    </ul>
+    <div class="ch-meta">
+      <span>Lecture : 12 min</span>
+      <span>Prérequis : aucun</span>
+    </div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="probleme"><span class="n">1.1</span>Le problème : du code plausible, pas encore sûr</h2>
+        <p>Quand un modèle de langage écrit une fonction de traitement audio ou de calcul numérique, le texte obtenu a presque toujours l'allure du code d'un ingénieur chevronné. Les noms sont clairs, la syntaxe compile, et les cinq ou dix tests unitaires écrits dans la foulée passent au vert. Pourtant, « plausible » et « valide pour toute entrée » sont deux propriétés très différentes : un modèle optimise la vraisemblance statistique d'une séquence de jetons, pas sa correction mathématique sur quatre milliards de flottants.</p>
+        <p>Dans une chaîne classique, la vérification arrive après coup, sous forme de tests échantillonnés à la main. C'est précisément là que les bogues silencieux survivent : un dépassement d'entier sur une valeur limite, une division par zéro dans une branche rare, ou un calcul flottant qui bascule vers l'infini puis produit <code>NaN</code>. Lorsqu'un agent autonome génère des milliers de lignes par heure, la relecture humaine ne peut plus servir de filet de sécurité unique.</p>
+        <p>VeriGraph repose sur une idée simple : au lieu de demander à un modèle de produire du texte libre puis de le tester sur quelques cas, on lui fait écrire un <dfn>graphe de flot de données</dfn> (un graphe orienté sans cycle où chaque opération consomme des valeurs déjà calculées) muni d'un <dfn>contrat</dfn> formel. Ce contrat rassemble une <dfn>précondition</dfn> (ce que la fonction suppose vrai sur ses entrées) et une <dfn>postcondition</dfn> (ce qu'elle garantit en sortie). Avant toute compilation, un <dfn>solveur SMT</dfn> — un moteur logique qui raisonne symboliquement sur des domaines complets comme les entiers bornés et les flottants IEEE 754 — examine chaque <dfn>obligation</dfn> de preuve dérivée du graphe et du contrat.</p>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>Tester une fonction avec six valeurs choisies à la main revient à faire passer six camionnettes sur un pont neuf avant d'ouvrir l'autoroute : si aucune ne tombe, on sait seulement que ces six passages précis ont tenu. Prouver le contrat avec un solveur revient au calcul de résistance des matériaux : l'ingénieur vérifie que, pour toute charge inférieure à la limite affichée à l'entrée du pont, aucune poutre ne cède.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="test-vs-preuve"><span class="n">1.2</span>Tester quelques entrées ou prouver pour toutes ?</h2>
+        <p>Prenons un exemple concret du dépôt : le limiteur audio <code>@soft_knee</code>. Son rôle est d'adoucir les crêtes d'un échantillon audio <code>x</code> en flottant 32 bits (<code>f32</code>) au-delà d'un seuil <code>knee</code> compris entre <code>0.5</code> et <code>0.99</code>, afin que la sortie reste toujours dans l'intervalle <code>[-1, 1]</code> sans jamais inverser le signe du signal.</p>
+        <p>Dans la première ébauche conservée dans <code>examples/soft_knee_draft.vgs</code>, l'expression qui compresse l'excédent <code>t</code> calcule <code>u = t / (1 + t)</code>, puis borne le résultat avec <code>FMIN</code> et <code>FCLAMP</code>. Sur papier, pour tout nombre réel positif, <code>t / (1 + t)</code> reste strictement inférieur à <code>1</code>. En arithmétique réelle, la formule semble irréprochable.</p>
+
+<pre class="code vgs" data-file="examples/soft_knee_draft.vgs"><code>// expect: reject @soft_knee/POST.0
+module soft_knee_draft;
+
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1], first draft"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) &amp;&amp; knee &gt;= 0.5 &amp;&amp; knee &lt;= 0.99;
+    POST: result &gt;= -1.0 &amp;&amp; result &lt;= 1.0 &amp;&amp; ((x &gt;= 0.0) == (result &gt;= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);
+    %3  = FSUB(1.0:f32, knee);
+    %4  = FDIV(%2, %3);                // t; overflows to +inf for huge x
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(%4, %5);                // BUG: inf / inf is NaN
+    %7  = FMIN(%6, 1.0:f32);           // does not help: IEEE minimum propagates NaN
+    %8  = FMA(%3, %7, knee);
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}</code></pre>
+
+        <p>En arithmétique flottante <code>f32</code>, dès que l'amplitude <code>|x|</code> dépasse environ <code>1.7e38</code> avec <code>knee = 0.5</code>, le rapport <code>t = %4</code> déborde vers <code>+inf</code>. La division <code>%6 = %4 / %5</code> calcule alors <code>+inf / +inf</code>, ce qui produit <code>NaN</code>. Et selon la norme IEEE 754-2019 suivie par VeriGraph, <code>FMIN</code> et <code>FCLAMP</code> propagent <code>NaN</code> jusqu'à la sortie. Basculez entre les trois vues de la figure ci-dessous pour comparer ce que voient six tests ordinaires, ce que découvre <code>vg verify</code>, et ce que donne la formule réparée <code>1 - 1 / (1 + t)</code>.</p>
+
+        <figure class="fig" id="fig-gap">
+          <div class="fig-stage">
+            <div class="gap-modes" role="group" aria-label="Comparer tests ordinaires, vérification et réparation">
+              <button class="btn small" type="button" data-mode="tests" aria-pressed="true">1 · 6 tests ordinaires</button>
+              <button class="btn small bad-active" type="button" data-mode="verify" aria-pressed="false">2 · Contre-exemple de vg verify</button>
+              <button class="btn small" type="button" data-mode="repaired" aria-pressed="false">3 · Noyau réparé (prouvé)</button>
+            </div>
+            <div class="gap-band">
+              <div class="gap-axis-labels">
+                <span>−3,4028235 × 10³⁸ (min f32 fini)</span>
+                <span>0,0</span>
+                <span>+3,4028235 × 10³⁸ (max f32 fini)</span>
+              </div>
+              <div class="gap-track" aria-hidden="true">
+                <div class="gap-coverage is-partial" id="gap-coverage"></div>
+              </div>
+              <p class="gap-summary" id="gap-summary">Chargement des résultats mesurés par la chaîne d'outils…</p>
+            </div>
+            <div class="gap-table-wrap" id="gap-table"></div>
+          </div>
+          <figcaption><b>Figure 1.1</b> L'écart entre l'échantillonnage et la preuve sur <code>@soft_knee</code>. Toutes les valeurs affichées viennent d'exécutions réelles de <code>vg run</code> et <code>vg verify</code> enregistrées dans <code>site/data/idee.json</code>. <span class="proof" id="fig-gap-proof"></span></figcaption>
+        </figure>
+
+        <p>Ce constat vaut dans les deux sens : si vous testez l'ébauche avec <code>vg run</code> sur <code>-2.0</code>, <code>-0.7</code>, <code>0.0</code>, <code>0.3</code>, <code>0.9</code> et <code>1.5</code>, chaque exécution renvoie <code>post: true</code>. Mais dès que <code>vg verify</code> lance son pré-criblage et ses requêtes formelles, il produit un <dfn>contre-exemple</dfn> concret et reproductible. Le terminal ci-dessous rejoue exactement cette séquence sur l'ébauche et sur la version réparée tirée de <code>examples/quickstart.vgs</code>.</p>
+
+        <div class="term" id="term-gap"></div>
+      </section>
+
+      <section>
+        <h2 id="chaine"><span class="n">1.3</span>La chaîne VeriGraph en cinq étapes</h2>
+        <p>VeriGraph transforme le cycle classique « écrire, compiler, déboguer en production » en une boucle fermée où l'agent reçoit des faits structurés avant que le compilateur n'intervienne. Une demande en langage naturel passe ainsi par cinq étapes strictement ordonnées : rédaction en <code>VG-Sym</code> (la projection texte lisible par l'IA et par l'humain), contrôle structurel et typage (<code>vg check</code>), preuve formelle des obligations (<code>vg verify</code>), puis effacement des preuves et compilation native (<code>vg build</code>) vers trois cibles.</p>
+        <p>Si une seule obligation échoue, le vérifieur ne renvoie pas une simple chaîne d'erreur opaque. Il fournit les entrées exactes qui cassent le contrat, indique si l'interpréteur de référence <code>vg-interp</code> a reproduit la défaillance, et isole la tranche minimale du graphe en cause. L'agent corrige alors le nœud — ou renforce le contrat d'un nœud appelé si l'erreur vient d'un contrat trop faible — puis soumet la nouvelle version à <code>vg verify</code>.</p>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-pipe" role="img" aria-label="Pipeline de VeriGraph en cinq étapes avec boucle de réparation sur contre-exemple"></svg>
+            <div class="fig-controls">
+              <button class="btn small" type="button" id="pipe-repair">Animer la boucle de réparation</button>
+              <button class="btn small" type="button" id="pipe-pass">Animer le chemin vérifié</button>
+            </div>
+          </div>
+          <figcaption><b>Figure 1.2</b> De la demande en langage naturel aux binaires natifs et WebAssembly. L'arête en pointillés montre la boucle de retour lorsqu'un contre-exemple est trouvé. <span class="proof" id="fig-pipe-proof"></span></figcaption>
+        </figure>
+
+        <ol class="steps">
+          <li><b>Rédiger une carte de contrat et du VG-Sym</b>L'agent écrit un nœud avec des étiquettes locales (<code>@soft_knee</code>), jamais d'empreintes calculées à la main. La syntaxe impose de définir chaque port et chaque nœud avant de les utiliser.</li>
+          <li><b>Contrôler la structure, les types et les effets (<code>vg check</code>)</b><code>vg-core</code> analyse, canonicalise et calcule les empreintes BLAKE3 ; <code>vg-types</code> vérifie localement les types, les masques d'effets et les poignées de capacité.</li>
+          <li><b>Prouver chaque obligation (<code>vg verify</code>)</b><code>vg-smt</code> traduit chaque objectif de preuve en requêtes SMT-LIB2 indépendantes envoyées à <code>z3</code>, <code>cvc5</code> ou <code>Bitwuzla</code>. En cas de réfutation, <code>vg-interp</code> rejoue le contre-exemple concrètement.</li>
+          <li><b>Réparer avec une tranche minimale</b>Si une preuve échoue, <code>vg-telemetry</code> extrait le sous-graphe responsable et explique quelle contrainte manque. L'agent répare et revérifie jusqu'à obtenir un nœud entièrement prouvé.</li>
+          <li><b>Compiler sans surcoût prouvé (<code>vg build</code>)</b><code>vg-codegen</code> efface les obligations démontrées, génère du LLVM IR enrichi des faits prouvés (<code>nsw</code>, <code>nuw</code>, <code>inbounds</code>) et assemble avec <code>clang</code> et <code>vg-rt</code> pour <code>x86_64</code>, <code>ARM64</code> et <code>wasm32-wasip1</code>.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2 id="invariants"><span class="n">1.4</span>Les huit invariants natifs pour l'IA</h2>
+        <p>VeriGraph n'a pas été pensé comme un langage humain auquel on aurait greffé un plugin d'IA. Chaque choix d'architecture de <code>docs/00-vision.md</code> répond à une question précise : que faut-il pour qu'un agent écrive, vérifie et répare du code sans intervention humaine ? Huit invariants découlent de ce principe, et toute modification qui en brise un exige un document d'architecture (ADR) justifié.</p>
+
+        <div class="cards">
+          <div class="card">
+            <span class="label">Invariant 1</span>
+            <h3>Tout jugement est une donnée</h3>
+            <p>Erreurs, verdicts, contre-exemples et coûts reviennent en JSON typé avec des codes stables (<code>VG-T0103</code>, <code>VG-V0001</code>) situés dans les noms de l'agent.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 2</span>
+            <h3>Raisonnement local</h3>
+            <p>Les types découlent des opérandes, opération par opération, et un nœud est prouvé uniquement à partir des contrats de ses appelés, jamais de leurs corps.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 3</span>
+            <h3>Texte vérifiable par préfixe</h3>
+            <p>Ports et étiquettes sont définis avant usage (ADR 0005), ce qui permet de contrôler tout préfixe et de guider un décodeur contraint jeton par jeton.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 4</span>
+            <h3>Identité par le contenu</h3>
+            <p>Un graphe canonique possède une unique empreinte BLAKE3 sur toute machine. Chaque obligation prouvée une fois est réutilisable partout et sur <code>VG-Mesh</code>.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 5</span>
+            <h3>Mêmes entrées, mêmes octets</h3>
+            <p>Empreintes, preuves, diagnostics, binaires et représentation canonique de <code>NaN</code> (ADR 0002) sont déterministes pour permettre le cache et le rejeu exact.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 6</span>
+            <h3>Rien d'implicite</h3>
+            <p>Aucune conversion silencieuse, aucun mode arithmétique par défaut, aucun comportement indéfini dans le code vérifié, aucune expression imbriquée.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 7</span>
+            <h3>Le contrat comme langue commune</h3>
+            <p>Les humains valident les contrats rendus en clair, les agents interrogent le registre par spécification, et le vérifieur attache le contrat au code.</p>
+          </div>
+          <div class="card">
+            <span class="label">Invariant 8</span>
+            <h3>Des garanties honnêtes</h3>
+            <p><code>UNKNOWN</code> n'est jamais une preuve, ce qui est mesuré n'est jamais présenté comme prouvé, et chaque garantie nomme explicitement ce qu'elle suppose fiable.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="garanties"><span class="n">1.5</span>Ce qui est prouvé, mesuré ou hors portée</h2>
+        <p>Un système de preuve perd toute crédibilité s'il entretient le flou entre ce qu'il démontre mathématiquement, ce qu'il mesure expérimentalement et ce qui échappe à son périmètre. VeriGraph sépare ces trois catégories jusque dans la syntaxe des contrats : <code>PRE</code>, <code>POST</code> et <code>COST</code> décrivent des propriétés prouvables, tandis que <code>BUDGET</code> (comme <code>latency_p99_us &lt;= 500</code>) désigne une cible mesurée par banc d'essai.</p>
+
+        <figure class="fig" id="fig-guarantees">
+          <div class="guarantees-grid" role="group" aria-label="Répartition entre ce qui est prouvé, mesuré et hors portée">
+            <div class="g-col is-proven">
+              <span class="label">Prouvé formellement</span>
+              <h3>Pour toute entrée sous <code>PRE</code></h3>
+              <ul>
+                <li>Aucune opération partielle ne piège (débordements <code>.checked</code>, divisions, bornes d'index, conversions <code>CAST</code>).</li>
+                <li><code>POST</code> tient sur les résultats et chaque <code>INVARIANT</code> tient à chaque étape de <code>FOLD_BOUNDED</code>.</li>
+                <li>Les effets restent dans <code>EFFECTS</code> et passent uniquement par les poignées reçues.</li>
+                <li><code>COST</code> borne les ressources abstraites (<code>ops</code>, <code>arena_bytes</code> dans le modèle de coût).</li>
+              </ul>
+            </div>
+            <div class="g-col is-measured">
+              <span class="label">Mesuré empiriquement</span>
+              <h3>Jamais revendiqué comme preuve</h3>
+              <ul>
+                <li>Les clauses <code>BUDGET</code>, notamment la latence <code>latency_p99_us</code> sur matériel réel.</li>
+                <li>Les ratios de vitesse face à <code>clang -O2</code> via <code>scripts/bench.sh</code> (<code>reports/bench/latest.json</code>).</li>
+                <li>Le taux de réussite de synthèse d'un modèle hébergé (<code>vg loop</code>) et la latence du décodeur contraint.</li>
+              </ul>
+            </div>
+            <div class="g-col is-out">
+              <span class="label">Non prouvé / Hors portée</span>
+              <h3>Ce que le solveur ne juge pas</h3>
+              <ul>
+                <li>Que le contrat exprime fidèlement l'intention humaine (étudié par la piste de recherche <code>R-14</code>).</li>
+                <li>L'absence de canaux auxiliaires temporels ou électromagnétiques.</li>
+                <li>La correction des briques de la <dfn>base de confiance</dfn> (<code>TCB</code>), qui sont testées différentiellement mais supposées justes.</li>
+              </ul>
+            </div>
+          </div>
+          <figcaption><b>Figure 1.3</b> Frontière nette des garanties de VeriGraph selon <code>docs/00-vision.md</code> et <code>docs/13-semantics.md</code>.</figcaption>
+        </figure>
+
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Un verdict <code>UNKNOWN</code> ou un dépassement de délai du solveur bloque la compilation : ce n'est jamais une preuve. De même, si les scripts de validation G0 à G8 existent dans le dépôt, les rapports <code>reports/gate-g*.md</code> restent en attente d'approbation par le propriétaire du projet. Enfin, selon <code>PROGRESS.md</code> (2026-11-24), trois des cinq noyaux du banc d'essai G4 (<code>matmul</code>, <code>sha256</code>, <code>mandelbrot</code>) dépassent encore la cible de <code>1,20×</code> le temps de <code>clang -O2</code>, et les tests sur <code>x86_64</code> Linux ne tournent pas localement sur cette machine ARM64.</p>
+        </aside>
+
+        <details class="deep">
+          <summary>Pour aller plus loin : la base de confiance (TCB) et la piste R-14</summary>
+          <div>
+            <p>Selon <code>docs/01-architecture.md</code>, la base de confiance (<em>Trusted Computing Base</em>) comprend le canonicaliseur et le validateur de <code>vg-core</code>, <code>vg-types</code>, le générateur de conditions de vérification de <code>vg-smt</code>, les solveurs SMT externes (<code>z3</code>, <code>cvc5</code>, <code>Bitwuzla</code>), <code>vg-codegen</code>, <code>LLVM</code>/<code>clang</code>, le petit moteur d'exécution en C <code>vg-rt</code> et le système d'exploitation qui applique le bac à sable. Les sorties de l'IA, les nœuds publiés sur <code>VG-Mesh</code>, le code importé par <code>OmniLift</code> et les données entrant dans un nœud exporté sont tous considérés comme non fiables.</p>
+            <p>Même avec une TCB parfaite, un danger subsiste : un contrat mathématiquement prouvé qui ne dit pas ce que l'humain souhaitait (par exemple un limiteur qui passerait les tests de plage en écrasant le signe des échantillons, ou un nœud trivial qui satisferait un contrat trop faible). La piste de recherche <code>R-14</code> étudie précisément comment détecter cet écart entre intention humaine et spécification formelle.</p>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 id="composants"><span class="n">1.6</span>La carte des composants</h2>
+        <p>L'espace de travail Rust de VeriGraph regroupe douze bibliothèques (crates) autour d'un unique modèle de données partagé dans <code>vg-core</code>, complétées par le serveur MCP <code>vg mcp</code> et l'extension pour l'éditeur Antigravity dans <code>editors/antigravity/</code>. Chaque boîte du schéma ci-dessous correspond à un chapitre de ce site : cliquez sur une boîte ou utilisez la liste au-dessous pour accéder directement à son étude détaillée.</p>
+
+        <figure class="fig">
+          <div class="fig-stage">
+            <svg class="dg" id="fig-arch" role="img" aria-label="Architecture des douze crates de VeriGraph, du serveur MCP et de l'extension IDE, avec liens vers leurs chapitres"></svg>
+            <ul class="comp-links" aria-label="Liens rapides vers les chapitres des composants">
+              <li><a href="graphe.html"><code>vg-core</code> · <code>vg-store</code> → Ch. 2</a></li>
+              <li><a href="vg-sym.html"><code>vg-decode</code> → Ch. 3</a></li>
+              <li><a href="types.html"><code>vg-types</code> → Ch. 4</a></li>
+              <li><a href="preuves.html"><code>vg-smt</code> → Ch. 5</a></li>
+              <li><a href="contre-exemple.html"><code>vg-interp</code> · <code>vg-telemetry</code> → Ch. 6</a></li>
+              <li><a href="compilation.html"><code>vg-codegen</code> · <code>vg-rt</code> → Ch. 7</a></li>
+              <li><a href="agent.html"><code>vg-cli</code> · <code>vg mcp</code> · Antigravity → Ch. 8</a></li>
+              <li><a href="mesh.html"><code>vg-mesh</code> → Ch. 9</a></li>
+              <li><a href="omnilift.html"><code>vg-omnilift</code> → Ch. 10</a></li>
+            </ul>
+          </div>
+          <figcaption><b>Figure 1.4</b> Les douze crates de <code>crates/</code>, le serveur MCP et l'extension IDE, regroupés selon leurs dépendances principales (<code>docs/01-architecture.md</code>). <span class="proof" id="fig-arch-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">1.7</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Pourquoi les six tests ordinaires sur <code>examples/soft_knee_draft.vgs</code> passent-ils alors que <code>vg verify</code> rejette le nœud ?</p>
+          <ol>
+            <li><button class="choice">Parce que <code>vg run</code> désactive la vérification des flottants en mode test.</button></li>
+            <li><button class="choice" data-right>Parce que six points autour de zéro n'atteignent pas les très grands flottants où <code>%4</code> déborde vers <code>+inf</code>, produisant <code>+inf / +inf = NaN</code>.</button></li>
+            <li><button class="choice">Parce que <code>vg verify</code> interdit toute opération <code>FDIV</code> sur des nombres <code>f32</code>.</button></li>
+          </ol>
+          <p class="why" hidden><code>vg run</code> exécute fidèlement l'arithmétique IEEE 754, mais sur des entrées modérées comme <code>1.5</code> le dénominateur ne déborde pas. Le vérifieur explore symboliquement tout le domaine admis par <code>PRE</code> et trouve immédiatement un flottant extrême comme <code>-3.4028235e38</code> où <code>%6</code> vaut <code>NaN</code>.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Que garantit un nœud vérifié qui déclare <code>BUDGET: latency_p99_us &lt;= 500;</code> dans son contrat ?</p>
+          <ol>
+            <li><button class="choice">Le solveur SMT a prouvé mathématiquement que l'exécution ne dépassera jamais 500 microsecondes sur aucun processeur.</button></li>
+            <li><button class="choice">Le compilateur rejette le programme s'il contient plus de 500 opérations.</button></li>
+            <li><button class="choice" data-right>Rien n'est prouvé sur le temps d'horloge : <code>BUDGET</code> est une cible mesurée par banc d'essai, contrairement à <code>PRE</code>, <code>POST</code> et <code>COST</code>.</button></li>
+          </ol>
+          <p class="why" hidden>Un solveur SMT ne modélise ni les caches du processeur ni l'ordonnanceur du système (erratum <code>E-15</code>). VeriGraph distingue donc <code>COST</code> (ressources abstraites) et <code>BUDGET</code> (cible mesurée empiriquement).</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Que fait VeriGraph lorsqu'un solveur renvoie <code>UNKNOWN</code> ou dépasse son délai sur une obligation ?</p>
+          <ol>
+            <li><button class="choice" data-right>Il refuse de considérer le nœud comme vérifié et n'autorise pas la compilation vérifiée.</button></li>
+            <li><button class="choice">Il accepte le nœud en insérant un simple avertissement dans le binaire.</button></li>
+            <li><button class="choice">Il considère que l'absence de contre-exemple vaut preuve partielle.</button></li>
+          </ol>
+          <p class="why" hidden>C'est l'un des principes non négociables de VeriGraph (<code>AGENTS.md</code>, section 2) : <code>UNKNOWN</code> ou un dépassement de délai n'est jamais une preuve. Seul <code>UNSAT</code> (ou <code>SAT</code> pour <code>NONVACUOUS</code>) prouve une obligation.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>VeriGraph remplace la confiance accordée à quelques tests par une preuve symbolique avant compilation : si le contrat tient sur tout le domaine défini par <code>PRE</code>, le binaire est compilé sans garde superflue ; sinon, le vérifieur renvoie un contre-exemple concret reproductible. Dans le chapitre suivant, nous ouvrons la boîte noire du graphe lui-même et de son adressage par le contenu.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/idee.js"></script>

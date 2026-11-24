@@ -1,0 +1,31 @@
+/* Styles spécifiques au chapitre 8 : La boucle agent */
+.mcp-card .schema-list {
+  margin: .65rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+.mcp-card .schema-list li {
+  margin: 0;
+}
+.mcp-card .schema-list code {
+  font-size: .74rem;
+  color: var(--ink-2);
+}
+.mcp-card .schema-list code.req {
+  border: 1px solid color-mix(in srgb, var(--proven) 45%, transparent);
+  color: var(--proven);
+}
+.prompt-quote {
+  margin: 1.2rem 0 1.6rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--violet);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font: italic 400 1.08rem/1.55 var(--serif);
+  max-width: var(--measure);
+}

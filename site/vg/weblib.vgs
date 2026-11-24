@@ -1,0 +1,859 @@
+// expect: verify
+// The web library of the VeriGraph site: the functions a landing page usually takes from its
+// JavaScript libraries, ported to VG-Sym with machine-checked contracts. Easing curves (Robert
+// Penner's equations, as jQuery UI, anime.js and GSAP ship them), CSS cubic-bezier, Math.sin, a
+// colour packer, d3's max, sum, nice ticks, linear scale, pie and arc, a shader-like aurora and the
+// fractal explorer's zoom controller. Five nodes are exported; site/build.sh compiles each one to
+// its own wasm32-wasip1 binary, and the page runs those binaries as they are.
+module weblib;
+
+// ---------------------------------------------------------------------------------------------
+// Numbers and colour: the parts of Math.* and of a colour library that the page needs. The MVP
+// has no transcendental ops (docs/14), so sine is a polynomial.
+// ---------------------------------------------------------------------------------------------
+
+NODE @sat01 [intent: "x limited to [0, 1] with NaN sent to 0, like CSS clamp(0, x, 1)"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0.0 && result <= 1.0;
+    POST: x >= 0.0 && x <= 1.0 ==> result == x;
+  }
+  BODY {
+    %0 = GE.f(x, 0.0:f32);
+    %1 = SELECT(%0, x, 0.0:f32);
+    %2 = LE.f(%1, 1.0:f32);
+    %3 = SELECT(%2, %1, 1.0:f32);
+    RETURN(%3);
+  }
+}
+
+// GLSL's fract for 0 <= x < 2^23, where truncation is floor; any other input gives 0.
+NODE @fract [intent: "The fractional part of x for 0 <= x < 2^23, like GLSL fract; 0 elsewhere"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0.0 && result < 1.0;
+  }
+  BODY {
+    %0 = GE.f(x, 0.0:f32);
+    %1 = LT.f(x, 8388608.0:f32);
+    %2 = BAND(%0, %1);
+    %3 = SELECT(%2, x, 0.0:f32);
+    %4 = CAST.u32(%3);
+    %5 = CAST.f32(%4);
+    %6 = FSUB(%3, %5);
+    RETURN(%6);
+  }
+}
+
+// sin(2 pi x) with x in turns, by the parabolic approximation: y = 8z - 16z|z| on
+// z = x - round(x), then one correction step, y + 0.225 (y|y| - y). Within 0.0011 of the sine.
+NODE @sin_turns [intent: "sin(2 pi x) for 0 <= x < 2^22, within 0.0011: Math.sin in turns"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FADD(x, 0.5:f32);
+    %1 = CALL_HASH(@fract, %0);
+    %2 = FSUB(%1, 0.5:f32);
+    %3 = FABS(%2);
+    %4 = FMUL(%2, %3);
+    %5 = FMUL(%2, 8.0:f32);
+    %6 = FMUL(%4, 16.0:f32);
+    %7 = FSUB(%5, %6);
+    %8 = FABS(%7);
+    %9 = FMUL(%7, %8);
+    %10 = FSUB(%9, %7);
+    %11 = FMUL(%10, 0.2249999940395355224609375:f32);
+    %12 = FADD(%11, %7);
+    RETURN(%12);
+  }
+}
+
+NODE @cos_turns [intent: "cos(2 pi x) for 0 <= x < 2^22, within 0.0011"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FADD(x, 0.25:f32);
+    %1 = CALL_HASH(@sin_turns, %0);
+    RETURN(%1);
+  }
+}
+
+NODE @byte [intent: "A colour channel in [0, 1] as a byte, rounded to nearest"] {
+  SIGNATURE: (c: f32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: c >= 0.0 && c <= 1.0;
+    POST: result <= 255;
+  }
+  BODY {
+    %0 = FMA(c, 255.0:f32, 0.5:f32);
+    %1 = CAST.u32(%0);
+    RETURN(%1);
+  }
+}
+
+// Any three floats give an opaque pixel: each channel is clamped first, so NaN or a value out of
+// range cannot reach the byte conversion.
+NODE @rgba [intent: "An opaque RGBA pixel from three channels clamped to [0, 1], bytes R, G, B, A in memory order"] {
+  SIGNATURE: (r: f32, g: f32, b: f32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 4278190080;
+  }
+  BODY {
+    %0 = CALL_HASH(@sat01, r);
+    %1 = CALL_HASH(@sat01, g);
+    %2 = CALL_HASH(@sat01, b);
+    %3 = CALL_HASH(@byte, %0);
+    %4 = CALL_HASH(@byte, %1);
+    %5 = CALL_HASH(@byte, %2);
+    %6 = SHL.checked(%4, 8:u32);
+    %7 = SHL.checked(%5, 16:u32);
+    %8 = OR(%3, %6);
+    %9 = OR(%8, %7);
+    %10 = OR(%9, 4278190080:u32);
+    RETURN(%10);
+  }
+}
+
+// A step of a bounded loop: the loop walks a small array, one element per step, so its bound is
+// visible to the verifier; the element itself carries nothing.
+NODE @tick [intent: "One step of a fixed-length loop"] {
+  SIGNATURE: (k: u64) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(0:u8);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Motion: the easing functions of animation libraries. Each maps [0, 1] into a proven range and
+// starts and ends exactly where an animation must: e(0) = 0 and e(1) = 1, bit for bit.
+// ---------------------------------------------------------------------------------------------
+
+NODE @ease_in_quad [intent: "easeInQuad: t^2"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FMUL(t, t);
+    RETURN(%0);
+  }
+}
+
+NODE @ease_out_cubic [intent: "easeOutCubic: 1 - (1 - t)^3"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FSUB(1.0:f32, t);
+    %1 = FMUL(%0, %0);
+    %2 = FMUL(%1, %0);
+    %3 = FSUB(1.0:f32, %2);
+    RETURN(%3);
+  }
+}
+
+NODE @ease_in_out_cubic [intent: "easeInOutCubic: 4t^3, then 1 - (2 - 2t)^3 / 2 from t = 0.5"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FMUL(t, t);
+    %1 = FMUL(%0, t);
+    %2 = FMUL(%1, 4.0:f32);
+    %3 = FMUL(t, 2.0:f32);
+    %4 = FSUB(2.0:f32, %3);
+    %5 = FMUL(%4, %4);
+    %6 = FMUL(%5, %4);
+    %7 = FMUL(%6, 0.5:f32);
+    %8 = FSUB(1.0:f32, %7);
+    %9 = LT.f(t, 0.5:f32);
+    %10 = SELECT(%9, %2, %8);
+    RETURN(%10);
+  }
+}
+
+NODE @ease_out_quart [intent: "easeOutQuart: 1 - (1 - t)^4"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FSUB(1.0:f32, t);
+    %1 = FMUL(%0, %0);
+    %2 = FMUL(%1, %1);
+    %3 = FSUB(1.0:f32, %2);
+    RETURN(%3);
+  }
+}
+
+NODE @ease_in_out_quint [intent: "easeInOutQuint: 16t^5, then 1 - (2 - 2t)^5 / 2 from t = 0.5"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FMUL(t, t);
+    %1 = FMUL(%0, %0);
+    %2 = FMUL(%1, t);
+    %3 = FMUL(%2, 16.0:f32);
+    %4 = FMUL(t, 2.0:f32);
+    %5 = FSUB(2.0:f32, %4);
+    %6 = FMUL(%5, %5);
+    %7 = FMUL(%6, %6);
+    %8 = FMUL(%7, %5);
+    %9 = FMUL(%8, 0.5:f32);
+    %10 = FSUB(1.0:f32, %9);
+    %11 = LT.f(t, 0.5:f32);
+    %12 = SELECT(%11, %3, %10);
+    RETURN(%12);
+  }
+}
+
+// easeOutBack overshoots by Penner's 10% and settles on 1. c1 = 1.70158 in f32 and c3 = c1 + 1,
+// which f32 holds exactly, so the curve starts at exactly 0. A bound of 1.1 does not hold: the
+// verifier's counterexample is t = 0.58073705, where f32 gives 1.1000034.
+NODE @ease_out_back [intent: "easeOutBack: 1 + c3 (t - 1)^3 + c1 (t - 1)^2, c1 = 1.70158"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= -0.001 && result <= 1.1001;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FSUB(t, 1.0:f32);
+    %1 = FMUL(%0, %0);
+    %2 = FMUL(%0, 2.701580047607421875:f32);
+    %3 = FADD(%2, 1.701580047607421875:f32);
+    %4 = FMUL(%1, %3);
+    %5 = FADD(1.0:f32, %4);
+    RETURN(%5);
+  }
+}
+
+// Four parabolas, n1 = 7.5625 and d1 = 2.75; the breakpoints k / d1 are rounded to f32 once.
+NODE @ease_out_bounce [intent: "easeOutBounce: the four-parabola bounce of easings.net"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = FMUL(t, t);
+    %1 = FMUL(%0, 7.5625:f32);
+    %2 = FSUB(t, 0.545454561710357666015625:f32);
+    %3 = FMUL(%2, %2);
+    %4 = FMA(%3, 7.5625:f32, 0.75:f32);
+    %5 = FSUB(t, 0.818181812763214111328125:f32);
+    %6 = FMUL(%5, %5);
+    %7 = FMA(%6, 7.5625:f32, 0.9375:f32);
+    %8 = FSUB(t, 0.954545438289642333984375:f32);
+    %9 = FMUL(%8, %8);
+    %10 = FMA(%9, 7.5625:f32, 0.984375:f32);
+    %11 = LT.f(t, 0.909090936183929443359375:f32);
+    %12 = SELECT(%11, %7, %10);
+    %13 = LT.f(t, 0.7272727489471435546875:f32);
+    %14 = SELECT(%13, %4, %12);
+    %15 = LT.f(t, 0.36363637447357177734375:f32);
+    %16 = SELECT(%15, %1, %14);
+    RETURN(%16);
+  }
+}
+
+// One coordinate of a CSS timing curve from (0, 0) to (1, 1) in Bernstein form; every term is
+// non-negative, so the result is too. The bare sum's bound of 1 under f32 rounding timed out in
+// bitwuzla after 10 minutes (4 million sampled inputs never exceeded it), so the node saturates at
+// 1 with a comparison, a bound the solvers prove at once.
+NODE @bez [intent: "3(1-s)^2 s p1 + 3(1-s) s^2 p2 + s^3: one coordinate of a CSS cubic Bezier"] {
+  SIGNATURE: (s: f32, p1: f32, p2: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: s >= 0.0 && s <= 1.0 && p1 >= 0.0 && p1 <= 1.0 && p2 >= 0.0 && p2 <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FSUB(1.0:f32, s);
+    %1 = FMUL(%0, s);
+    %2 = FMUL(%1, 3.0:f32);
+    %3 = FMUL(%2, %0);
+    %4 = FMUL(%3, p1);
+    %5 = FMUL(%2, s);
+    %6 = FMUL(%5, p2);
+    %7 = FMUL(s, s);
+    %8 = FMUL(%7, s);
+    %9 = FADD(%4, %6);
+    %10 = FADD(%9, %8);
+    %11 = LE.f(%10, 1.0:f32);
+    %12 = SELECT(%11, %10, 1.0:f32);
+    RETURN(%12);
+  }
+}
+
+// One bisection step on the curve parameter: [lo, hi] keeps bracketing the s with x(s) = x.
+NODE @bisect_step [intent: "Halve [lo, hi] towards the parameter where the curve's x equals x"] {
+  SIGNATURE: (acc: Tuple<f32, f32>, k: u8, x: f32, x1: f32, x2: f32) -> (Tuple<f32, f32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc.0 >= 0.0 && acc.0 <= acc.1 && acc.1 <= 1.0;
+    PRE: x1 >= 0.0 && x1 <= 1.0 && x2 >= 0.0 && x2 <= 1.0;
+    POST: result.0 >= 0.0 && result.0 <= result.1 && result.1 <= 1.0;
+  }
+  BODY {
+    %0 = PROJ(acc, 0:u32);
+    %1 = PROJ(acc, 1:u32);
+    %2 = FADD(%0, %1);
+    %3 = FMUL(%2, 0.5:f32);
+    %4 = CALL_HASH(@bez, %3, x1, x2);
+    %5 = LT.f(%4, x);
+    %6 = SELECT(%5, %3, %0);
+    %7 = SELECT(%5, %1, %3);
+    %8 = TUPLE(%6, %7);
+    RETURN(%8);
+  }
+}
+
+// CSS cubic-bezier(x1, y1, x2, y2): solve x(s) = x by 24 bisection steps, which reach f32
+// precision on [0, 1], then return y(s). WebKit's UnitBezier tries Newton steps first; bisection
+// alone is slower but needs no derivative that could vanish. The spec fixes both ends.
+NODE @cubic_bezier [intent: "CSS cubic-bezier(x1, y1, x2, y2) at x, for control values in [0, 1]"] {
+  SIGNATURE: (x: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: x >= 0.0 && x <= 1.0;
+    PRE: x1 >= 0.0 && x1 <= 1.0 && y1 >= 0.0 && y1 <= 1.0;
+    PRE: x2 >= 0.0 && x2 <= 1.0 && y2 >= 0.0 && y2 <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: x == 0.0 ==> result == 0.0;
+    POST: x == 1.0 ==> result == 1.0;
+    INVARIANT @bracket(k, acc): acc.0 >= 0.0 && acc.0 <= acc.1 && acc.1 <= 1.0;
+  }
+  BODY {
+    %0 = GENERATE(@tick, 24:u64);
+    %1 = TUPLE(0.0:f32, 1.0:f32);
+    %2 = FOLD_BOUNDED(@bisect_step, %0, x, x1, x2, init=%1, invariant=@bracket);
+    %3 = PROJ(%2, 0:u32);
+    %4 = PROJ(%2, 1:u32);
+    %5 = FADD(%3, %4);
+    %6 = FMUL(%5, 0.5:f32);
+    %7 = CALL_HASH(@bez, %6, y1, y2);
+    %8 = EQ(x, 1.0:f32);
+    %9 = SELECT(%8, 1.0:f32, %7);
+    %10 = EQ(x, 0.0:f32);
+    %11 = SELECT(%10, 0.0:f32, %9);
+    RETURN(%11);
+  }
+}
+
+NODE @css_ease [intent: "The CSS keyword ease: cubic-bezier(0.25, 0.1, 0.25, 1)"] {
+  SIGNATURE: (t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: result >= 0.0 && result <= 1.0;
+    POST: t == 0.0 ==> result == 0.0;
+    POST: t == 1.0 ==> result == 1.0;
+  }
+  BODY {
+    %0 = CALL_HASH(@cubic_bezier, t, 0.25:f32, 0.100000001490116119384765625:f32, 0.25:f32, 1.0:f32);
+    RETURN(%0);
+  }
+}
+
+// Sample i of the table: curve i / 256 at t = (i mod 256) / 255. Strict SELECT evaluates all eight
+// curves, which costs nothing next to a frame.
+NODE @ease_sample [intent: "Sample i of the 8 x 256 easing table"] {
+  SIGNATURE: (i: u64) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 2048;
+    POST: result >= -0.001 && result <= 1.1001;
+    POST: i % 256 == 0 ==> result == 0.0;
+    POST: i % 256 == 255 ==> result == 1.0;
+  }
+  BODY {
+    %0 = DIV.checked(i, 256:u64);
+    %1 = MOD.checked(i, 256:u64);
+    %2 = CAST.f32(%1);
+    %3 = FDIV(%2, 255.0:f32);
+    %4 = CALL_HASH(@ease_in_quad, %3);
+    %5 = CALL_HASH(@ease_out_cubic, %3);
+    %6 = CALL_HASH(@ease_in_out_cubic, %3);
+    %7 = CALL_HASH(@ease_out_quart, %3);
+    %8 = CALL_HASH(@ease_in_out_quint, %3);
+    %9 = CALL_HASH(@ease_out_back, %3);
+    %10 = CALL_HASH(@ease_out_bounce, %3);
+    %11 = CALL_HASH(@css_ease, %3);
+    %12 = EQ(%0, 6:u64);
+    %13 = SELECT(%12, %10, %11);
+    %14 = EQ(%0, 5:u64);
+    %15 = SELECT(%14, %9, %13);
+    %16 = EQ(%0, 4:u64);
+    %17 = SELECT(%16, %8, %15);
+    %18 = EQ(%0, 3:u64);
+    %19 = SELECT(%18, %7, %17);
+    %20 = EQ(%0, 2:u64);
+    %21 = SELECT(%20, %6, %19);
+    %22 = EQ(%0, 1:u64);
+    %23 = SELECT(%22, %5, %21);
+    %24 = EQ(%0, 0:u64);
+    %25 = SELECT(%24, %4, %23);
+    RETURN(%25);
+  }
+}
+
+NODE @motion [intent: "The page's eight easing curves, 256 samples each, for every animation on the site", export] {
+  SIGNATURE: () -> (Array<f32, 2048>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: forall(i in 0..2048) { result[i] >= -0.001 && result[i] <= 1.1001 };
+    POST: forall(c in 0..8) { result[c * 256] == 0.0 && result[c * 256 + 255] == 1.0 };
+  }
+  BODY {
+    %0 = GENERATE(@ease_sample, 2048:u64);
+    RETURN(%0);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Charts: d3.max, d3.sum, nice ticks and a clamped linear scale for the bar chart; d3.pie and
+// d3.arc for the donut. The page draws what these return, in SVG.
+// ---------------------------------------------------------------------------------------------
+
+NODE @max_step [intent: "Fold step of d3.max over values in [0, 5000]"] {
+  SIGNATURE: (acc: f32, x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc >= 0.0 && acc <= 5000.0 && x >= 0.0 && x <= 5000.0;
+    POST: result >= 0.0 && result <= 5000.0;
+  }
+  BODY {
+    %0 = FMAX(acc, x);
+    RETURN(%0);
+  }
+}
+
+// The first step of the 1-2-5 series that covers vmax in at most five ticks; 0 means none yet.
+NODE @nice_pick [intent: "Fold step: keep the first 1-2-5 step that spans vmax in five ticks"] {
+  SIGNATURE: (acc: f32, c: f32, vmax: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc >= 0.0 && acc <= 1000.0;
+    POST: result >= 0.0 && result <= 1000.0;
+  }
+  BODY {
+    %0 = EQ(acc, 0.0:f32);
+    %1 = FMUL(c, 5.0:f32);
+    %2 = LE.f(vmax, %1);
+    %3 = BAND(%0, %2);
+    %4 = LE.f(c, 1000.0:f32);
+    %5 = GE.f(c, 0.0:f32);
+    %6 = BAND(%4, %5);
+    %7 = BAND(%3, %6);
+    %8 = SELECT(%7, c, acc);
+    RETURN(%8);
+  }
+}
+
+NODE @bar_frac [intent: "A bar's length as a fraction of the axis: d3.scaleLinear().clamp(true)"] {
+  SIGNATURE: (v: f32, top: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= 0.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FDIV(v, top);
+    %1 = CALL_HASH(@sat01, %0);
+    RETURN(%1);
+  }
+}
+
+NODE @tick_value [intent: "The value of tick k: k times the step"] {
+  SIGNATURE: (k: u64, step: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: k < 6;
+  }
+  BODY {
+    %0 = CAST.f32(k);
+    %1 = FMUL(%0, step);
+    RETURN(%1);
+  }
+}
+
+NODE @tick_pos [intent: "Where tick k sits on the axis, as a fraction; past the last tick, 2"] {
+  SIGNATURE: (k: u64, n: u32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: k < 6 && n >= 1 && n <= 5;
+    POST: result >= 0.0 && result <= 2.0;
+  }
+  BODY {
+    %0 = CAST.f32(k);
+    %1 = CAST.f32(n);
+    %2 = FDIV(%0, %1);
+    %3 = CAST.u64(n);
+    %4 = LE.u(k, %3);
+    %5 = SELECT(%4, %2, 2.0:f32);
+    RETURN(%5);
+  }
+}
+
+// The bar chart's layout: an axis from 0 to n * step, where step is the first of the 1-2-5 series
+// that reaches the largest value in at most five ticks; each bar as a fraction of that axis; and
+// the ticks' values and positions. Values outside [0, 5000] are refused at the checked entry.
+NODE @bar_chart [intent: "Layout of a bar chart of up to 12 values: bar fractions, tick values, tick positions, tick count", export] {
+  SIGNATURE: (vs: Array<f32, 12>) -> (Array<f32, 12>, Array<f32, 6>, Array<f32, 6>, u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..12) { vs[i] >= 0.0 && vs[i] <= 5000.0 };
+    POST: forall(i in 0..12) { result.0[i] >= 0.0 && result.0[i] <= 1.0 };
+    POST: result.3 >= 1 && result.3 <= 5;
+    POST: forall(k in 0..6) { result.2[k] >= 0.0 && result.2[k] <= 2.0 };
+    INVARIANT @in_range(k, acc): acc >= 0.0 && acc <= 5000.0;
+    INVARIANT @picked(k, acc): acc >= 0.0 && acc <= 1000.0;
+  }
+  BODY {
+    %0 = FOLD_BOUNDED(@max_step, vs, init=0.0:f32, invariant=@in_range);
+    %1 = GT.f(%0, 0.0:f32);
+    %2 = SELECT(%1, %0, 1.0:f32);
+    %3 = IDENTITY([0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0]:Array<f32, 16>);
+    %4 = FOLD_BOUNDED(@nice_pick, %3, %2, init=0.0:f32, invariant=@picked);
+    %5 = GT.f(%4, 0.0:f32);
+    %6 = SELECT(%5, %4, 1000.0:f32);
+    %7 = FDIV(%2, %6);
+    %8 = LE.f(%7, 5.0:f32);
+    %9 = SELECT(%8, %7, 5.0:f32);
+    %10 = GE.f(%9, 0.0:f32);
+    %11 = SELECT(%10, %9, 0.0:f32);
+    %12 = CAST.u32(%11);
+    %13 = CAST.f32(%12);
+    %14 = LT.f(%13, %11);
+    %15 = CAST.u32(%14);
+    %16 = ADD.checked(%12, %15);
+    %17 = EQ(%16, 0:u32);
+    %18 = SELECT(%17, 1:u32, %16);
+    %19 = LE.u(%18, 5:u32);
+    %20 = SELECT(%19, %18, 5:u32);
+    %21 = CAST.f32(%20);
+    %22 = FMUL(%21, %6);
+    %23 = SIMD_MAP(@bar_frac, vs, %22);
+    %24 = GENERATE(@tick_value, 6:u64, %6);
+    %25 = GENERATE(@tick_pos, 6:u64, %20);
+    RETURN(%23, %24, %25, %20);
+  }
+}
+
+NODE @masked [intent: "Value j when j < n, else 0: the terms of a prefix sum"] {
+  SIGNATURE: (j: u64, n: u64, vs: Array<f32, 8>) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: j < 8 && forall(i in 0..8) { vs[i] >= 0.0 && vs[i] <= 1000000.0 };
+    POST: result >= 0.0 && result <= 1000000.0;
+  }
+  BODY {
+    %0 = INDEX(vs, j);
+    %1 = LT.u(j, n);
+    %2 = SELECT(%1, %0, 0.0:f32);
+    RETURN(%2);
+  }
+}
+
+NODE @sum_step [intent: "Fold step of d3.sum, saturating at 10^7"] {
+  SIGNATURE: (acc: f32, x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: acc >= 0.0 && acc <= 10000000.0 && x >= 0.0 && x <= 1000000.0;
+    POST: result >= 0.0 && result <= 10000000.0;
+  }
+  BODY {
+    %0 = FADD(acc, x);
+    %1 = FMIN(%0, 10000000.0:f32);
+    RETURN(%1);
+  }
+}
+
+NODE @prefix [intent: "d3.sum of the first n of eight values"] {
+  SIGNATURE: (n: u64, vs: Array<f32, 8>) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..8) { vs[i] >= 0.0 && vs[i] <= 1000000.0 };
+    POST: result >= 0.0 && result <= 10000000.0;
+    INVARIANT @capped(k, acc): acc >= 0.0 && acc <= 10000000.0;
+  }
+  BODY {
+    %0 = GENERATE(@masked, 8:u64, n, vs);
+    %1 = FOLD_BOUNDED(@sum_step, %0, init=0.0:f32, invariant=@capped);
+    RETURN(%1);
+  }
+}
+
+// Coordinate e of the outline: segment e / 132; within it, point p = (e mod 132) / 2 runs along
+// the outer arc (p = 0 … 32) and back along the inner one (p = 33 … 65); e mod 2 picks x or y.
+// Angles are in turns from twelve o'clock, clockwise, as d3.arc draws them, with a small pad
+// between segments; the sweep in [0, 1] draws the pie in.
+NODE @donut_pt [intent: "Coordinate e of the donut's outlines in a unit viewBox"] {
+  SIGNATURE: (e: u64, vs: Array<f32, 8>, total: f32, sweep: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: e < 1056 && forall(i in 0..8) { vs[i] >= 0.0 && vs[i] <= 1000000.0 };
+    PRE: sweep >= 0.0 && sweep <= 1.0;
+    POST: result >= -1.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = DIV.checked(e, 132:u64);
+    %1 = MOD.checked(e, 132:u64);
+    %2 = DIV.checked(%1, 2:u64);
+    %3 = MOD.checked(%1, 2:u64);
+    %4 = CALL_HASH(@prefix, %0, vs);
+    %5 = ADD.checked(%0, 1:u64);
+    %6 = CALL_HASH(@prefix, %5, vs);
+    %7 = GT.f(total, 0.0:f32);
+    %8 = SELECT(%7, total, 1.0:f32);
+    %9 = FDIV(%4, %8);
+    %10 = CALL_HASH(@sat01, %9);
+    %11 = FDIV(%6, %8);
+    %12 = CALL_HASH(@sat01, %11);
+    %13 = FMA(%10, sweep, 0.00390625:f32);
+    %14 = FMUL(%12, sweep);
+    %15 = FSUB(%14, 0.00390625:f32);
+    %16 = FMAX(%15, %13);
+    %17 = LE.u(%2, 32:u64);
+    %18 = SUB.checked(65:u64, %2);
+    %19 = SELECT(%17, %2, %18);
+    %20 = CAST.f32(%19);
+    %21 = FDIV(%20, 32.0:f32);
+    %22 = FSUB(%16, %13);
+    %23 = FMA(%22, %21, %13);
+    %24 = SELECT(%17, 1.0:f32, 0.625:f32);
+    %25 = CALL_HASH(@sin_turns, %23);
+    %26 = CALL_HASH(@cos_turns, %23);
+    %27 = FMUL(%24, %25);
+    %28 = FMUL(%24, %26);
+    %29 = FNEG(%28);
+    %30 = EQ(%3, 0:u64);
+    %31 = SELECT(%30, %27, %29);
+    RETURN(%31);
+  }
+}
+
+NODE @donut [intent: "d3.pie and d3.arc for up to eight values: each segment's outline, drawn to a sweep in [0, 1]", export] {
+  SIGNATURE: (vs: Array<f32, 8>, sweep: f32) -> (Array<f32, 1056>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: forall(i in 0..8) { vs[i] >= 0.0 && vs[i] <= 1000000.0 };
+    PRE: sweep >= 0.0 && sweep <= 1.0;
+    POST: forall(i in 0..1056) { result[i] >= -1.0 && result[i] <= 1.0 };
+  }
+  BODY {
+    %0 = CALL_HASH(@prefix, 8:u64, vs);
+    %1 = GENERATE(@donut_pt, 1056:u64, vs, %0, sweep);
+    RETURN(%1);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The hero's sky: three aurora ribbons over a night gradient, a fragment shader written as a
+// GENERATE kernel. The phase t loops: every time term is t or 1 - t inside a sine in turns.
+// ---------------------------------------------------------------------------------------------
+
+// A wavy centre line, and a glow w^2 / (w^2 + d^2) around it, four times wider above the line.
+NODE @ribbon [intent: "The glow of one aurora ribbon at (u, v) and phase t"] {
+  SIGNATURE: (u: f32, v: f32, t: f32, phase: f32, base: f32, amp: f32, w: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && t >= 0.0 && t <= 1.0;
+    PRE: phase >= 0.0 && phase <= 1.0 && base >= 0.0 && base <= 1.0;
+    PRE: amp >= 0.0 && amp <= 0.25 && w >= 0.01 && w <= 0.25;
+    POST: result >= 0.0 && result <= 1.0;
+  }
+  BODY {
+    %0 = FMUL(u, 0.875:f32);
+    %1 = FADD(%0, t);
+    %2 = FADD(%1, phase);
+    %3 = CALL_HASH(@sin_turns, %2);
+    %4 = FMUL(u, 1.875:f32);
+    %5 = FSUB(1.0:f32, t);
+    %6 = FADD(%4, %5);
+    %7 = FADD(%6, phase);
+    %8 = FADD(%7, phase);
+    %9 = CALL_HASH(@sin_turns, %8);
+    %10 = FMA(%9, 0.5:f32, %3);
+    %11 = FMA(%10, amp, base);
+    %12 = FSUB(v, %11);
+    %13 = LT.f(%12, 0.0:f32);
+    %14 = FMUL(w, 4.0:f32);
+    %15 = SELECT(%13, %14, w);
+    %16 = FMUL(%15, %15);
+    %17 = FMUL(%12, %12);
+    %18 = FADD(%16, %17);
+    %19 = FDIV(%16, %18);
+    RETURN(%19);
+  }
+}
+
+// Vertical curtains: the product of two sines across the sky, kept between 0.5 and 1.
+NODE @rays [intent: "The curtain pattern of the aurora at u and phase t"] {
+  SIGNATURE: (u: f32, t: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: u >= 0.0 && u <= 1.0 && t >= 0.0 && t <= 1.0;
+    POST: result >= 0.5 && result <= 1.0;
+  }
+  BODY {
+    %0 = FMUL(u, 6.0:f32);
+    %1 = FMUL(t, 2.0:f32);
+    %2 = FADD(%0, %1);
+    %3 = CALL_HASH(@sin_turns, %2);
+    %4 = FMUL(u, 15.0:f32);
+    %5 = FSUB(1.0:f32, t);
+    %6 = FADD(%4, %5);
+    %7 = CALL_HASH(@sin_turns, %6);
+    %8 = FMUL(%3, %7);
+    %9 = FMA(%8, 0.25:f32, 0.75:f32);
+    RETURN(%9);
+  }
+}
+
+NODE @aurora_px [intent: "Pixel i of the 320 x 180 aurora sky at loop phase t"] {
+  SIGNATURE: (i: u64, t: f32) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 57600 && t >= 0.0 && t <= 1.0;
+    POST: result >= 4278190080;
+  }
+  BODY {
+    %0 = MOD.checked(i, 320:u64);
+    %1 = DIV.checked(i, 320:u64);
+    %2 = CAST.f32(%0);
+    %3 = CAST.f32(%1);
+    %4 = FDIV(%2, 319.0:f32);
+    %5 = FDIV(%3, 179.0:f32);
+    %6 = CALL_HASH(@ribbon, %4, %5, t, 0.0:f32, 0.40625:f32, 0.09375:f32, 0.03125:f32);
+    %7 = CALL_HASH(@ribbon, %4, %5, t, 0.375:f32, 0.5625:f32, 0.109375:f32, 0.0390625:f32);
+    %8 = CALL_HASH(@ribbon, %4, %5, t, 0.6875:f32, 0.3125:f32, 0.0625:f32, 0.0234375:f32);
+    %9 = CALL_HASH(@rays, %4, t);
+    %10 = FMUL(%6, %9);
+    %11 = FMUL(%10, 0.9375:f32);
+    %12 = FMUL(%7, 0.28125:f32);
+    %13 = FMUL(%8, %9);
+    %14 = FMUL(%13, 0.46875:f32);
+    %15 = FMA(%5, 0.03125:f32, 0.00390625:f32);
+    %16 = FMA(%5, 0.0390625:f32, 0.015625:f32);
+    %17 = FMA(%5, 0.078125:f32, 0.05078125:f32);
+    %18 = FMA(%11, 0.23046875:f32, %15);
+    %19 = FMA(%12, 0.1796875:f32, %18);
+    %20 = FMA(%14, 0.62109375:f32, %19);
+    %21 = FMA(%11, 0.828125:f32, %16);
+    %22 = FMA(%12, 0.41796875:f32, %21);
+    %23 = FMA(%14, 0.3984375:f32, %22);
+    %24 = FMA(%11, 0.53125:f32, %17);
+    %25 = FMA(%12, 0.94140625:f32, %24);
+    %26 = FMA(%14, 0.94921875:f32, %25);
+    %27 = CALL_HASH(@rgba, %20, %23, %26);
+    RETURN(%27);
+  }
+}
+
+NODE @aurora [intent: "One frame of the hero's aurora, 320 x 180 RGBA pixels at loop phase t", export] {
+  SIGNATURE: (t: f32) -> (Array<u32, 57600>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: t >= 0.0 && t <= 1.0;
+    POST: forall(i in 0..57600) { result[i] >= 4278190080 };
+  }
+  BODY {
+    %0 = GENERATE(@aurora_px, 57600:u64, t);
+    RETURN(%0);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The fractal explorer's controller. Its POST is word for word the PRE of @render in
+// examples/mandelbrot.vgs, so every view it returns is one the renderer accepts.
+// ---------------------------------------------------------------------------------------------
+
+// Clamped with comparisons, so NaN cannot pass: a value outside [lo, hi] or NaN becomes the
+// nearer bound, and NaN becomes lo.
+NODE @clamp_to [intent: "x limited to [lo, hi], NaN sent to lo"] {
+  SIGNATURE: (x: f32, lo: f32, hi: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: lo <= hi;
+    POST: result >= lo && result <= hi;
+  }
+  BODY {
+    %0 = GE.f(x, lo);
+    %1 = SELECT(%0, x, lo);
+    %2 = LE.f(%1, hi);
+    %3 = SELECT(%2, %1, hi);
+    RETURN(%3);
+  }
+}
+
+// The clicked point is computed as @pixel in examples/mandelbrot.vgs computes it. Below 2^-24 per
+// pixel, f32 has no digits left for a view centred near 1, so zooming stops there; it also keeps
+// the scale above 0, which halving alone would not once it reached the smallest subnormal.
+NODE @zoom [intent: "The fractal view after a click at pixel (px, py): recentred there, zoomed in or out by 2", export] {
+  SIGNATURE: (cx: f32, cy: f32, scale: f32, px: u32, py: u32, zin: Bool) -> (Tuple<f32, f32, f32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: cx >= -2.5 && cx <= 1.5 && cy >= -1.5 && cy <= 1.5 && scale > 0.0 && scale <= 0.02;
+    PRE: px < 256 && py < 192;
+    POST: result.0 >= -2.5 && result.0 <= 1.5 && result.1 >= -1.5 && result.1 <= 1.5 && result.2 > 0.0 && result.2 <= 0.02;
+  }
+  BODY {
+    %0 = CAST.f32(px);
+    %1 = FSUB(%0, 128.0:f32);
+    %2 = FMA(%1, scale, cx);
+    %3 = CAST.f32(py);
+    %4 = FSUB(%3, 96.0:f32);
+    %5 = FMUL(%4, scale);
+    %6 = FSUB(cy, %5);
+    %7 = FMUL(scale, 0.5:f32);
+    %8 = FMUL(scale, 2.0:f32);
+    %9 = SELECT(zin, %7, %8);
+    %10 = CALL_HASH(@clamp_to, %9, 0.000000059604644775390625:f32, 0.02:f32);
+    %11 = CALL_HASH(@clamp_to, %2, -2.5:f32, 1.5:f32);
+    %12 = CALL_HASH(@clamp_to, %6, -1.5:f32, 1.5:f32);
+    %13 = TUPLE(%11, %12, %10);
+    RETURN(%13);
+  }
+}

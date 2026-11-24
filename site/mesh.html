@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>VG-Mesh, le registre · VeriGraph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Comment VG-Mesh indexe des nœuds vérifiés par contrat et classe de spécification, re-vérifie chaque soumission à la porte d'ingestion, maintient un journal Merkle C2SP et résout @MESH_QUERY dans vg.lock.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300..700&family=Spline+Sans+Mono:wght@400..600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/mesh.css">
+
+<header class="bar"></header>
+
+<main id="top">
+  <header class="ch-head wrap">
+    <p class="eyebrow">Chapitre 9 · vg-mesh</p>
+    <h1>VG-Mesh, <em>chercher par contrat, jamais par nom.</em></h1>
+    <p class="lede">Un registre classique fait confiance à un nom de paquet et à une version. VG-Mesh stocke des graphes adressés par contenu, n'accepte que ceux qui franchissent sa porte d'ingestion à six contrôles, et laisse un agent chercher un composant par ce qu'il prouve faire.</p>
+    <ul class="crates"><li><code>vg-mesh</code></li><li><code>vg-store</code></li><li><code>vg-smt</code></li></ul>
+    <div class="ch-meta"><span>Lecture : 14 min</span><span>Prérequis : chapitres 2, 5 et 8</span></div>
+  </header>
+
+  <div class="ch-body wrap">
+    <aside class="toc" id="toc" aria-label="Sommaire du chapitre"></aside>
+    <article class="prose">
+
+      <section>
+        <h2 id="pourquoi"><span class="n">9.1</span>Pourquoi un registre de nœuds vérifiés</h2>
+        <p>Dans un écosystème logiciel ordinaire, vous cherchez une bibliothèque par son nom commercial ou sa popularité. Deux fonctions qui calculent exactement le même hachage SHA-256 portent des noms différents, vivent dans des paquets incompatibles, et rien ne garantit que la version publiée respecte les bornes promises dans son fichier README. <dfn>VG-Mesh</dfn> (<code>vg-mesh</code>, spécifié dans <code>docs/09-vg-mesh.md</code>) remplace la confiance aveugle dans un nom de paquet par une recherche fondée sur la signature, les effets autorisés et le contrat mathématique.</p>
+
+        <aside class="note note-info">
+          <b>Analogie</b>
+          <p>Un registre de paquets classique ressemble à un annuaire téléphonique : vous cherchez « Plombier Express » en espérant qu'il sache réparer une fuite. VG-Mesh fonctionne comme un bureau d'homologation : vous déposez le cahier des charges technique, le registre ne retient que les pièces qui ont passé les tests au banc, et vous indique le niveau exact de certification obtenu.</p>
+        </aside>
+
+        <p>L'équivalence sémantique générale entre deux programmes étant indécidable, deux implémentations distinctes de SHA-256 (par exemple en VG-Sym, en C ou en Rust) ne partageront jamais le même hachage structurel BLAKE3. VG-Mesh les réunit plutôt dans une même <dfn>classe de spécification</dfn> (<i>spec class</i>) autour d'un nœud <code>SPEC</code> canonique identifié par son <code>spec_hash</code>. Chaque membre indique comment son appartenance a été établie, et un appelant hérite toujours du niveau de preuve le plus faible parmi ses liaisons Mesh :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Évidence</th><th>Signification (<code>docs/09-vg-mesh.md</code>)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>proved</code></td><td>Le contrat <code>result == spec:s(…)</code> est prouvé universellement pour toute entrée admise (souvent via un invariant de pliage, ADR 0008).</td></tr>
+              <tr><td><code>bounded(n)</code></td><td>Le raffinement est prouvé jusqu'à une taille ou un déroulement de boucle borné à <code>n</code> (ex. <code>bounded(8)</code> sous Alive2 pour OmniLift).</td></tr>
+              <tr><td><code>tested(m)</code></td><td>Seuls <code>m</code> cas de test différentiels concordent ; insuffisant pour qu'une preuve d'appelant s'appuie dessus.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Le registre manipule sept types d'objets distincts, stockés au-dessus de <code>vg-store</code> (<code>docs/09-vg-mesh.md</code>) :</p>
+
+        <ul>
+          <li><b>Node</b> (indexé par <code>node_hash</code>) : les octets canoniques <code>.vgir</code> du nœud lui-même.</li>
+          <li><b>Spec</b> (indexé par <code>spec_hash</code>) : un nœud <code>SPEC</code> de référence et son interface publique.</li>
+          <li><b>Proof record</b> (indexé par empreinte d'obligation) : le verdict, le solveur, sa version exacte et un certificat lorsqu'il existe.</li>
+          <li><b>Attestation</b> : une déclaration signée par Ed25519 affirmant « le nœud N raffine la spécification S selon tel vérificateur C ».</li>
+          <li><b>Benchmark</b> (par <code>node_hash</code> et cible) : cycles par octet, latence médiane p50 et latence p99 mesurées.</li>
+          <li><b>Provenance</b> : la trace complète d'un import OmniLift (source, commit, compilateur et options).</li>
+          <li><b>Name</b> : un pointeur lisible et signé vers une empreinte, analogue à une référence <code>git</code>.</li>
+        </ul>
+      </section>
+
+      <section id="sec-pipeline">
+        <h2 id="pipeline"><span class="n">9.2</span>Porte d'ingestion et pipeline de requête</h2>
+        <p>Rien n'entre dans VG-Mesh sur parole. Chaque soumission franchit une <dfn>porte d'ingestion</dfn> (<i>ingestion gate</i>) en six contrôles obligatoires (codes <code>VG-M0001</code> à <code>VG-M0006</code>) : (1) recalcule l'empreinte canonique BLAKE3 et rejette tout écart ; (2) valide la structure et rejoue <code>vg-types</code> ; (3) re-vérifie chaque obligation avec le solveur SMT ; (4) vérifie la transitivité des masques d'effets sur tous les appelés ; (5) contrôle la signature Ed25519 du déposant et ajoute l'entrée au journal de transparence ; (6) déduplique par <code>node_hash</code> et rattache le nœud à ses classes de spécification.</p>
+
+        <p>Lors du test de jalon G7 (<code>reports/gate-g7.md</code>), la suite a confirmé le rejet de huit tentatives de falsification : octet <code>.vgir</code> inversé, empreinte prétendue fausse, signature forgée, signature manquante, masque d'effets sous-déclaré, journal réordonné, journal tronqué et rejeu de soumission.</p>
+
+        <figure class="fig" id="fig-mesh-pipeline-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-mesh-pipeline" role="img" aria-label="Pipeline de requête VG-Mesh en cinq étapes : spec exacte, filtre structurel, classement sémantique, sous-typage comportemental et tri par coût"></svg></div>
+          <figcaption><b>Figure 9.1</b> Pipeline d'une requête <code>MeshContractQuery</code>. Les étapes 1 à 3 s'exécutent sous la barre des 5 ms : en G7 sur 100 000 nœuds synthétiques et 10 000 requêtes, la médiane mesurée est de <b>19 µs</b> et le p99 de <b>421 µs</b> (<code>reports/gate-g7.md</code>). <span class="proof" id="fig-mesh-pipeline-proof"></span></figcaption>
+        </figure>
+
+        <p>Lorsque la requête demande un sous-typage comportemental général (étape 4), le solveur prouve que la précondition demandée implique celle du candidat (<code>PRE_query ⇒ PRE_candidate</code>) et que, sous <code>PRE_query</code>, la postcondition du candidat garantit celle de la requête (<code>PRE_query ∧ POST_candidate ⇒ POST_query</code>), selon le principe de Liskov et Wing (<code>docs/09-vg-mesh.md</code>). Autrement dit, le candidat retenu a le droit d'exiger moins que l'appelant et de promettre davantage, jamais l'inverse. Les résultats de cette vérification comportementale sont mis en cache ; les vérifications non en cache s'exécutent de manière asynchrone, en dehors du budget de 5 ms tenu par les trois premières étapes d'indexation.</p>
+
+        <p>À l'étape 5, les candidats retenus sont classés par coût statique vérifié (<code>COST</code>) puis par mesures de performance réelles (<code>Benchmark</code>) sur l'architecture cible de l'appelant. Deux implémentations équivalentes de CRC-32 ou de SHA-256 peuvent ainsi être départagées automatiquement selon le processeur visé.</p>
+      </section>
+
+      <section id="sec-merkle">
+        <h2 id="merkle"><span class="n">9.3</span>Journal de transparence Merkle</h2>
+        <p>Comment auditer qu'un registre n'a jamais supprimé ni réécrit silencieusement une soumission passée ? Chaque publication acceptée est inscrite dans un <dfn>journal de transparence</dfn> en ajout seul conforme à la RFC 6962 et aux formats ouverts C2SP (<code>crates/vg-mesh/src/tlog.rs</code>) : les feuilles sont hachées avec le préfixe <code>0x00</code> (<code>leaf_hash</code>), les nœuds internes avec <code>0x01</code> (<code>node_hash</code>), l'arbre vide vaut <code>SHA-256("")</code> (<code>empty_root</code>), et chaque point de contrôle (<i>checkpoint</i>) est une note signée par Ed25519 (<code>c2sp.org/signed-note</code>, <code>c2sp.org/tlog-checkpoint</code>) servie par tuiles statiques de hauteur 8 et largeur 256 (<code>c2sp.org/tlog-tiles</code>). Ce découpage en tuiles standard permet à n'importe quel client ou témoin externe de vérifier une preuve d'inclusion ou de cohérence entre deux tailles d'arbre sans jamais télécharger l'historique complet.</p>
+
+        <figure class="fig" id="fig-merkle-log-wrap">
+          <div class="fig-stage"><svg class="dg" id="fig-merkle-log" role="img" aria-label="Arbre de Merkle en ajout seul de VG-Mesh, de leaf_hash jusqu'au checkpoint signé C2SP et aux tuiles statiques"></svg></div>
+          <div class="fig-controls">
+            <button class="btn small" type="button" id="btn-merkle-pulse">Animer une publication dans le journal</button>
+            <span class="readout" id="merkle-status">Cliquez pour voir une entrée remonter jusqu'au checkpoint signé.</span>
+          </div>
+          <figcaption><b>Figure 9.2</b> Construction de l'arbre de Merkle en ajout seul et émission du checkpoint signé C2SP dans <code>crates/vg-mesh/src/tlog.rs</code>. <span class="proof" id="fig-merkle-log-proof"></span></figcaption>
+        </figure>
+      </section>
+
+      <section id="sec-pratique">
+        <h2 id="pratique"><span class="n">9.4</span>Publier, chercher et résoudre en pratique</h2>
+        <p>Dans <code>examples/audio_limiter.vgs</code>, le nœud <code>@limit_frame</code> a besoin d'un hachage SHA-256 sans le réécrire ligne par ligne. Il déclare donc un bloc <code>@MESH_QUERY @sha256</code>. Survolez les parties soulignées pour comprendre comment <code>vg mesh resolve</code> lit cette requête :</p>
+
+        <div class="annotated">
+<pre class="code vgs" data-file="examples/audio_limiter.vgs"><code><span data-note="Déclare une dépendance abstraite : aucun hash n'est écrit à la main dans le fichier source." data-title="@MESH_QUERY">@MESH_QUERY @sha256</span> {
+  <span data-note="Filtre structurel : la fonction doit prendre une tranche d'octets et rendre 32 octets." data-title="signature">signature: (Slice&lt;u8&gt;) -&gt; (Array&lt;u8, 32&gt;);</span>
+  <span data-note="Filtre d'effets : la fonction doit être pure (EFFECTS: [])." data-title="effects">effects: [];</span>
+  <span data-note="Parce que le label est @sha256 et le POST vaut result == spec:sha256(arg0), vg mesh resolve interroge directement la classe de spécification sha256." data-title="post / classe">post: result == spec:sha256(arg0);</span>
+  <span data-note="Indication sémantique pour le classement quand aucune classe exacte n'est demandée." data-title="intent">intent: "SHA-256 digest of a byte slice";</span>
+}</code></pre>
+          <aside class="panel annot-panel"><span class="label">Survolez le code</span><p>Passez le curseur sur une clause de <code>@MESH_QUERY</code> pour voir comment le registre la résout.</p></aside>
+        </div>
+
+        <p>Lors de la génération de <code>site/data/mesh.json</code>, <code>site/build/mesh.sh</code> a exécuté ces quatre étapes sur une racine vierge : publier <code>examples/sha256.vgs</code>, interroger le registre par contrat, résoudre <code>examples/audio_limiter.vgs</code> dans <code>vg.lock</code>, puis vérifier tout <code>audio_limiter.vgs</code>.</p>
+
+        <div class="stats" id="mesh-stats"></div>
+
+        <div class="term" id="term-mesh"></div>
+
+        <p>Voici le fichier <code>vg.lock</code> réellement produit par <code>vg mesh resolve</code> : l'étiquette locale <code>@sha256</code> y est épinglée vers l'empreinte du nœud <code>@sha256_impl</code> et celle du <code>SPEC @sha256</code> :</p>
+
+        <pre class="code"><code id="vg-lock-out"></code></pre>
+      </section>
+
+      <section>
+        <h2 id="http"><span class="n">9.5</span>L'API HTTP de <code>vg mesh serve</code></h2>
+        <p>Pour partager un registre sur le réseau ou avec des outils externes, <code>vg mesh serve [--root DIR] [--addr HOST:PORT]</code> lance un serveur HTTP/1.1 léger (adresse par défaut <code>127.0.0.1:7878</code>, taille maximale de requête 16 MiB dans <code>crates/vg-mesh/src/http.rs</code>) exposant quatre routes :</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Méthode et route</th><th>Entrée</th><th>Réponse</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>POST /query</code></td><td>Objet JSON <code>MeshContractQuery</code> (<code>docs/09</code>)</td><td><code>MeshQueryOut</code> JSON : candidats triés avec coût, évidence et empreintes.</td></tr>
+              <tr><td><code>POST /publish</code></td><td><code>{"vgir_hex", "signer", "signature", …}</code></td><td><code>PublishOut</code> JSON : empreintes acceptées ou motifs de rejet (<code>VG-M…</code>).</td></tr>
+              <tr><td><code>GET /checkpoint</code></td><td>—</td><td>Checkpoint C2SP signé au format texte (<code>c2sp.org/tlog-checkpoint</code>).</td></tr>
+              <tr><td><code>GET /tile/&lt;L&gt;/&lt;N&gt;[.p/&lt;W&gt;]</code></td><td>Niveau <code>L</code>, index <code>N</code>, largeur partielle <code>W</code></td><td>Octets bruts de la tuile Merkle C2SP (<code>c2sp.org/tlog-tiles</code>).</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="demo-sha">
+        <h2 id="demo"><span class="n">9.6</span>Démo en direct : <code>sha256.wasm</code> depuis le Mesh</h2>
+        <p>Le nœud <code>@sha256_impl</code> publié dans le registre ci-dessus (55 obligations prouvées sur 55, dont l'égalité exacte <code>result == spec:sha256(m)</code> face au <code>SPEC</code> FIPS 180-4) a été compilé vers WebAssembly (<code>site/wasm/sha256.wasm</code>). Saisissez n'importe quel texte ci-dessous : le binaire WASM calcule directement les 32 octets du condensat et vous pouvez comparer la sortie avec le vecteur officiel FIPS 180-4 pour <code>"abc"</code> (<code>crates/vg-cli/tests/sha256.rs</code>).</p>
+
+        <div class="demo-box">
+          <div class="demo-row">
+            <div>
+              <label class="label" for="sha-input">Message UTF-8 envoyé à <code>sha256.wasm</code></label>
+              <input id="sha-input" type="text" value="abc" spellcheck="false">
+            </div>
+            <button class="btn primary small" type="button" id="sha-run-btn">Hacher</button>
+          </div>
+          <div class="demo-presets">
+            <button class="btn small sha-preset" type="button" data-val="abc">« abc »</button>
+            <button class="btn small sha-preset" type="button" data-val="">Chaîne vide</button>
+            <button class="btn small sha-preset" type="button" data-val="VeriGraph">« VeriGraph »</button>
+          </div>
+          <div class="demo-out">
+            <div class="demo-kv">
+              <span class="label">Condensat calculé par <code>sha256.wasm</code></span>
+              <code id="sha-got">—</code>
+            </div>
+            <div class="demo-kv">
+              <span class="label">Référence FIPS 180-4 pour « abc »</span>
+              <code class="ref">ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</code>
+            </div>
+            <div class="demo-kv">
+              <span class="label">Référence FIPS 180-4 pour chaîne vide</span>
+              <code class="ref">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="limites"><span class="n">9.7</span>Confiance et limites honnêtes</h2>
+        <aside class="note note-limit">
+          <b>Limite actuelle</b>
+          <p>Comme le rappelle <code>docs/09-vg-mesh.md</code>, les preuves ne garantissent que ce que disent les contrats : un nœud au contrat trop faible (ou malveillant à l'intérieur de ses effets autorisés) peut renvoyer de mauvaises réponses, et les canaux auxiliaires temporels restent hors périmètre. De plus, la version MVP exécute un registre local unique (<code>.vg/mesh</code>) ; la fédération entre registres, la lutte contre le spam, les témoins externes et les politiques de confiance relèvent de la piste <code>[R-12]</code>. Enfin, les critères du jalon G7 sont satisfaits (<code>reports/gate-g7.md</code>) et restent en attente d'approbation par le propriétaire.</p>
+        </aside>
+      </section>
+
+      <section>
+        <h2 id="quiz"><span class="n">9.8</span>Vérifiez votre compréhension</h2>
+
+        <div class="quiz">
+          <span class="label">Question 1</span>
+          <p class="q">Que se passe-t-il si vous tentez de publier dans VG-Mesh un nœud dont les octets <code>.vgir</code> ont été modifiés d'un seul bit après signature ?</p>
+          <ol>
+            <li><button class="choice">Le registre accepte le nœud tant que la syntaxe reste valide.</button></li>
+            <li><button class="choice" data-right>La porte d'ingestion rejette immédiatement la soumission (recalcul du hachage BLAKE3, signature Ed25519 et re-vérification).</button></li>
+            <li><button class="choice">Le nœud est accepté avec le niveau <code>tested(0)</code>.</button></li>
+          </ol>
+          <p class="why" hidden>En G7 (<code>reports/gate-g7.md</code>), tous les scénarios de falsification (<code>tamper_flipped_vgir_byte</code>, <code>tamper_wrong_claimed_hash</code>, <code>tamper_forged_signature</code>, etc.) sont rejetés à la porte d'ingestion avant toute inscription au journal.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 2</span>
+          <p class="q">Un nœud A entièrement prouvé appelle via <code>@MESH_QUERY</code> un nœud B dont l'appartenance à sa classe a l'évidence <code>bounded(8)</code>. Que rapporte <code>vg verify</code> sur A ?</p>
+          <ol>
+            <li><button class="choice">Une preuve universelle <code>proved</code> pour A sans aucune mention de B.</button></li>
+            <li><button class="choice" data-right>Il signale l'évidence la plus faible utilisée parmi ses liaisons Mesh (ici <code>bounded(8)</code>), car la garantie de A dépend du contrat de B.</button></li>
+          </ol>
+          <p class="why" hidden>Selon <code>docs/09-vg-mesh.md</code>, une preuve d'appelant qui repose sur le <code>POST</code> d'une liaison Mesh n'est jamais plus forte que l'évidence de cette liaison.</p>
+        </div>
+
+        <div class="quiz">
+          <span class="label">Question 3</span>
+          <p class="q">Quel est le rôle du fichier <code>vg.lock</code> après l'exécution de <code>vg mesh resolve</code> ?</p>
+          <ol>
+            <li><button class="choice">Il stocke les clefs privées Ed25519 des auteurs du projet.</button></li>
+            <li><button class="choice" data-right>Il épingle chaque étiquette <code>@MESH_QUERY</code> vers les empreintes exactes du nœud et de son <code>SPEC</code>, rendant les vérifications et compilations suivantes déterministes.</button></li>
+          </ol>
+          <p class="why" hidden><code>vg.lock</code> fige le lien entre un nom local (<code>@sha256</code>) et son empreinte immuable (<code>7ddf55ff…</code>), tandis que les objets eux-mêmes sont copiés dans <code>.vg/objects</code>.</p>
+        </div>
+
+        <aside class="note note-key">
+          <b>À retenir</b>
+          <p>VG-Mesh substitue la recherche par contrat et classe de spécification aux noms de paquets, vérifie chaque soumission à l'entrée et la consigne dans un journal Merkle C2SP auditable, puis épingle les dépendances résolues dans <code>vg.lock</code> pour que <code>vg verify</code> et <code>vg build</code> restent entièrement reproductibles.</p>
+        </aside>
+      </section>
+
+    </article>
+  </div>
+  <nav class="pager wrap" id="pager" aria-label="Chapitres voisins"></nav>
+</main>
+<footer class="foot"></footer>
+<script type="module" src="js/pages/mesh.js"></script>

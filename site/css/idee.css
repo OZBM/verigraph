@@ -1,0 +1,154 @@
+/* Styles propres au chapitre 1 (idee.html). */
+
+.gap-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-bottom: 1.1rem;
+}
+
+.gap-modes .btn[aria-pressed="true"] {
+  background: var(--proven);
+  color: var(--night);
+  border-color: var(--proven);
+}
+
+.gap-modes .btn.bad-active[aria-pressed="true"] {
+  background: var(--coral);
+  color: var(--night);
+  border-color: var(--coral);
+}
+
+.gap-band {
+  position: relative;
+  padding: 1.1rem 1rem 1.2rem;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--deep);
+}
+
+.gap-axis-labels {
+  display: flex;
+  justify-content: space-between;
+  font: .74rem/1.3 var(--mono);
+  color: var(--faint);
+  margin-bottom: .5rem;
+}
+
+.gap-track {
+  position: relative;
+  height: 18px;
+  border-radius: 99px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+}
+
+.gap-coverage {
+  height: 100%;
+  width: 0%;
+  transition: width .45s var(--vg-out), background .3s var(--vg-out);
+}
+
+.gap-coverage.is-partial {
+  width: 14%;
+  margin-left: 43%;
+  background: color-mix(in srgb, var(--proven) 55%, transparent);
+}
+
+.gap-coverage.is-broken {
+  width: 100%;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--coral) 55%, transparent), color-mix(in srgb, var(--proven) 25%, transparent) 22%, color-mix(in srgb, var(--proven) 25%, transparent) 78%, color-mix(in srgb, var(--coral) 55%, transparent));
+}
+
+.gap-coverage.is-proven {
+  width: 100%;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--proven) 75%, transparent), var(--proven), color-mix(in srgb, var(--proven) 75%, transparent));
+}
+
+.gap-summary {
+  margin: .9rem 0 0;
+  font: .86rem/1.5 var(--mono);
+  color: var(--ink-2);
+}
+
+.gap-table-wrap {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+  background: var(--deep);
+}
+
+.gap-table-wrap table {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: .82rem;
+}
+
+.guarantees-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 1.6rem 0 1.8rem;
+}
+
+.g-col {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-color: color-mix(in srgb, var(--g-accent, var(--proven)) 55%, var(--line));
+  border-radius: 12px;
+  padding: 1.1rem;
+}
+
+.g-col.is-proven { --g-accent: var(--proven); }
+.g-col.is-measured { --g-accent: var(--amber); }
+.g-col.is-out { --g-accent: var(--coral); }
+
+.g-col .label {
+  color: var(--g-accent);
+  display: block;
+  margin-bottom: .45rem;
+}
+
+.g-col h3 {
+  margin: 0 0 .7rem;
+  font-size: 1.05rem;
+}
+
+.g-col ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: .92rem;
+}
+
+.comp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .6rem;
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+.comp-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .3rem .65rem;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  font: .78rem/1.3 var(--mono);
+  text-decoration: none;
+}
+
+.comp-links a:hover {
+  border-color: var(--proven);
+}
+
+@media (max-width: 860px) {
+  .guarantees-grid {
+    grid-template-columns: 1fr;
+  }
+}

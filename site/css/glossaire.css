@@ -1,0 +1,92 @@
+/* Styles spécifiques au glossaire */
+.gloss-controls {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  margin: 0 0 1.8rem;
+  max-width: var(--measure);
+}
+.gloss-search {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .65rem;
+  align-items: center;
+  margin-top: .45rem;
+}
+.alpha-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: .85rem;
+}
+.alpha-nav a {
+  font: 500 .78rem/1 var(--mono);
+  text-decoration: none;
+  color: var(--muted);
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: .4rem .55rem;
+  transition: color .2s var(--vg-out), border-color .2s var(--vg-out);
+}
+.alpha-nav a:hover,
+.alpha-nav a:focus-visible {
+  color: var(--proven);
+  border-color: var(--proven);
+}
+.gloss-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: .9rem;
+  max-width: var(--measure);
+}
+.gloss-item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: .95rem 1.1rem;
+}
+.gloss-item[hidden] {
+  display: none;
+}
+.gloss-item dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem .8rem;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+  margin: 0 0 .4rem;
+}
+.gloss-item dt a.ch-link {
+  font: 500 .74rem/1 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--proven);
+  text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--proven) 35%, transparent);
+  padding: .24rem .5rem;
+  border-radius: 99px;
+}
+.gloss-item dt a.ch-link:hover {
+  background: color-mix(in srgb, var(--proven) 12%, transparent);
+}
+.gloss-item dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: .96rem;
+  line-height: 1.55;
+}
+section.gloss-letter[hidden] {
+  display: none;
+}
+#gloss-empty[hidden] {
+  display: none;
+}
