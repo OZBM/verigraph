@@ -2649,11 +2649,15 @@ fn emit_main_runner(m: &mut ModBuilder, graph: &CallGraph) -> Result<(), Diagnos
     m.require_decl("declare void @vg_io_write_exact(ptr, i64)");
     m.require_decl("declare void @vg_io_flush_stdout()");
     m.require_decl("declare i32 @vg_rt_resolve_handle(ptr, i32, i8)");
+    m.require_decl("declare void @vg_rt_set_args(i32, ptr)");
+    m.require_decl("declare void @vg_rt_sandbox()");
 
     let root = &graph.order.last().expect("graph has root").1;
     let prefix = &graph.prefixes[&graph.root_hash];
 
     let mut f = FnBuilder::new();
+    // The command line binds the root's handles (docs/04).
+    f.emit("call void @vg_rt_set_args(i32 %argc, ptr %argv)");
     // Generous opaque vg_ctx buffer (16-byte aligned)
     let ctx_ptr = f.alloca("[128 x i8]", 16);
     let triple_str = m.intern_cstr(m.target.triple());
@@ -2821,6 +2825,8 @@ fn emit_main_runner(m: &mut ModBuilder, graph: &CallGraph) -> Result<(), Diagnos
         out_bufs.push((ty.clone(), buf));
     }
 
+    // Every handle is open: drop all other authority before the root runs (docs/04).
+    f.emit("call void @vg_rt_sandbox()");
     let rc = f.reg();
     f.emit(format!(
         "{rc} = call i32 @vg_{prefix}({})",

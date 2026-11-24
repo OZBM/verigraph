@@ -7,8 +7,10 @@ vg hash FILE...                               print node, body and contract hash
 vg check FILE.vgs                             parse, canonicalize, type- and effect-check (JSON)
 vg verify FILE.vgs [--mode M] [--timeout MS]  prove every obligation with the SMT solvers (JSON)
 vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
-vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
+vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--timeout MS] [--unverified] [--emit-llvm]
                                               verify, then compile (default target: aarch64-apple-darwin)
+vg loop (DIR | PROMPT.md) [--model M] [--rounds N] [--replay SCRIPT] [-o DIR]
+                                              the hosted loop: a model writes nodes, a grader judges them
 vg mcp                                        serve vg_check, vg_verify, vg_run, vg_build over MCP stdio
 ```
 
@@ -83,10 +85,11 @@ effect host, so effect ops find no files or clocks: use `vg run` on pure nodes.
 ## vg build
 
 ```bash
-vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
+vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--timeout MS] [--unverified] [--emit-llvm]
 ```
 
-Verifies `@NODE` and everything it calls (10-second timeout per obligation), then compiles it with
+Verifies `@NODE` and everything it calls (`--timeout`, default 10 seconds per obligation, reusing the
+proof records in `<root>/.vg/proofs`), then compiles it with
 clang. Targets: `aarch64-apple-darwin` (the default), `x86_64-unknown-linux-gnu` and `wasm32-wasip1`;
 repeat `--target` for several. Each artifact is written to `DIR/<label>-<target>` (default DIR:
 `target/vg`).
@@ -94,15 +97,42 @@ repeat `--target` for several. Each artifact is written to `DIR/<label>-<target>
 - A fully proven node builds with proof facts and no runtime checks.
 - A node that is not fully proven is refused, and the result carries the `verify` report. With
   `--unverified` it builds with a runtime check on every partial op.
+- `--emit-llvm` also writes each target's LLVM IR to `DIR/<label>-<target>.ll`, for linking a node
+  into another program; `benchmarks/kernels` does that to time a call in-process.
 
 | Field | Content |
 | --- | --- |
 | `ok`, `verified` | the build succeeded; every obligation was proven |
 | `artifacts` | `target`, `path`, `bytes`, `blake3` (of the file), `linked` (`false` for an object file), `residual_guards` |
+| `manifest` | the path of `DIR/<label>.manifest.toml`, which names each handle and what binds it (docs/04) |
 | `error`, `verify` | why a build was refused, and the verification result |
 
-In version 0, only `aarch64-apple-darwin` produces a linked executable. The other two targets produce
-object files (`"linked": false`) until a Linux sysroot and wasi-sdk are set up.
+`aarch64-apple-darwin` links with the host clang, `x86_64-unknown-linux-gnu` with `zig cc`, and
+`wasm32-wasip1` with Homebrew's LLVM and its WASI sysroot. A target whose toolchain is missing gives
+an object file (`"linked": false`). Two builds of one node give the same bytes.
+
+## vg loop
+
+```bash
+vg loop benchmarks/synthesis [--model claude-opus-5-5] [--rounds 5] [-o reports/g5]
+vg loop examples/audio_limiter.prompt.md -o reports/m1
+vg loop DIR --replay SCRIPT.json
+```
+
+The hosted loop of docs/07 (P5.7, G5). For each task, a hosted model gets the request, the synthesis
+skill and three tools, `vg_check`, `vg_verify` (each call is one repair round, at most `--rounds`)
+and `submit`. A grader then judges what was submitted, trusting nothing the model said: the node must
+verify, meet the task's reference contract (proven through a wrapper that calls it), and pass the
+task's tests in vg-interp; a verified node that breaks its own contract on a test input is an
+unsound accept. It writes `results.json`, the file `make gate-g5` reads, and one transcript per task.
+A Markdown prompt file is one task with no reference contract, graded on verification alone (M1.1).
+
+The model is called through the Anthropic Messages API with `curl`; the key comes from
+`ANTHROPIC_API_KEY` and is written only to a temporary header file. **This spends money.** By our
+estimate, not a measurement, a 30-task run with Claude Opus 5.5 uses about 1.5 million input and
+150,000 output tokens, around $9 before prompt caching, which the loop turns on. `--replay` plays
+scripted model turns from a file instead, `{"<task id>": [<API response>, …]}`, and costs nothing;
+the tests use it.
 
 ## vg asm, vg disasm, vg hash
 
@@ -151,6 +181,14 @@ byte form of docs/13:
   little-endian at their width, floats as their IEEE bits little-endian, arrays and tensors as their
   elements, row-major. docs/13 and docs/06 give the layout of the other types.
 - The results follow the same rules, in order.
+- A root's `FileIn` and `FileOut` handles bind, in parameter order, to the command-line arguments:
+  the first file handle to the first argument, and so on; `-` means stdin for a `FileIn` and stdout
+  for a `FileOut`. A `FileOut` appends. A `Clock` takes no argument. The build's manifest lists the
+  bindings.
+- Once its handles are open, the program drops every other authority before the root runs (ADR
+  0011): on macOS a deny-by-default `sandbox_init` profile, on Linux Landlock and a seccomp filter
+  that refuses sockets, and under WASI only the directories the runner preopens
+  (`wasmtime run --dir DIR`). Nothing else on disk can be opened.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -159,6 +197,7 @@ byte form of docs/13:
 | 2 | The input bytes do not decode: too few bytes, or a non-canonical NaN |
 | 3 | The arena is exhausted |
 | 4 | A runtime check failed (only in `--unverified` builds) |
+| 5 | A handle's argument is missing or cannot be opened, or the OS sandbox cannot be applied (on Linux, a kernel without Landlock) |
 
 ```bash
 printf '\007\000\000\000\002\000\000\000' | target/vg/safe_div-aarch64-apple-darwin | xxd

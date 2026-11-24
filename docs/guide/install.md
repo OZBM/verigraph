@@ -9,9 +9,13 @@
 | Bitwuzla | 0.11.0, pinned in `toolchain.lock` | float queries; `vg verify --mode release` | macOS: `brew install bitwuzla`. Optional: without it z3 takes the float queries |
 | cvc5 | 1.4.2, pinned in `toolchain.lock` | `vg verify --mode release` | The release binary from the cvc5 GitHub releases. Optional: release mode needs two of the three solvers |
 | clang | Apple clang 21 on macOS; Homebrew LLVM 23.1.6 for wasm32 | `vg build` | Xcode, then `xcode-select --install`, for aarch64-apple-darwin. `brew install llvm` for `--target wasm32-wasip1`, which `vg` builds with Homebrew's clang when it is installed: Apple clang before Xcode 27 has no wasm32 target, so without Homebrew LLVM that target fails with VG-B0002 there |
+| zig | 0.17.1, pinned in `toolchain.lock` | `vg build --target x86_64-unknown-linux-gnu` | `brew install zig`. Optional: without it that target gives an object file |
+| WASI sysroot | Homebrew `wasi-libc` 34 and `wasi-runtimes` 23.1.6 | `vg build --target wasm32-wasip1` | `brew install wasi-libc wasi-runtimes`, with Homebrew `llvm`. Optional: without them that target gives an object file |
+| wasmtime | 51.0.0 | running `wasm32-wasip1` programs | `brew install wasmtime`. Optional |
 
 Version 0 is built for macOS on Apple Silicon. On Linux x86_64, `vg check`, `vg verify`, `vg run` and
-`vg mcp` work, and `vg build` can only produce object files (see [Troubleshooting](troubleshooting.md)).
+`vg mcp` work, and `vg build` links x86_64 programs when zig is installed (see
+[Troubleshooting](troubleshooting.md)).
 
 ## Build and install `vg`
 

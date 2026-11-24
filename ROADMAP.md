@@ -136,7 +136,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P5.4 Tier 2 incremental checker API, consumed later by R-01
 - [ ] P5.5 skills/verigraph-synthesis/SKILL.md kept in sync; its examples checked in CI
 - [ ] P5.6 benchmarks/synthesis: 30 tasks with request, reference contract and tests; grown to 50 for R-01 and R-09
-- [ ] P5.7 Hosted-loop harness: drive a hosted model through the tools; record rounds, tokens and outcomes
+- [x] P5.7 Hosted-loop harness: drive a hosted model through the tools; record rounds, tokens and outcomes
 
 ### P6 · Telemetry — W2 — Nov 18 → Dec 2 — G6
 - [ ] P6.1 Backward slice from a failed obligation, pruned by delta debugging

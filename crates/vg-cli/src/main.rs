@@ -2,6 +2,7 @@
 //! `vg build`, `vg explain`, `vg mesh` and `vg mcp`, whose results are the docs/15 JSON of the MCP
 //! tools of the same names.
 
+mod hosted;
 mod json;
 mod mcp;
 mod mesh;
@@ -24,7 +25,7 @@ const USAGE: &str = "usage:
                                                 prove every obligation; release needs two solvers (JSON)
   vg explain FILE.vgs OBLIGATION [--timeout MS] the failure report of one obligation, and its prose
   vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
-  vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--unverified]
+  vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--timeout MS] [--unverified] [--emit-llvm]
                                                 verify, then compile (default target: aarch64-apple-darwin)
   vg lift FILE FUNCTION [--lang c|rust] [--root DIR]
                                                 lift a C or Rust function with Alive2 and fuzzing (JSON)
@@ -32,6 +33,8 @@ const USAGE: &str = "usage:
   vg mesh query QUERY.json [--root DIR]         candidates for a docs/09 MeshContractQuery
   vg mesh resolve FILE.vgs [--root DIR]         bind each @MESH_QUERY, pin it in vg.lock, fetch its nodes
   vg mesh serve [--root DIR] [--addr HOST:PORT] the registry's HTTP API (default 127.0.0.1:7878)
+  vg loop (DIR | PROMPT.md) [--model M] [--rounds N] [--replay SCRIPT] [-o DIR]
+                                                the hosted loop: a model writes nodes, a grader judges them
   vg mcp                                        serve the eight docs/15 tools over MCP stdio";
 
 fn main() -> ExitCode {
@@ -74,9 +77,15 @@ struct Opts {
     targets: Vec<String>,
     out: PathBuf,
     unverified: bool,
+    emit_llvm: bool,
     detail: u8,
     addr: String,
     lang: Option<String>,
+    out_set: bool,
+    model: String,
+    replay: Option<PathBuf>,
+    rounds: usize,
+    skill: PathBuf,
 }
 
 fn opts(args: &[String]) -> Result<Opts, Fail> {
@@ -89,9 +98,15 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
         targets: vec![],
         out: PathBuf::from("target/vg"),
         unverified: false,
+        emit_llvm: false,
         detail: 1,
         addr: "127.0.0.1:7878".into(),
         lang: None,
+        out_set: false,
+        model: "claude-opus-5-5".into(),
+        replay: None,
+        rounds: 5,
+        skill: PathBuf::from("skills/verigraph-synthesis/SKILL.md"),
     };
     let value = |it: &mut std::slice::Iter<String>, what: &str| {
         it.next()
@@ -117,8 +132,20 @@ fn opts(args: &[String]) -> Result<Opts, Fail> {
             }
             "--mode" => o.mode = Some(value(&mut it, "--mode")?),
             "--target" => o.targets.push(value(&mut it, "--target")?),
-            "-o" => o.out = value(&mut it, "-o")?.into(),
+            "-o" => {
+                o.out = value(&mut it, "-o")?.into();
+                o.out_set = true;
+            }
+            "--model" => o.model = value(&mut it, "--model")?,
+            "--replay" => o.replay = Some(value(&mut it, "--replay")?.into()),
+            "--skill" => o.skill = value(&mut it, "--skill")?.into(),
+            "--rounds" => {
+                o.rounds = value(&mut it, "--rounds")?
+                    .parse()
+                    .map_err(|_| Fail::Usage("--rounds takes a count".into()))?
+            }
             "--unverified" => o.unverified = true,
+            "--emit-llvm" => o.emit_llvm = true,
             "--detail" => {
                 o.detail = match value(&mut it, "--detail")?.as_str() {
                     "0" => 0,
@@ -332,7 +359,19 @@ fn run(args: &[String]) -> Result<(), Fail> {
                     } else {
                         o.targets.clone()
                     };
-                    tools::build(&src, &env, node, &targets, &o.out, o.unverified)
+                    let mut smt = tools::mode_options(o.mode.as_deref(), o.timeout_ms)
+                        .map_err(Fail::Usage)?;
+                    smt.cache = Some(o.root.join(".vg").join("proofs"));
+                    tools::build(
+                        &src,
+                        &env,
+                        node,
+                        &targets,
+                        &o.out,
+                        &smt,
+                        o.unverified,
+                        o.emit_llvm,
+                    )
                 }
                 _ => return Err(Fail::Usage(format!("wrong arguments for {cmd}"))),
             };
@@ -354,6 +393,42 @@ fn run(args: &[String]) -> Result<(), Fail> {
             } else {
                 Err(Fail::Error(String::new()))
             }
+        }
+        "loop" => {
+            let [path] = o.files.as_slice() else {
+                return Err(Fail::Usage(
+                    "loop takes a tasks directory or a prompt file".into(),
+                ));
+            };
+            let tasks = hosted::load_tasks(Path::new(path)).map_err(error)?;
+            let skill = std::fs::read_to_string(&o.skill)
+                .map_err(|e| error(format!("{}: {e}", o.skill.display())))?;
+            let mut provider: Box<dyn hosted::Provider> = match &o.replay {
+                Some(script) => Box::new(hosted::Replay::load(script).map_err(error)?),
+                None => Box::new(hosted::Anthropic::from_env().map_err(error)?),
+            };
+            let out_dir = if o.out_set {
+                o.out.clone()
+            } else {
+                PathBuf::from("reports/g5")
+            };
+            let (no_mesh, no_fetch) = (|_: &str| None, |_: &Hash| None);
+            let env = tools::Env {
+                mesh: &no_mesh,
+                fetch: &no_fetch,
+            };
+            let results = hosted::run_all(
+                &tasks,
+                provider.as_mut(),
+                &o.model,
+                o.rounds,
+                &skill,
+                &out_dir,
+                &env,
+            )
+            .map_err(error)?;
+            println!("{}", serde_json::to_string_pretty(&results).expect("JSON"));
+            Ok(())
         }
         "mcp" => mcp::serve().map_err(error),
         c => Err(Fail::Usage(format!("unknown command {c}"))),

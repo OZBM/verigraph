@@ -26,8 +26,13 @@ Likewise `t.0.1` lexes as `t`, `.`, `0.1`: write `(t.0).1`.
 **`vg build` says "not every obligation is proven".** Fix the obligations first. To build anyway, with
 a runtime check on every partial op, add `--unverified`.
 
-**`vg build` for `x86_64-unknown-linux-gnu` or `wasm32-wasip1` gives `"linked": false`.** Version 0
-compiles those targets to object files only; linking needs a Linux sysroot and wasi-sdk.
+**`vg build` for `x86_64-unknown-linux-gnu` or `wasm32-wasip1` gives `"linked": false`.** That
+target's linker is missing: `zig` for x86_64 Linux, Homebrew's `llvm`, `wasi-libc` and
+`wasi-runtimes` for WASM ([Installation](install.md)). The object file is still built.
+
+**A built program exits with code 5.** A handle's command-line argument is missing or names a file
+that cannot be opened (`vg-rt: cannot open …` on stderr), or the OS sandbox could not be applied:
+on Linux the kernel needs Landlock (5.13 or later, enabled). The program never runs unsandboxed.
 
 **VG-S0009.** A `@MESH_QUERY` label has no pin in `vg.lock`. Version 0 cannot query VG-Mesh yet, so
 `examples/audio_limiter.vgs`'s `@limit_frame`, which calls a SHA-256 from Mesh, does not check;

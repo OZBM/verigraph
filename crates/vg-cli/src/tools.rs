@@ -403,23 +403,26 @@ fn target(name: &str) -> Option<vg_codegen::Target> {
 /// vg_build: verify the root and everything it calls, then compile it for each target. With
 /// `unverified`, a node that is not fully proven still builds, with a runtime check on every partial
 /// op (exit code 4 when one fails) and no proof facts.
+#[allow(clippy::too_many_arguments)]
 pub fn build(
     src: &str,
     env: &Env,
     root: &str,
     targets: &[String],
     out_dir: &Path,
+    smt: &vg_smt::Options,
     unverified: bool,
+    emit_llvm: bool,
 ) -> J {
     let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
-    let a = match m.find(root) {
-        Ok((a, _)) => a,
+    let (a, d) = match m.find(root) {
+        Ok(x) => x,
         Err(e) => return json!({ "ok": false, "error": e }),
     };
-    let (proven, report) = verify_nodes(&m, &m.closure(a), &solver_options(10_000), 1);
+    let (proven, report) = verify_nodes(&m, &m.closure(a), smt, 1);
     if !proven && !unverified {
         return json!({
             "ok": false,
@@ -439,6 +442,22 @@ pub fn build(
             runtime_checks: !proven,
         };
         let out = out_dir.join(format!("{}-{t}", a.label));
+        // The module's textual IR, for linking a node into another program (benchmarks/kernels).
+        if emit_llvm {
+            let ll = out_dir.join(format!("{}-{t}.ll", a.label));
+            let written = vg_codegen::emit_llvm(&a.node, &callee, &opts)
+                .map_err(|d| json!({ "ok": false, "diagnostics": [diag(&d)] }))
+                .and_then(|ir| {
+                    std::fs::create_dir_all(out_dir)
+                        .and_then(|()| std::fs::write(&ll, ir))
+                        .map_err(
+                            |e| json!({ "ok": false, "error": format!("{}: {e}", ll.display()) }),
+                        )
+                });
+            if let Err(j) = written {
+                return j;
+            }
+        }
         match vg_codegen::build(&a.node, &callee, &opts, &out) {
             Ok(r) => {
                 let bytes = std::fs::read(&r.artifact).unwrap_or_default();
@@ -454,7 +473,40 @@ pub fn build(
             Err(d) => return json!({ "ok": false, "diagnostics": [diag(&d)] }),
         }
     }
-    json!({ "ok": true, "verified": proven, "artifacts": artifacts })
+    let manifest = out_dir.join(format!("{}.manifest.toml", a.label));
+    if let Err(e) = std::fs::write(&manifest, root_manifest(a, d)) {
+        return json!({ "ok": false, "error": format!("{}: {e}", manifest.display()) });
+    }
+    json!({
+        "ok": true, "verified": proven, "artifacts": artifacts,
+        "manifest": manifest.display().to_string(),
+    })
+}
+
+/// docs/04's manifest of a root: each handle parameter and what binds it. A FileIn or FileOut
+/// takes the next command-line argument, in parameter order ("-" for stdin or stdout), as vg-rt
+/// opens them; once they are open the OS sandbox grants nothing else (ADR 0011).
+fn root_manifest(a: &Assembled, d: &NodeDef) -> String {
+    use vg_core::types::{Handle, Type};
+    let mut s = format!("format = 1\nroot = \"@{}\"\n", a.label);
+    let mut argv = 0;
+    for (p, ty) in d.params.iter().zip(&a.node.params) {
+        let kind = match ty {
+            Type::Handle(Handle::FileIn) => "FileIn",
+            Type::Handle(Handle::FileOut) => "FileOut",
+            Type::Handle(Handle::Clock) => "Clock",
+            _ => continue,
+        };
+        s += &format!(
+            "\n[[handle]]\nparam = \"{}\"\nkind = \"{kind}\"\n",
+            p.name.text
+        );
+        if kind != "Clock" {
+            argv += 1;
+            s += &format!("path = {{ argv = {argv} }}\n");
+        }
+    }
+    s
 }
 
 /// vg_lift: lift a C or Rust function through OmniLift (P8.7, docs/08, docs/15).

@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#if defined(__linux__)
+#define _DEFAULT_SOURCE /* syscall(2), for Landlock */
+#endif
 
 #include "vg_rt.h"
 
@@ -11,10 +14,20 @@
 #include <time.h>
 #include <unistd.h>
 
+#if defined(__APPLE__)
+/* Deprecated by Apple, and still the one way to sandbox a process after it starts (ADR 0011). */
+int sandbox_init(const char *profile, uint64_t flags, char **errorbuf);
+#elif defined(__linux__)
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <stddef.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#endif
+
 #define VG_MAX_HANDLES 35u
-#define VG_ENV_HANDLES 32u
-#define VG_DEF_FILE_IN 32u
-#define VG_DEF_FILE_OUT 33u
+#define VG_ROOT_HANDLES 34u
 #define VG_DEF_CLOCK 34u
 
 static _Alignas(16) uint8_t vg_empty_sentinel[16] = {0};
@@ -69,6 +82,17 @@ static int vg_parse_u64(const char *s, uint64_t *out) {
     return 1;
 }
 
+/* The command line, for the manifest's argv bindings (docs/04); main hands it over first. */
+static int vg_argc = 0;
+static char **vg_argv = NULL;
+static int vg_next_arg = 1;
+
+void vg_rt_set_args(int argc, char **argv) {
+    vg_argc = argc;
+    vg_argv = argv;
+    vg_next_arg = 1;
+}
+
 static void vg_init_handles(vg_ctx *ctx) {
     ctx->handles = (vg_handle *)calloc(VG_MAX_HANDLES, sizeof(vg_handle));
     if (!ctx->handles) {
@@ -81,67 +105,125 @@ static void vg_init_handles(vg_ctx *ctx) {
         ctx->handles[i].owned = 0;
         ctx->handles[i].configured = 0;
     }
-
-    for (uint32_t i = 0; i < VG_ENV_HANDLES; ++i) {
-        char key[32];
-        snprintf(key, sizeof(key), "VG_HANDLE_%u", i);
-        const char *spec = getenv(key);
-        if (!spec || !*spec) {
-            continue;
-        }
-        ctx->handles[i].configured = 1;
-        if (strcmp(spec, "stdin") == 0) {
-            ctx->handles[i].fd = STDIN_FILENO;
-            ctx->handles[i].kind = VG_HANDLE_FILE_IN;
-            ctx->handles[i].owned = 0;
-        } else if (strcmp(spec, "stdout") == 0) {
-            ctx->handles[i].fd = STDOUT_FILENO;
-            ctx->handles[i].kind = VG_HANDLE_FILE_OUT;
-            ctx->handles[i].owned = 0;
-        } else if (strcmp(spec, "clock") == 0) {
-            ctx->handles[i].fd = -1;
-            ctx->handles[i].kind = VG_HANDLE_CLOCK;
-            ctx->handles[i].owned = 0;
-        } else if (strncmp(spec, "in:", 3) == 0) {
-            int fd = open(spec + 3, O_RDONLY);
-            ctx->handles[i].fd = fd;
-            ctx->handles[i].kind = VG_HANDLE_FILE_IN;
-            ctx->handles[i].owned = (fd >= 0) ? 1 : 0;
-        } else if (strncmp(spec, "out:", 4) == 0) {
-            int fd = open(spec + 4, O_WRONLY | O_CREAT | O_APPEND, 0644);
-            ctx->handles[i].fd = fd;
-            ctx->handles[i].kind = VG_HANDLE_FILE_OUT;
-            ctx->handles[i].owned = (fd >= 0) ? 1 : 0;
-        }
-    }
-
-    ctx->handles[VG_DEF_FILE_IN].fd = STDIN_FILENO;
-    ctx->handles[VG_DEF_FILE_IN].kind = VG_HANDLE_FILE_IN;
-    ctx->handles[VG_DEF_FILE_IN].owned = 0;
-
-    ctx->handles[VG_DEF_FILE_OUT].fd = STDOUT_FILENO;
-    ctx->handles[VG_DEF_FILE_OUT].kind = VG_HANDLE_FILE_OUT;
-    ctx->handles[VG_DEF_FILE_OUT].owned = 0;
-
-    ctx->handles[VG_DEF_CLOCK].fd = -1;
     ctx->handles[VG_DEF_CLOCK].kind = VG_HANDLE_CLOCK;
-    ctx->handles[VG_DEF_CLOCK].owned = 0;
+    ctx->handles[VG_DEF_CLOCK].configured = 1;
 }
 
-uint32_t vg_rt_resolve_handle(const vg_ctx *ctx, uint32_t param_ord, uint8_t kind) {
-    if (ctx && param_ord < VG_ENV_HANDLES && ctx->handles && ctx->handles[param_ord].configured) {
-        return param_ord;
-    }
-    if (kind == VG_HANDLE_FILE_IN) {
-        return VG_DEF_FILE_IN;
-    }
-    if (kind == VG_HANDLE_FILE_OUT) {
-        return VG_DEF_FILE_OUT;
-    }
+/* docs/04: the root's FileIn and FileOut handles bind, in parameter order, to the next command-line
+ * argument, "-" meaning stdin for a FileIn and stdout for a FileOut; a Clock needs none. A FileOut
+ * appends, so an existing file loses nothing. A handle that cannot be opened ends the process with
+ * exit code 5 before the root runs. */
+uint32_t vg_rt_resolve_handle(vg_ctx *ctx, uint32_t param_ord, uint8_t kind) {
     if (kind == VG_HANDLE_CLOCK) {
         return VG_DEF_CLOCK;
     }
-    return 0u;
+    if (!ctx || !ctx->handles || param_ord >= VG_ROOT_HANDLES ||
+        (kind != VG_HANDLE_FILE_IN && kind != VG_HANDLE_FILE_OUT)) {
+        fprintf(stderr, "vg-rt: handle %u has no binding\n", param_ord);
+        exit(5);
+    }
+    if (!vg_argv || vg_next_arg >= vg_argc) {
+        fprintf(stderr, "vg-rt: handle %u needs a path argument (or - for %s)\n", param_ord,
+                kind == VG_HANDLE_FILE_IN ? "stdin" : "stdout");
+        exit(5);
+    }
+    const char *path = vg_argv[vg_next_arg++];
+    int fd;
+    uint8_t owned = 0;
+    if (strcmp(path, "-") == 0) {
+        fd = kind == VG_HANDLE_FILE_IN ? STDIN_FILENO : STDOUT_FILENO;
+    } else {
+        fd = kind == VG_HANDLE_FILE_IN ? open(path, O_RDONLY)
+                                       : open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        owned = 1;
+    }
+    if (fd < 0) {
+        fprintf(stderr, "vg-rt: cannot open %s: %s\n", path, strerror(errno));
+        exit(5);
+    }
+    ctx->handles[param_ord].fd = fd;
+    ctx->handles[param_ord].kind = kind;
+    ctx->handles[param_ord].owned = owned;
+    ctx->handles[param_ord].configured = 1;
+    return param_ord;
+}
+
+#if defined(__linux__)
+/* Landlock's interface, defined here so older kernel headers still compile (ABI 1 to 4). */
+#define VG_LANDLOCK_CREATE_RULESET_VERSION 1u
+#define VG_LANDLOCK_FS_ABI1 ((1ULL << 13) - 1) /* EXECUTE ... MAKE_SYM */
+#define VG_LANDLOCK_FS_REFER (1ULL << 13)
+#define VG_LANDLOCK_FS_TRUNCATE (1ULL << 14)
+#define VG_LANDLOCK_NET_TCP 3ULL /* BIND_TCP | CONNECT_TCP */
+#ifndef SYS_landlock_create_ruleset
+#define SYS_landlock_create_ruleset 444
+#define SYS_landlock_restrict_self 446
+#endif
+#if defined(__x86_64__)
+#define VG_AUDIT_ARCH AUDIT_ARCH_X86_64
+#elif defined(__aarch64__)
+#define VG_AUDIT_ARCH AUDIT_ARCH_AARCH64
+#endif
+
+static void vg_sandbox_fail(const char *what) {
+    fprintf(stderr, "vg-rt: %s; a VeriGraph program does not run unsandboxed\n", what);
+    exit(5);
+}
+#endif
+
+/* docs/04: once its handles are open, the process drops every other authority, so it keeps exactly
+ * the descriptors its manifest names. macOS: a deny-by-default profile. Linux: a Landlock ruleset
+ * that handles every filesystem right and grants none (and from ABI 4 every TCP right), plus a
+ * seccomp filter that makes socket fail with EPERM. WASM: WASI already holds only its preopens. */
+void vg_rt_sandbox(void) {
+#if defined(__APPLE__)
+    char *err = NULL;
+    if (sandbox_init("(version 1)(deny default)", 0, &err) != 0) {
+        fprintf(stderr, "vg-rt: sandbox_init failed: %s\n", err ? err : "unknown error");
+        exit(5);
+    }
+#elif defined(__linux__)
+    long abi = syscall(SYS_landlock_create_ruleset, NULL, 0, VG_LANDLOCK_CREATE_RULESET_VERSION);
+    if (abi < 1) {
+        vg_sandbox_fail("this kernel has no Landlock");
+    }
+    struct {
+        uint64_t handled_access_fs;
+        uint64_t handled_access_net;
+    } attr = {VG_LANDLOCK_FS_ABI1, 0};
+    if (abi >= 2) {
+        attr.handled_access_fs |= VG_LANDLOCK_FS_REFER;
+    }
+    if (abi >= 3) {
+        attr.handled_access_fs |= VG_LANDLOCK_FS_TRUNCATE;
+    }
+    size_t attr_size = sizeof(uint64_t);
+    if (abi >= 4) {
+        attr.handled_access_net = VG_LANDLOCK_NET_TCP;
+        attr_size = sizeof(attr);
+    }
+    long rfd = syscall(SYS_landlock_create_ruleset, &attr, attr_size, 0);
+    if (rfd < 0 || prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 ||
+        syscall(SYS_landlock_restrict_self, rfd, 0) != 0) {
+        vg_sandbox_fail("Landlock could not be applied");
+    }
+    close((int)rfd);
+    struct sock_filter filter[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, VG_AUDIT_ARCH, 1, 0),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+        /* x32 numbers on x86_64 would otherwise reach socket past the next check. */
+        BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x40000000u, 1, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_socket, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog prog = {(unsigned short)(sizeof(filter) / sizeof(filter[0])), filter};
+    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) != 0) {
+        vg_sandbox_fail("the seccomp filter could not be applied");
+    }
+#endif
 }
 
 void vg_rt_init(vg_ctx *ctx, uint64_t arena_bytes, const char *target_triple) {

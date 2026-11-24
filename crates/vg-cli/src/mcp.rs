@@ -208,6 +208,11 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
                 str_arg("root"),
                 &targets,
                 std::path::Path::new(out),
+                &vg_smt::Options {
+                    cache: Some(std::path::PathBuf::from(".vg/proofs")),
+                    ..tools::solver_options(10_000)
+                },
+                false,
                 false,
             )
         }

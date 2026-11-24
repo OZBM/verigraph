@@ -59,7 +59,9 @@ typedef struct {
 /* Lifecycle and bump arena */
 void vg_rt_init(vg_ctx *ctx, uint64_t arena_bytes, const char *target_triple);
 void vg_rt_destroy(vg_ctx *ctx);
-uint32_t vg_rt_resolve_handle(const vg_ctx *ctx, uint32_t param_ord, uint8_t kind);
+void vg_rt_set_args(int argc, char **argv);
+uint32_t vg_rt_resolve_handle(vg_ctx *ctx, uint32_t param_ord, uint8_t kind);
+void vg_rt_sandbox(void);
 int32_t vg_arena_has_space(const vg_ctx *ctx, uint64_t needed);
 void *vg_arena_alloc(vg_ctx *ctx, uint64_t bytes);
 void *vg_input_alloc(vg_ctx *ctx, uint64_t bytes);
