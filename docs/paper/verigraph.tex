@@ -1,0 +1,186 @@
+% VeriGraph: formal foundations of a content-addressed, contract-verified program
+% representation for AI agents.
+%
+% Build (either works):
+%   tectonic verigraph.tex
+%   latexmk -pdf verigraph.tex        (pdfLaTeX + BibTeX)
+%
+% Every number in this paper comes from a command named in Section 8 or Appendix C.
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{lmodern}
+\else
+  \usepackage{fontspec}
+\fi
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{stmaryrd}
+\usepackage{booktabs,tabularx,array}
+\usepackage{enumitem}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[colorlinks=true,linkcolor=MidnightBlue,citecolor=MidnightBlue,urlcolor=MidnightBlue]{hyperref}
+\usepackage[capitalise,nameinlink]{cleveref}
+\hypersetup{
+  pdftitle={VeriGraph: Formal Foundations of a Content-Addressed, Contract-Verified Program
+    Representation for AI Agents},
+  pdfauthor={Omar Zakaria Ben Mustapha},
+  pdfkeywords={content-addressed code, program verification, SMT, IEEE 754, AI agents}
+}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\emergencystretch}{3em}
+
+% ---------------------------------------------------------------- theorems
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\crefname{assumption}{Assumption}{Assumptions}
+\crefname{lstlisting}{Listing}{Listings}
+\Crefname{lstlisting}{Listing}{Listings}
+
+% ---------------------------------------------------------------- notation
+\newcommand{\VG}{VeriGraph}
+\newcommand{\sem}[1]{\llbracket #1 \rrbracket}
+\newcommand{\NaN}{\mathsf{NaN}}
+\newcommand{\rn}{\mathrm{rn}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Fl}{\mathbb{F}}
+\newcommand{\op}[1]{\mbox{\textsf{#1}}}
+\newcommand{\kw}[1]{\texttt{#1}}
+\newcommand{\eqC}{\equiv_{C}}
+\newcommand{\unr}{\mathrm{unr}}
+\newcommand{\pre}{\mathrm{pre}}
+\newcommand{\enc}{\mathrm{enc}}
+\newcommand{\dec}{\mathrm{dec}}
+\newcommand{\cat}{\mathbin{\|}}
+\newcommand{\Hop}{H_{\mathsf{op}}}
+\newcommand{\hash}{h}
+\newcommand{\Pre}{\mathit{Pre}}
+\newcommand{\Post}{\mathit{Post}}
+\newcommand{\val}{\mathit{val}}
+\newcommand{\trap}{\mathord{\lightning}}
+\newcommand{\Om}{\Omega}
+\newcommand{\Eff}{\mathsf{Eff}}
+\newcommand{\true}{\mathsf{tt}}
+\newcommand{\false}{\mathsf{ff}}
+\newcommand{\ctx}{\Gamma}
+\newcommand{\file}[1]{\texttt{#1}}
+
+% ---------------------------------------------------------------- listings
+\lstdefinelanguage{vgsym}{
+  morekeywords={module,NODE,SPEC,SIGNATURE,EFFECTS,CONTRACT,PRE,POST,INVARIANT,DECREASES,
+    COST,BUDGET,LEARNABLE,BODY,RETURN,forall,in,result,true,false,signature,effects,pre,
+    post,intent,export,loss},
+  sensitive=true,
+  morecomment=[l]{//},
+  morestring=[b]",
+}
+\lstset{
+  language=vgsym,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{Gray},
+  stringstyle=\color{BrickRed},
+  columns=fullflexible,
+  keepspaces=true,
+  frame=lines,
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=6pt,
+  captionpos=b,
+  upquote=true,
+  showstringspaces=false,
+}
+
+\title{\VG: Formal Foundations of a Content-Addressed,\\
+  Contract-Verified Program Representation for AI Agents}
+\author{Omar Zakaria Ben Mustapha\thanks{The repository is private at the time of writing and is
+  scheduled to become public at milestone M1. Every measurement in this paper names the
+  commit and the command that produced it (\cref{sec:status,app:repro}).}}
+\date{Draft of 6 November 2026 \\[2pt] \small Prototype commit \texttt{fe499c8}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+\VG{} is a programming system designed for software written, checked and repaired by AI
+agents. A program is a set of nodes; each node is a typed, single-assignment dataflow graph of
+combinators with a machine-checked contract, and its identity is a BLAKE3 hash of its
+canonical structure and contract. Contracts are split into obligations, each discharged by
+one quantifier-free SMT query, and every failure is returned as structured data with a
+counterexample that a reference interpreter replays. This paper gives the formal
+foundations of the design. We define a core calculus for nodes and prove that:
+(i)~two bodies have the same hash if and only if their unravelings coincide up to the
+commutativity of designated operations, under an explicit field-capacity condition and the
+standard collision-freeness idealization, and that hash equality implies equal meaning;
+(ii)~hash-consing never merges two effect operations when effect tokens are linear;
+(iii)~no polynomial-time canonical form identifies exactly the semantically equivalent nodes
+unless $\mathrm{P}=\mathrm{NP}$, which justifies identity by specification;
+(iv)~identifying all NaN bit patterns makes every float operation of the minimal viable
+product a congruence, except copySign with a NaN sign operand, and makes addition,
+multiplication, minimum and maximum commutative bit for bit;
+(v)~the combinator proof rules, the fresh-element rule and an exact bit-width encoding of
+mathematical integers are sound, provided each obligation is checked only against facts of
+operations that precede it in a topological order, a proviso we show to be necessary.
+We give a complete IEEE~754 proof of the case study's soft-knee kernel and characterize
+exactly the inputs on which its first draft fails; an exhaustive check of every finite
+binary32 input for ten knee values ($4.28\times10^{10}$ evaluations) agrees. Finally, we report
+the prototype: its core representation passes the automated checks of its first gate, which
+still awaits the owner's approval, and an independent review found violations of exactly our
+side conditions, among them a hash collision that we reproduce. No verifier, compiler or
+benchmark exists yet, and we claim none.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+\input{sec/intro}
+\input{sec/overview}
+\input{sec/calculus}
+\input{sec/identity}
+\input{sec/float}
+\input{sec/verification}
+\input{sec/case}
+\input{sec/status}
+\input{sec/related}
+\input{sec/discussion}
+
+\section*{Acknowledgments and disclosure}
+\addcontentsline{toc}{section}{Acknowledgments and disclosure}
+\VG{} is being built by AI engineering agents under a human owner who approves every gate.
+This paper was drafted with the assistance of AI systems: Claude (Anthropic) wrote the text
+and the proofs, Gemini (Google) reviewed the proofs, the soundness arguments and the factual
+claims independently, and GPT-OSS was asked as well but returned partial or mistaken answers
+(\cref{sec:status}). Every finding they raised was checked by hand before it was used.
+The independent review of gate G1 cited in \cref{sec:status} was performed by a separate AI
+session. Responsibility for errors rests with the author.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+\input{sec/appendix}
+
+\end{document}

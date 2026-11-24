@@ -1,0 +1,343 @@
+\section{Identity: canonical forms and content addressing}\label{sec:identity}
+
+A \VG{} node is named by hashes. The \emph{body hash} covers the op graph, the \emph{contract
+hash} the canonical contract, and the \emph{node hash} the format version, the effect set,
+the signature and the other two. All are BLAKE3 hashes in derive-key mode, one context string
+per kind of hash, so hashes of different kinds are computed by different keyed functions. This
+section characterizes exactly when two bodies share a hash, shows that a shared node hash
+implies a shared meaning, and explains why semantic equivalence needs a different mechanism.
+
+\subsection{Canonicalization}
+
+The specification canonicalizes a node in seven steps: validate the structure; resolve labels
+to hashes and drop identity ops and debug information; hash bottom-up; sort the operands of
+commutative ops by hash; merge ops with equal hashes and drop ops on which no output, effect
+chain or live invariant depends; number the remaining ops by a post-order depth-first walk
+from the outputs, in port order; serialize the sections deterministically. The hash of an op
+covers its opcode, mode, attribute word, result types and the hashes of its operands in port
+order, after the commutative sort. An input hashes as its position and type, a constant as its
+type and exact bytes, a callee as its node hash, and an op result as its op's hash and its
+result index.
+
+\subsection{Terms and unraveling}
+
+\begin{definition}[Terms]\label{def:terms}
+\emph{Operand terms} $t$ and \emph{op terms} $u$ are given by
+\[
+t ::= \mathsf{in}(j,\tau) \mid \mathsf{const}(\tau,b) \mid \mathsf{callee}(h) \mid
+      \mathsf{inv}(h) \mid \langle u\rangle_s
+\qquad\qquad
+u ::= f(t_1,\dots,t_n),
+\]
+where $b$ is a byte string, $h$ a hash, $s$ a result index and $f$ an op symbol of arity $n$.
+The \emph{unraveling} $\unr$ of an operand of a well-formed node is defined by recursion on the
+op index: $\unr(\mathsf{in}(j))=\mathsf{in}(j,\tau_j)$,
+$\unr(\mathsf{const}(c))=\mathsf{const}(\tau_c,\enc(c))$,
+$\unr(\mathsf{callee}(h))=\mathsf{callee}(h)$, $\unr(\mathsf{inv}(h))=\mathsf{inv}(h)$, and
+$\unr(\mathsf{op}(i,s))=\langle f_i(\unr(a_{i,1}),\dots,\unr(a_{i,n_i}))\rangle_s$.
+\end{definition}
+
+Unraveling forgets sharing: a body is a term graph~\cite{ariola1996equational}, and its
+unraveling is the tuple of trees it denotes.
+
+\begin{definition}[Equality up to commutativity]\label{def:eqc}
+$\eqC$ is the least congruence on terms that contains $f(t_1,t_2)\eqC f(t_2,t_1)$ for every
+$f\in\mathit{Comm}$ and $\op{FMA}(t_1,t_2,t_3)\eqC\op{FMA}(t_2,t_1,t_3)$.
+\end{definition}
+
+\subsection{Structural encodings and the capacity condition}
+
+Every hash is computed from a byte string, its \emph{preimage}, built from fixed-width
+integers, 32-byte hashes and type encodings. A type is encoded as a tag byte, an argument-count
+byte, and its arguments, each of which is either a nested type encoding or a 32-bit immediate
+(a bit width, an array length, a tensor dimension or a handle kind); the tag determines which.
+The preimages hashed under the op context are
+\begin{align*}
+\pre(\mathsf{in}(j,\tau)) &= \mathtt{00}\cat u_{32}(j)\cat\enc_T(\tau) &
+\pre(\mathsf{callee}(h)) &= \mathtt{03}\cat h \\
+\pre(\langle u\rangle_s) &= \mathtt{01}\cat\Hop(\pre(u))\cat u_8(s) &
+\pre(\mathsf{inv}(h)) &= \mathtt{04}\cat h \\
+\pre(\mathsf{const}(\tau,b)) &= \mathtt{02}\cat\enc_T(\tau)\cat u_{32}(|b|)\cat b
+\end{align*}
+\begin{align*}
+\pre(f(t_1,\dots,t_n)) = {}& \mathtt{05}\cat u_{16}(\mathit{opcode})\cat u_8(\mathit{mode})\cat
+  u_{32}(\mathit{attr})\cat u_8(r)\cat\enc_T(\rho_1)\cat\dots\cat\enc_T(\rho_r)\\
+  & {}\cat u_{32}(n)\cat h_{\pi(1)}\cat\dots\cat h_{\pi(n)},
+\end{align*}
+where $h_k=\Hop(\pre(t_k))$ and the permutation $\pi$ sorts the commutative positions
+($\{1,2\}$ for $f\in\mathit{Comm}$ or $f=\op{FMA}$) by increasing byte string and fixes the
+others. We write $\hash(t)=\Hop(\pre(t))$. Ties in the sort are harmless: two operands with the
+same hash contribute the same bytes in either order. The hash of an invariant covers the ports
+it names through their operand hashes; since an invariant never names a port that depends on the
+fold that uses it (\ref{wf:order}), these definitions are well founded. The prototype rejects a
+violation with the message ``an INVARIANT names a port that depends on the fold that uses it''.
+
+\begin{assumption}[Field capacity]\label{cond:capacity}
+Every integer written into a $w$-bit field is below $2^w$. For the fields above this means: at
+most 255 tuple members, at most 254 tensor dimensions (the argument count of a tensor is one
+more than its number of dimensions), at most 255 results per op, and result indices below 256.
+\end{assumption}
+
+\begin{lemma}[Prefix-free encodings]\label{lem:prefixfree}
+Under \cref{cond:capacity}, $\enc_T$ is prefix-free: no type encoding is a proper prefix of
+another, and a concatenation of type encodings determines the sequence of types. Preimages of
+different kinds differ in their first byte, and equal preimages have equal fields: the same
+leaf; or the same op hash and result index; or the same op symbol, arity and sequence of operand
+hashes.
+\end{lemma}
+\begin{proof}
+For types, by induction on nesting depth. A decoder reads the tag, which fixes the kind of each
+argument (for example, an array has a type and then an immediate, a tuple has only types); it
+reads the count, which by \cref{cond:capacity} is the true number of arguments; and it reads
+each argument, an immediate of four bytes or, by induction, a uniquely delimited type
+encoding. So each encoding is parsed in exactly one way and ends at a determined position,
+which excludes proper prefixes. For preimages, the first byte fixes the kind; the remaining
+fields have fixed widths, are 32-byte hashes, or are type encodings, which are uniquely
+delimited, and counts ($r$, $n$, $|b|$) are exact by \cref{cond:capacity}. So equal preimages
+have equal fields.
+\end{proof}
+
+\begin{remark}[Why the condition is not a formality]\label{rem:capacity}
+Without \cref{cond:capacity} the encoding is ambiguous. If the member count of a tuple is
+written as one byte modulo 256, then $\mathsf{Tuple}\langle\mathsf{Tuple}\langle
+\mathsf{u8}^{257}\rangle,\mathsf{u8}\rangle$ and
+$\mathsf{Tuple}\langle\mathsf{Tuple}\langle\mathsf{u8}\rangle,\mathsf{u8}^{257}\rangle$ both
+encode as $[\mathsf{TUPLE},2][\mathsf{TUPLE},1]$ followed by 258 copies of the encoding of
+$\mathsf{u8}$, although they are different types. \Cref{sec:status} reports that the prototype
+writes these counts without enforcing the bound, and that the two identity functions on these
+types receive the same node hash.
+\end{remark}
+
+\subsection{The characterization theorem}
+
+\begin{assumption}[Collision freeness]\label{ass:cr}
+For each hash context, distinct preimages that occur have distinct hashes.
+\end{assumption}
+
+No hash function is collision free, but a 256-bit function makes collisions improbable, and
+derive-key mode keeps contexts apart. The standard idealization quantifies this.
+
+\begin{lemma}[Birthday bound]\label{lem:birthday}
+Let $H$ be a uniformly random function into $\{0,1\}^{256}$. For any procedure that makes at
+most $q$ distinct queries to $H$, possibly adaptively, the probability that two queries
+collide is at most $q(q-1)/2^{257}$.
+\end{lemma}
+\begin{proof}
+The $k$-th distinct query receives a uniformly random value independent of the previous ones,
+so it collides with one of the $k-1$ earlier values with probability at most
+$(k-1)/2^{256}$. Summing over $k\le q$ gives $q(q-1)/2^{257}$.
+\end{proof}
+
+For $q=2^{64}$ preimages the bound is about $2^{-129}$. Modelling each derive-key context of
+BLAKE3 as an independent random function is a heuristic~\cite{bellare1993random}; BLAKE3 has a
+256-bit output and is designed for a 128-bit security level~\cite{blake3}.
+\Cref{ass:cr} is the event that no collision occurs.
+
+\begin{theorem}[Hashes characterize terms up to commutativity]\label{thm:hash-char}
+Assume \cref{cond:capacity,ass:cr}. For all operand terms $t,t'$ that arise from well-formed
+nodes, $\hash(t)=\hash(t')$ if and only if $t\eqC t'$.
+\end{theorem}
+\begin{proof}
+($\Leftarrow$) Let $t\sim t'$ mean $\hash(t)=\hash(t')$; it is an equivalence relation. It is a
+congruence: if $t_k\sim t'_k$ for every $k$, the preimages of $f(t_1,\dots,t_n)$ and
+$f(t'_1,\dots,t'_n)$ contain the same operand hashes, sorted the same way, so the op terms have
+equal hashes, and so do $\langle f(\dots)\rangle_s$ and $\langle f(\dots)\rangle_s$ for every
+$s$. It contains the generators of $\eqC$: for commutative positions, sorting
+$(\hash(t_1),\hash(t_2))$ and $(\hash(t_2),\hash(t_1))$ yields the same sequence. Since $\eqC$
+is the least congruence containing the generators, ${\eqC}\subseteq{\sim}$.
+
+($\Rightarrow$) By induction on the sum of the sizes of $t$ and $t'$. Suppose
+$\hash(t)=\hash(t')$. By \cref{ass:cr}, $\pre(t)=\pre(t')$, and by \cref{lem:prefixfree} $t$ and
+$t'$ have the same kind and equal fields. If they are leaves, they are equal. Otherwise
+$t=\langle u\rangle_s$ and $t'=\langle u'\rangle_{s}$ with $\Hop(\pre(u))=\Hop(\pre(u'))$, hence
+$\pre(u)=\pre(u')$ by \cref{ass:cr}. By \cref{lem:prefixfree}, $u=f(t_1,\dots,t_n)$ and
+$u'=f(t'_1,\dots,t'_n)$ have the same op symbol (opcode, mode, attribute and result types)
+and the same arity, and their sorted operand-hash sequences are equal. At a non-commutative
+position $k$, $\hash(t_k)=\hash(t'_k)$, so $t_k\eqC t'_k$ by induction. At the commutative
+positions, the multisets $\{\hash(t_1),\hash(t_2)\}$ and $\{\hash(t'_1),\hash(t'_2)\}$ are
+equal; so either $\hash(t_1)=\hash(t'_1)$ and $\hash(t_2)=\hash(t'_2)$, or
+$\hash(t_1)=\hash(t'_2)$ and $\hash(t_2)=\hash(t'_1)$. In the first case $t_1\eqC t'_1$ and
+$t_2\eqC t'_2$ by induction; in the second, $t_1\eqC t'_2$ and $t_2\eqC t'_1$, and
+$f(t_1,t_2,\dots)\eqC f(t'_2,t'_1,\dots)\eqC f(t'_1,t'_2,\dots)$ by the commutativity
+generator. Either way $u\eqC u'$, hence $t\eqC t'$.
+\end{proof}
+
+The body hash is computed under its own context from the output count, the hashes of the
+output operands, and, for each learnable parameter, its type, its bounds as constants and the
+hash of its loss node if it has one.
+
+\begin{corollary}[Body hashes]\label{cor:body}
+Under the assumptions of \cref{thm:hash-char}, two well-formed nodes have equal body hashes
+if and only if they have the same number of outputs, $\unr(a_k)\eqC\unr(a'_k)$ for every output
+$k$, and equal learnable boxes.
+\end{corollary}
+
+\begin{corollary}[Canonical form]\label{cor:canon}
+Under the assumptions of \cref{thm:hash-char}, steps~5 and~6 of canonicalization merge two ops
+exactly when their op terms are equal up to commutativity, and the canonical body is
+determined by the $\eqC$-classes of the unraveled outputs and of the terms the live invariants
+refer to. Consequently canonicalization is idempotent, and each of the following moves of the
+specification leaves the canonical body unchanged: consistent renaming of ports, parameters,
+bound variables and labels; reordering statements while respecting \ref{wf:order}; duplicating
+a pure op; adding a pure op that nothing uses; swapping the operands of a commutative op;
+binding a value through an identity op; and changing comments or debug text.
+\end{corollary}
+\begin{proof}
+By \cref{thm:hash-char}, equal op hashes mean $\eqC$-equal op terms, so merging by hash
+identifies exactly the $\eqC$-classes; the post-order numbering from the outputs, in port order
+and with operands of commutative ops in sorted order, is then a function of the merged graph.
+Hence the canonical body depends only on the classes named in the statement, and
+canonicalizing it again finds the same classes. Each move preserves those classes: renaming
+changes no position, hash or label resolution; reordering does not change $\unr$; a duplicate
+of a pure op has the same term; an unused op contributes to no output term; a commutative swap
+is a generator of $\eqC$; identity ops are erased before hashing; comments and debug text are
+not hashed.
+\end{proof}
+
+The specification also states the converse: texts with equal canonical forms are related by
+these moves. As listed, the moves do not suffice, because canonicalization makes three further
+identifications that the specification states elsewhere: several clauses of one kind join into
+one conjunction in source order; a refined parameter or result type is stored as its base type
+with the refinement conjoined to the precondition or postcondition; and two literals that
+denote the same value, such as \kw{0.99} and its binary32 rounding written out, or the integers
+\kw{-0} and \kw{0}, are the same constant. With these three added to the moves, every text can be
+moved to the canonical printing of its canonical form (the printer emits callees first and ops in
+post-order, which respects \ref{wf:order}), and the moves can be reversed, which gives the
+converse. We do not formalize the printer, so we state this direction as a remark rather than a
+theorem.
+
+\subsection{Effects are never merged}
+
+Merging ops with equal hashes is sound for pure ops, whose copies and discards are
+natural~\cite{fox1976coalgebras}; it would be wrong for effects, since two reads of a clock are
+two observations. The specification's answer is the effect token; the next lemma shows that it
+suffices.
+
+\begin{lemma}[Effectful ops are never merged]\label{lem:eff-never-merged}
+Assume \cref{cond:capacity,ass:cr}, and let $N$ satisfy \ref{wf:eff}. Distinct ops of $N$ that
+consume an $\Eff$ value have distinct hashes. Hence step~5 never merges them.
+\end{lemma}
+\begin{proof}
+By \cref{lem:chain}, these ops form the chain $e_1,\dots,e_p$. Let $\epsilon_0$ be input $0$
+and $\epsilon_q$ the $\Eff$ result of $e_q$. Suppose $\hash(e_i)=\hash(e_j)$ with $i<j$. By
+\cref{ass:cr} and \cref{lem:prefixfree} the two op terms have the same opcode, hence the same
+operand layout, and equal operand hashes at every position, in particular at the position of
+the $\Eff$ operand: $\hash(\epsilon_{i-1})=\hash(\epsilon_{j-1})$. If $i>1$, both are op results,
+so their preimages are equal and $\hash(e_{i-1})=\hash(e_{j-1})$. Repeating $i-1$ times gives
+$\hash(\epsilon_0)=\hash(\epsilon_{j-i})$ with $j-i\ge1$. But the preimage of $\epsilon_0$ starts
+with byte \texttt{00} (an input) and that of $\epsilon_{j-i}$ with \texttt{01} (an op result),
+so the preimages differ and \cref{ass:cr} is contradicted.
+\end{proof}
+
+The lemma depends on \ref{wf:eff}. A node in which one token feeds two effect ops cannot be
+written in VG-Sym, because the text lowering rejects it, but it can be built through an API or
+read from bytes. \Cref{sec:status} reports that the prototype's decoder accepts such a node
+and that its merge step then merges two clock reads. The lemma shows that checking
+\ref{wf:eff} on every path into the canonicalizer, the decoder included, restores the
+guarantee.
+
+\subsection{Equal hashes, equal meaning}
+
+The meaning of an operand term is defined compositionally: $\sem{\mathsf{in}(j,\tau)}=v_j$,
+constants denote their values, $\sem{\langle f(t_1,\dots,t_n)\rangle_s}$ applies the meaning of
+$f$ (as in \cref{def:eval}) to the meanings of the $t_k$, and the ops on the effect chain read
+the trace in the order in which their $\Eff$ operands are nested, which is the order of the
+chain.
+
+\begin{lemma}[Unraveling preserves meaning]\label{lem:unr-sem}
+For every operand $a$ of a well-formed node, $\val(a)=\sem{\unr(a)}$, both sides being
+undefined together.
+\end{lemma}
+\begin{proof}
+By induction on the op index. The two definitions apply the same function to the same operand
+values; for the ops on the effect chain, the order of the chain (\cref{lem:chain}) is the order
+in which their $\Eff$ operands are nested in the terms, so both definitions hand them the same
+trace entries.
+\end{proof}
+
+\begin{theorem}[Equal node hashes imply equal meaning]\label{thm:hash-meaning}
+Assume \cref{cond:capacity,ass:cr}, and that callees with equal hashes have equal meanings. If
+two well-formed canonical nodes $N$ and $N'$ have equal node hashes, then they have the same
+format version, effect set, signature and learnable box; for every input, callee semantics and
+trace, either both trap or both return the same result; and their contracts are equal up to
+the renaming of parameters and bound variables.
+\end{theorem}
+\begin{proof}
+By \cref{ass:cr} the node-hash preimages are equal, so the version, effect set, signature, box,
+body hash and contract hash coincide. By \cref{cor:body}, the output terms are $\eqC$-equal. The
+meaning of an op symbol in $\mathit{Comm}$ is a commutative function: obviously so for integers
+and Booleans, and for floats by \cref{thm:float-comm} below; hence $\eqC$-equal terms have
+equal meanings, traps included, by induction on the congruence. By \cref{lem:unr-sem} the
+outputs of $N$ and $N'$ have equal values. Ops that only invariants use are covered by the
+contract hash, which encodes each port by its operand hash, so their terms, and therefore their
+traps, agree as well. Finally, the canonical contract encodes parameters by position and bound
+variables by de Bruijn index~\cite{maziarz2021hashing}, so equal contract hashes mean equal
+formulas up to renaming.
+\end{proof}
+
+Two artifacts with one node hash can still differ outside the node's meaning. The attributes
+\kw{export} and \kw{inline} are not hashed, although \kw{export} makes the code generator emit a
+checked entry point; the specification leaves that choice to the owner.
+
+\subsection{Why semantic identity needs specifications}
+
+The source document of \VG{} expected two implementations of SHA-256 to converge to one hash.
+\Cref{thm:hash-char} shows that a structural hash cannot do this unless the implementations
+unravel to the same terms. One might hope for a smarter canonical form. The next theorem shows
+that no efficient one exists.
+
+\begin{theorem}[Semantic equivalence is coNP-hard]\label{thm:conp}
+Deciding whether two pure, fixed-size, well-formed nodes compute the same function is
+coNP-hard, already for nodes with only Boolean inputs and the ops \op{BAND}, \op{BOR} and
+\op{BNOT}.
+\end{theorem}
+\begin{proof}
+We reduce the complement of satisfiability, which is coNP-complete~\cite{cook1971complexity},
+to equivalence. Given a propositional formula $\psi$ over variables $p_1,\dots,p_n$, build the
+node $N_\psi$ with signature $(\mathsf{Bool}^n)\to(\mathsf{Bool})$ that evaluates $\psi$ with
+one \op{BAND}, \op{BOR} or \op{BNOT} per connective, and the node $N_\bot$ with the same
+signature that returns the constant \kw{false}. Both are well formed and pure, and the
+construction takes time linear in $|\psi|$. They compute the same function if and only if
+$\psi$ is unsatisfiable.
+\end{proof}
+
+\begin{corollary}\label{cor:no-canon}
+If some polynomial-time computable function $c$ on nodes satisfied $c(N)=c(N')$ exactly when
+$N$ and $N'$ compute the same function, then $\mathrm{P}=\mathrm{NP}$.
+\end{corollary}
+\begin{proof}
+Equivalence would be decidable in polynomial time by comparing $c(N_\psi)$ with $c(N_\bot)$,
+so unsatisfiability would be in P, hence coNP $=$ P and therefore NP $=$ P.
+\end{proof}
+
+Any efficiently computable identity must therefore either merge some inequivalent programs or
+separate some equivalent ones. \VG{} chooses the second, which is the safe failure, and handles
+semantic identity by specification: a SPEC node is an executable reference, and an
+implementation joins its spec class when its postcondition \kw{result == spec:s(\dots)} is
+proven. The registry records how membership was shown: \emph{proved} for every input,
+\emph{bounded}$(n)$ for inputs of size at most $n$, or \emph{tested}$(m)$ on $m$ cases, which a
+caller's proof may never rely on.
+
+\begin{proposition}[Spec classes are extensional]\label{prop:specclass}
+Let $I_1$ and $I_2$ satisfy their contracts (\cref{def:satisfies}) with postconditions
+$\kw{result == spec:}s(\bar x)$, for a result type on which \kw{==} is identity (integers,
+Booleans and collections of them), and let $s$ satisfy its own contract. Then $I_1(\bar v)=
+I_2(\bar v)$ for every $\bar v$ that satisfies the preconditions of $I_1$, $I_2$ and $s$.
+\end{proposition}
+\begin{proof}
+For such $\bar v$, $\bar v$ lies in the domain of $\kw{spec:}s$, where the term denotes
+$s(\bar v)$ in every interpretation. The postconditions of $I_1$ and $I_2$ hold at $\bar v$, so
+$I_1(\bar v)=s(\bar v)=I_2(\bar v)$.
+\end{proof}
+
+For float results \kw{==} is IEEE equality, under which $-0=+0$ and $\NaN\neq\NaN$; a spec class
+over floats must use \kw{same} to obtain the same conclusion.
+
+\subsection{Short hashes}
+
+Text and diagnostics show a hash as \texttt{\#} followed by 12 hexadecimal digits. If $n$
+uniformly random 48-bit prefixes are drawn, a collision becomes more likely than not near
+$n\approx\sqrt{2\ln 2\cdot 2^{48}}\approx 1.98\times10^{7}$; for 8 digits (32 bits) the same
+estimate is about $7.7\times10^{4}$. The toolchain lengthens a displayed prefix on any clash
+within a module, and binaries always carry all 32 bytes, so short hashes are a convenience,
+never an identity.

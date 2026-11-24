@@ -1,0 +1,194 @@
+\section{Case study: the soft-knee limiter}\label{sec:case}
+
+This section proves the property that the verifier must establish for the case study, and
+characterizes exactly where the first draft fails. The verifier does not exist yet, so the proofs
+are by hand; an exhaustive enumeration then checks both statements mechanically.
+
+\subsection{Floating-point facts}
+
+Let $\Fl$ be the binary32 values of \cref{def:onenan} and
+$\Om=(2-2^{-23})\cdot2^{127}$ the largest finite one. Let $\rn:\R\to\Fl\cup\{\pm\infty\}$ round to
+nearest, ties to even. We use the following facts~\cite{ieee754-2019,muller2018handbook}.
+\begin{enumerate}[label=(F\arabic*),ref=F\arabic*]
+\item\label{f:mono} \emph{Monotonicity}: $x\le y$ implies $\rn(x)\le\rn(y)$.
+\item\label{f:exact} \emph{Exactness}: if $x\in\Fl$ then $\rn(x)=x$.
+\item\label{f:sterbenz} \emph{Sterbenz's lemma}~\cite{sterbenz1974}: if $a,b\in\Fl$ are finite and
+  $b/2\le a\le 2b$, then $a-b\in\Fl$.
+\item\label{f:ops} \emph{Operations}: for non-NaN operands, \op{FADD}, \op{FSUB}, \op{FMUL},
+  \op{FDIV} and \op{FMA} return $\rn$ of the exact result (\op{FMA} with a single rounding),
+  except for the invalid cases $\infty-\infty$, $0\cdot\infty$, $0/0$ and $\infty/\infty$,
+  which return $\NaN$. An exact zero result of a subtraction of equal values is $+0$; $1+(+\infty)
+  =+\infty$; $1/(+\infty)=+0$; a finite non-negative value divided by a positive finite value
+  is never $\NaN$.
+\item\label{f:overflow} \emph{Overflow}: $\rn(x)=+\infty$ exactly when $x\ge2^{128}-2^{103}$.
+\end{enumerate}
+Write $\kappa$ for the binary32 value of the literal \kw{0.99}:
+\[
+\kappa=\frac{4152361}{4194304}=0.9900000095367431640625\qquad(\texttt{0x3F7D70A4}).
+\]
+
+\subsection{The repaired kernel is correct}
+
+\begin{theorem}[Soft knee]\label{thm:softknee}
+For every $x\in\Fl$ with $x$ finite and every $\mathit{knee}\in\Fl$ with
+$\frac12\le\mathit{knee}\le\kappa$, the kernel of \cref{lst:softknee} does not trap, none of its
+ports holds $\NaN$, and its result $r$ satisfies $-1\le r\le1$ and
+$(x\ge0)\Leftrightarrow(r\ge0)$, with IEEE comparisons.
+\end{theorem}
+\begin{proof}
+We follow the ports in order and write $k$ for $\mathit{knee}$.
+\begin{itemize}
+\item $\%0=|x|\in[0,\Om]$, and $\%0=+0$ for $x=\pm0$.
+\item $\%1=\rn(\%0-k)$ is finite. If $\%0>k$, the exact difference is positive and at least
+  $2^{-24}$, the spacing of $\Fl$ near $k$, so $\%1>0$ by \ref{f:mono} and \ref{f:exact}; if
+  $\%0=k$, $\%1=+0$ by \ref{f:ops}; if $\%0<k$, $\%1<0$.
+\item $\%2=\op{FMAX}(\%1,+0)$ is $\%1$ when $\%1>0$ and $+0$ otherwise (the maximum places
+  $+0$ above $-0$). So $\%2\in\{+0\}\cup(0,\Om]$; it is never $-0$ or $\NaN$.
+\item $\%3=1-k$ exactly, by \ref{f:sterbenz} with $a=1$, $b=k$: $k/2\le\frac12<1\le2k$. Hence
+  $\%3\in[1-\kappa,\frac12]$, and $1-\kappa=41943/4194304>0$.
+\item $\%4=\%2/\%3$: a value in $[0,\Om]$ divided by a positive finite value. By \ref{f:ops}
+  and \ref{f:mono}, $\%4\in[+0,+\infty]$; it is $+\infty$ when the quotient overflows and never
+  $\NaN$.
+\item $\%5=1+\%4\in[1,+\infty]$: if $\%4$ is finite, $1+\%4\ge1$ and \ref{f:mono},
+  \ref{f:exact} give $\%5\ge1$; if $\%4=+\infty$, $\%5=+\infty$.
+\item $\%6=1/\%5\in[0,1]$: if $\%5=+\infty$, $\%6=+0$; otherwise $1/\%5\in(0,1]$ and
+  \ref{f:mono}, \ref{f:exact} give $0\le\%6\le1$.
+\item $\%7=\rn(1-\%6)\in[0,1]$, since $1-\%6\in[0,1]$ and $0,1\in\Fl$.
+\item $\%8=\op{FMA}(\%3,\%7,k)=\rn(\%3\cdot\%7+k)$. Because $\%3=1-k$ exactly, the exact value is
+  $k+(1-k)\cdot\%7$, a convex combination of $k$ and $1$, hence in $[k,1]$. By \ref{f:mono} and
+  \ref{f:exact}, $\%8\in[k,1]\subseteq[\frac12,1]$.
+\item $\%9=\op{FCOPYSIGN}(\%8,x)$. Its obligation, that $x$ is not $\NaN$, holds because $x$ is
+  finite. $|\%9|=\%8\in[\frac12,1]$, and $\%9$ carries the sign bit of $x$.
+\item $\%10=(\%0\le k)$, decided on non-NaN values, and $\%11=\op{SELECT}(\%10,x,\%9)$.
+\item $\%12=\op{FCLAMP}(\%11,-1,1)$. Its obligation, that the bounds are not $\NaN$ and
+  $-1\le1$, holds.
+\end{itemize}
+No port is $\NaN$ and the only partial ops, \op{FCOPYSIGN} and \op{FCLAMP}, have their
+obligations discharged, so the kernel does not trap. Two cases remain.
+\emph{Case $|x|\le k$.} Then $\%11=x$ with $|x|\le k<1$, the clamp returns $x$ (for $x=-0$,
+$\op{FMAX}(-0,-1)=-0$ and $\op{FMIN}(-0,1)=-0$), so $r=x$: it lies in $[-1,1]$ and the sign
+clause reads $(x\ge0)\Leftrightarrow(x\ge0)$.
+\emph{Case $|x|>k$.} Then $x\neq\pm0$, $\%11=\%9$ with $|\%9|\in[\frac12,1]$, and the clamp
+returns $\%9$, so $r\in[-1,1]$. If $x>0$, then $r=\%8>0$ and both sides of the sign clause are
+true; if $x<0$, then $r=-\%8<0$ and both are false.
+\end{proof}
+
+\begin{remark}[What the proof says about the contract]\label{rem:contract}
+The proof uses finiteness of $x$ only to exclude $\NaN$: for $x=\pm\infty$ the same steps give
+$\%4=\%5=+\infty$, $\%6=+0$, $\%7=1$, $\%8=1$ and $r=\pm1$, which satisfies the postcondition. The
+precondition is therefore stronger than necessary, which is the safe direction. Conversely, the
+sign clause does not distinguish $-0$ from $+0$, because IEEE comparison treats them as
+equal: the kernel returns $x$ itself on the linear branch, so it preserves a signed zero, but
+the contract would also accept a kernel that does not. Stating such intent precisely is the
+problem that the project's research track on intent validation addresses.
+\end{remark}
+
+\subsection{The first draft fails, and exactly where}
+
+The draft (\file{examples/soft\_knee\_draft.vgs}) differs in two ports:
+$\%6=\op{FDIV}(\%4,\%5)$, that is $u=t/(1+t)$, and $\%7=\op{FMIN}(\%6,1)$.
+
+\begin{proposition}[The draft's failure set]\label{prop:draft}
+For $\mathit{knee}=\frac12$ and finite $x\in\Fl$, the draft violates its postcondition exactly
+when $2^{127}\le|x|\le\Om$. There are $2^{24}=16{,}777{,}216$ such inputs; among them is the
+binary32 value of $3\cdot10^{38}$, which is $14791142\cdot2^{104}\approx3.0000000055\times10^{38}$
+(\texttt{0x7F61B1E6}). On every violating input the result is $\NaN$, so all three conjuncts of
+the postcondition fail.
+\end{proposition}
+\begin{proof}
+With $k=\frac12$, $\%3=\frac12$. If $|x|\le\frac12$, the linear branch returns $x$ and the
+postcondition holds as in \cref{thm:softknee}. Let $|x|>\frac12$. If $|x|<2^{24}$, then
+$\%1\in(0,2^{24})$ and $\%4=\rn(2\cdot\%1)=2\cdot\%1$ is finite. If $|x|\ge2^{24}$, the spacing of
+$\Fl$ at $|x|$ is at least $2$, so $|x|-\frac12$ lies strictly within half a spacing of $|x|$ and
+$\%1=\%2=|x|$; then $\%4=\rn(2|x|)$, which by \ref{f:overflow} is $+\infty$ exactly when
+$2|x|\ge2^{128}-2^{103}$. The largest element of $\Fl$ below $2^{127}$ is $2^{127}-2^{103}$,
+whose double $2^{128}-2^{104}$ does not overflow, and the next element is $2^{127}$, whose double
+does. So $\%4=+\infty$ exactly when $|x|\ge2^{127}$.
+
+If $\%4$ is finite, then $\%5=\rn(1+\%4)$ is finite and $\%5\ge\%4$ by \ref{f:mono}, so
+$\%6=\rn(\%4/\%5)\in[0,1]$, $\%7=\%6$, $\%8=\rn(\%6/2+\frac12)\in[\frac12,1]$, and the result
+$\op{FCOPYSIGN}(\%8,x)$ satisfies the postcondition as in \cref{thm:softknee}. If
+$\%4=+\infty$, then $\%5=+\infty$ and $\%6=\infty/\infty=\NaN$; \op{FMIN}, \op{FMA},
+\op{FCOPYSIGN} (whose magnitude operand is $\NaN$), \op{SELECT} (which takes $\%9$ because
+$|x|>k$) and \op{FCLAMP} all propagate it, so $r=\NaN$ and every comparison in the postcondition
+is false.
+
+The elements $x$ of $\Fl$ with $2^{127}\le|x|\le\Om$ are those with biased exponent $254$:
+$2^{23}$ of each sign, $2^{24}$ in all. Finally $3\cdot10^{38}/2^{104}\approx14791142.49$ rounds to
+$14791142\in[2^{23},2^{24})$, so the binary32 value of $3\cdot10^{38}$ is $14791142\cdot2^{104}$,
+which lies in $[2^{127},\Om]$.
+\end{proof}
+
+At that input the draft's ports are $\%1=\%2=x$, $\%3=\frac12$, $\%4=\%5=+\infty$ and
+$\%6=\dots=\%12=\NaN$, while the repaired kernel computes $\%6=+0$, $\%7=\%8=1$ and $r=1$. This
+is the failing slice that the specification's failure report shows the agent.
+
+\subsection{The frame node}
+
+\begin{proposition}[The frame]\label{prop:frame}
+If \kw{@soft\_knee} satisfies its contract (\cref{thm:softknee}) and the registry binding for
+\kw{@sha256} satisfies \kw{result == spec:sha256(arg0)}, then every obligation of
+\kw{@limit\_frame} in \cref{lst:frame} is valid, its cost clause included. (Its \kw{BUDGET}
+clause yields no obligation: it is measured.)
+\end{proposition}
+\begin{proof}
+The goal of \op{SIMD\_MAP}, for a fresh index $(i,c)$ with $0\le i<512$ and $0\le c<2$, is the
+kernel's precondition at $\mathit{frame}[i,c]$ and $\mathit{knee}$; it follows from the
+instance of the node's precondition at $(i,c)$ and from the learnable box. The box's bounds take
+the parameter's type \kw{f32}, so they are $\frac12$ and $\kappa$, exactly the bounds that the
+kernel's precondition places on $\mathit{knee}$. The first
+conjunct of the postcondition, a \kw{forall} over $(i,c)$, becomes a goal at a fresh index; the
+fact of \op{SIMD\_MAP} instantiated there is the kernel's postcondition, which states exactly
+the range and sign conditions. The second conjunct is the fact of \op{CALL\_HASH}, because
+\op{AS\_BYTES}$(\%0)$ denotes $\kw{as\_bytes}(\kw{result.0})$. For the cost clause: the heap is
+always empty in the MVP; \op{SIMD\_MAP} over a fixed-size tensor and \op{AS\_BYTES} allocate
+nothing, and a callee without the \textsf{ARENA} effect contributes $0$, so
+$\kw{arena\_bytes}=0$.
+\end{proof}
+
+The proof of the frame is short because the kernel carries the content; the trusted part is the
+binding for SHA-256, whose evidence must be \emph{proved} for the frame's postcondition to be a
+proof, and the fidelity of \kw{spec:sha256} to FIPS~180-4, which no proof can establish. The
+latency budget is measured, never proven. The checked entry point of the exported node
+evaluates the precondition, 1,024 finiteness tests, on every external call.
+
+\subsection{Mechanical cross-check}
+
+We checked \cref{thm:softknee,prop:draft} by enumeration. A C program in the paper's directory,
+\file{softknee\_check.c}, evaluates both kernels port by port in binary32. IEEE minimum and
+maximum are implemented explicitly, \op{FMA} is the C library's \kw{fmaf}, and the program is
+compiled with the flags \kw{-O2}, \kw{-ffp-contract=off} and \kw{-fno-fast-math}, so no
+operation is fused or reassociated. It also checks the intermediate facts used in the proof: no port is $\NaN$,
+$\%2$ is never $-0$, $\%3=1-k$ exactly, the ranges of $\%4$ to $\%8$, and the magnitude and
+sign of $\%9$. \Cref{tab:enum} reports a run on an Apple M3 Max under macOS 27.2 (Apple clang
+21.0.0, 16 threads, 52\,s of wall time; the program first checks that subnormals are not
+flushed).
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}Xrr@{}}
+\toprule
+& Inputs & Evaluations & Violations \\
+\midrule
+E1 & every finite $x$ ($4{,}278{,}190{,}080$ values) for 10 values of $k$: $\frac12$, its
+  successor, $0.75$, $0.9$, $\kappa$, its predecessor, and 4 seeded random values &
+  $42{,}781{,}900{,}800$ & 0 \\
+E2 & every $k\in[\frac12,\kappa]$ ($8{,}220{,}837$ values) against 36 special $x$ (signed zeros,
+  subnormals, $\pm\Om$, $\pm k$ and its neighbours, \dots) & $295{,}950{,}132$ & 0 \\
+E3 & seeded random pairs over the whole precondition & $1{,}073{,}741{,}824$ & 0 \\
+E4 & the draft, every finite $x$, $k=\frac12$ & $4{,}278{,}190{,}080$ & $16{,}777{,}216$ \\
+\bottomrule
+\end{tabularx}
+\caption{Exhaustive and random checks of the soft-knee kernels. E1--E3 test the repaired kernel
+against its postcondition and the intermediate facts of the proof of \cref{thm:softknee}; E2
+also confirms that $1-k$ is exact for every admissible $k$. E4 counts the draft's violations;
+the count is exactly $2^{24}$, as \cref{prop:draft} predicts.}
+\label{tab:enum}
+\end{table}
+
+The draft's failure set grows as the knee rises, because $\%3=1-k$ shrinks and the quotient
+overflows sooner: the same run found $33{,}554{,}432$ violating inputs at $k=0.75$ and
+$112{,}742{,}912$ at $k=\kappa$. The enumeration checks our reading of the semantics in C, not
+\VG's interpreter, which does not exist yet; it confirms the hand proofs on every input it
+covers and covers every binary32 $x$ for the knees it lists.

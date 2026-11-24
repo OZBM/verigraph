@@ -1,0 +1,314 @@
+\section{A core calculus for \VG{} nodes}\label{sec:calculus}
+
+This section fixes the objects the later theorems are about. The calculus covers the MVP
+fragment of the specification: scalar, collection and float operations, the bounded
+combinators \op{SIMD\_MAP}, \op{FOLD\_BOUNDED}, \op{GENERATE} and \op{ASSERT\_GUARD}, calls by
+hash, and three effect operations. It leaves out what the MVP rejects: recursion, sum types,
+generics and explicit memory regions. Individual operations are given by a table
+(\cref{app:ops}); the calculus needs only their typing, domain and meaning.
+
+\subsection{Types and values}
+
+\begin{definition}[Types]\label{def:types}
+\[
+\begin{array}{rcl}
+\tau & ::= & \mathsf{Bool} \mid \mathsf{u}N \mid \mathsf{i}N \mid \mathsf{f16} \mid
+  \mathsf{bf16} \mid \mathsf{f32} \mid \mathsf{f64}
+  \mid \mathsf{Array}\langle\tau, n\rangle \mid \mathsf{Tensor}\langle\tau,[d_1,\dots,d_k]\rangle
+  \mid \mathsf{Slice}\langle\tau\rangle \\
+  & \mid & \mathsf{Tuple}\langle\tau_1,\dots,\tau_k\rangle \mid
+  \mathsf{Result}\langle\tau,\tau'\rangle \mid \Eff \mid \mathsf{FileIn} \mid \mathsf{FileOut}
+  \mid \mathsf{Clock}
+\end{array}
+\]
+with $N\in\{8,16,32,64\}$ and static $n, d_i$. A type is \emph{fixed-size} if it is
+$\mathsf{Bool}$, a scalar, or an array, tensor, tuple or result built from fixed-size types.
+\end{definition}
+
+$\sem{\mathsf{u}N} = \{0,\dots,2^N-1\}$ and $\sem{\mathsf{i}N}=\{-2^{N-1},\dots,2^{N-1}-1\}$;
+arrays, tensors and slices denote sequences (a slice of length below $2^{64}$), tuples and
+results the usual products and tagged sums, $\sem{\Eff}=\{\star\}$, and handle types denote
+opaque capabilities that only the runtime creates.
+
+\begin{definition}[Float values with one NaN]\label{def:onenan}
+Let $\varphi$ be one of the binary formats binary16, bfloat16, binary32 or binary64, of width
+$w_\varphi$ bits. Let $\mathrm{Fin}_\varphi$ be its finite values, with $+0$ and $-0$ distinct,
+and $V_\varphi = \mathrm{Fin}_\varphi \cup \{+\infty,-\infty,\NaN\}$. Let
+$B_\varphi = \{0,1\}^{w_\varphi}$ be the bit patterns. The decoding
+$\dec_\varphi : B_\varphi\to V_\varphi$ is the IEEE~754 decoding~\cite{ieee754-2019}, except
+that every pattern with an all-ones exponent field and a non-zero significand decodes to the
+single value $\NaN$. The encoding $\enc_\varphi : V_\varphi\to B_\varphi$ maps every non-NaN
+value to its IEEE~754 encoding and $\NaN$ to the canonical quiet NaN $c_\varphi$ with a zero
+sign bit: \texttt{0x7E00}, \texttt{0x7FC0}, \texttt{0x7FC00000} and
+\texttt{0x7FF8000000000000} for the four formats. We write $\sem{\mathsf{f}N}=V_\varphi$.
+\end{definition}
+
+This is the float domain of the SMT-LIB theory of floating point~\cite{brain2015fp}, which has
+a single NaN, and the NaN that the deterministic profile of WebAssembly
+produces~\cite{wasm-spec}.
+
+\begin{lemma}[Encoding and decoding]\label{lem:encdec}
+$\dec_\varphi\circ\enc_\varphi=\mathrm{id}_{V_\varphi}$, and $\enc_\varphi\circ\dec_\varphi$ is
+idempotent and fixes exactly the bit patterns that are not non-canonical NaNs. In particular
+$\enc_\varphi$ is injective.
+\end{lemma}
+\begin{proof}
+Binary interchange formats encode every non-NaN datum, each signed zero and each infinity by
+exactly one bit pattern~\cite{ieee754-2019}; decimal formats, which have several encodings per
+value, are not used. Hence $\dec(\enc(v))=v$ for $v\neq\NaN$, and $\dec(c_\varphi)=\NaN$. For a
+pattern $p$, $\enc(\dec(p))=p$ unless $p$ encodes a NaN other than $c_\varphi$, in which case it
+is $c_\varphi$; applying $\enc\circ\dec$ again changes nothing. Injectivity follows from the
+left inverse.
+\end{proof}
+
+\subsection{Nodes}
+
+\begin{definition}[Op symbols]\label{def:opsym}
+An \emph{op symbol} $f$ is an opcode with its mode byte, its operand types
+$(\tau_1,\dots,\tau_{n})$ and its result types $(\rho_1,\dots,\rho_{r})$. A \emph{primitive}
+op symbol has a domain $D_f\subseteq\sem{\tau_1}\times\dots\times\sem{\tau_n}$ and a meaning
+$\sem{f}: D_f\to\sem{\rho_1}\times\dots\times\sem{\rho_r}$; it is \emph{total} when $D_f$ is the
+whole product. A set $\mathit{Comm}$ of binary op symbols is designated commutative
+(\op{ADD}, \op{MUL}, \op{AND}, \op{OR}, \op{XOR}, \op{EQ}, \op{NE}, \op{BAND}, \op{BOR},
+\op{FADD}, \op{FMUL}, \op{FMIN}, \op{FMAX}), and \op{FMA} is commutative in its first two
+operands. \emph{Call-like} op symbols (\op{CALL\_HASH}, \op{ASSERT\_GUARD}, \op{SIMD\_MAP},
+\op{FOLD\_BOUNDED}, \op{GENERATE}) take callee operands; \emph{effect} op symbols
+(\op{FILE\_READ}, \op{FILE\_WRITE}, \op{CLOCK\_READ}) take an $\Eff$ token first and return one
+first.
+\end{definition}
+
+The domain of a partial primitive op is its \emph{obligation} in the specification: for
+example $D_{\op{ADD.checked}}$ contains the pairs whose exact sum fits the type,
+$D_{\op{INDEX}}$ the pairs $(xs,i)$ with $i<\mathrm{len}(xs)$, and $D_{\op{FCOPYSIGN}}$ the
+pairs whose second operand is not $\NaN$ (\cref{sec:float}).
+
+\begin{definition}[Nodes]\label{def:node}
+A node is a tuple $N=\langle P,\Theta,R,\varepsilon,(o_0,\dots,o_{k-1}),\mathit{out},C\rangle$
+where $P=(\tau_1,\dots,\tau_m)$ are the parameter types;
+$\Theta=((\varphi_1,lo_1,hi_1),\dots,(\varphi_l,lo_l,hi_l))$ are the learnable parameters, each
+with a float format and bounds; the \emph{inputs} of $N$ are its parameters followed by its
+learnable parameters, numbered $0,\dots,m+l-1$; $R=(\rho_1,\dots,\rho_r)$ are the result types;
+$\varepsilon$ is a subset of the twelve effect names (\textsf{ARENA}, \textsf{CLOCK},
+\textsf{FILE\_READ}, \textsf{FILE\_WRITE}, \dots); each op is $o_i=f_i(a_{i,1},\dots,a_{i,n_i})$
+with operands
+\[
+a ::= \mathsf{in}(j) \mid \mathsf{const}(c) \mid \mathsf{callee}(h) \mid \mathsf{inv}(h) \mid
+\mathsf{op}(i',s),
+\]
+denoting an input, a typed constant, the hash of a callee node, an invariant clause, and the
+$s$-th result of op $o_{i'}$; $\mathit{out}=(a_1,\dots,a_r)$ are the output operands; and $C$
+is the contract (\cref{sec:contracts}).
+\end{definition}
+
+\begin{definition}[Well-formed nodes]\label{def:wf}
+A node is well formed when:
+\begin{enumerate}[label=(W\arabic*),ref=W\arabic*]
+\item\label{wf:order} \emph{Order.} Every operand $\mathsf{op}(i',s)$ of $o_i$ has $i'<i$ and
+  $s$ below the number of results of $o_{i'}$, and an invariant never names a port that
+  depends on the fold that uses it. Hence the op graph is acyclic and every port is defined
+  before use.
+\item\label{wf:typing} \emph{Local typing.} Operand types match the op symbol, and output
+  types match $R$.
+\item\label{wf:eff} \emph{Linear effect token.} If $\varepsilon\not\subseteq\{\textsf{ARENA}\}$,
+  then input $0$ and result $0$ have type $\Eff$ and no other input or result has; otherwise no
+  input or result has type $\Eff$. Each $\Eff$ value (input~$0$, and the $\Eff$ result of each
+  op that returns one) is used exactly once in total, by the operands of ops and by
+  $\mathit{out}$.
+\item\label{wf:kernel} \emph{Kernels.} The callees of \op{SIMD\_MAP}, \op{FOLD\_BOUNDED} and
+  \op{GENERATE} have an empty effect set, fixed-size parameter and result types, and one
+  result.
+\item\label{wf:effects} \emph{Effects.} An effect op occurs only if its effect is in
+  $\varepsilon$, and $\varepsilon_g\subseteq\varepsilon$ for every callee $g$.
+\item\label{wf:handles} \emph{Handles.} Values of type $\Eff$ or of a handle type occur only as
+  top-level inputs and results, as call arguments and results, and as effect-op operands; never
+  inside a tuple, result or collection, in a kernel signature, or as a constant.
+\item\label{wf:calls} \emph{Calls.} The call graph is acyclic.
+\item\label{wf:capacity} \emph{Field capacity.} Every count stored in a fixed-width field of
+  the binary format fits that field (\cref{cond:capacity}).
+\end{enumerate}
+\end{definition}
+
+The first property is what the specification calls define-before-use; it makes every prefix
+of a VG-Sym file checkable (invariant~I3). The next lemma is the formal content of the
+statement that the effect token ``orders'' effects.
+
+Kernels are pure, but the callees of \op{ASSERT\_GUARD} are ordinary nodes and may have
+effects. Such a guard takes the effect token as an argument and returns its selected callee's
+token, so, like a call to an effectful node, it consumes one $\Eff$ value and produces one; only
+the selected callee's effects happen.
+
+\begin{lemma}[The effect chain]\label{lem:chain}
+Let $N$ be well formed with $\varepsilon\not\subseteq\{\textsf{ARENA}\}$. The ops that consume
+an $\Eff$ value form a single sequence $e_1,\dots,e_p$ such that $e_1$ consumes input $0$,
+$e_{q+1}$ consumes the $\Eff$ result of $e_q$, and output $0$ is the $\Eff$ result of $e_p$
+(or input $0$ when $p=0$). Hence the effectful ops of $N$, including calls to effectful nodes,
+are totally ordered.
+\end{lemma}
+\begin{proof}
+Let $G$ be the directed graph whose vertices are the $\Eff$ values of $N$, with an edge
+$u\to w$ when the op that produces $w$ consumes $u$. Every op that consumes an $\Eff$ value
+consumes exactly one and produces exactly one (\ref{wf:typing}, \ref{wf:eff}), so every vertex
+other than input $0$ has in-degree exactly $1$, and input $0$ has in-degree $0$. Every vertex
+is used exactly once (\ref{wf:eff}): either by an op, giving out-degree $1$, or by
+$\mathit{out}$, giving out-degree $0$; since only result $0$ has type $\Eff$, exactly one
+vertex is used by $\mathit{out}$. By \ref{wf:order} $G$ is acyclic. A finite acyclic graph
+whose vertices all have in- and out-degree at most $1$ is a disjoint union of paths, one per
+vertex of in-degree $0$; here there is one. So $G$ is a single path from input $0$ to the
+vertex used by $\mathit{out}$, and it contains every $\Eff$ value. Listing the producers of
+its vertices in path order gives $e_1,\dots,e_p$.
+\end{proof}
+
+\subsection{Evaluation}
+
+\begin{definition}[Environment]\label{def:env}
+An environment consists of a callee semantics $\eta$ and an effect trace $T=(t_1,t_2,\dots)$,
+the sequence of value results that the environment supplies to effect ops. $\eta$ maps each
+callee hash to a partial function; for an effectful callee, the function also takes the unread
+rest of the trace and returns the part it has not read.
+\end{definition}
+
+\begin{definition}[Evaluation]\label{def:eval}
+Fix a well-formed node $N$, an input vector $v$ and an environment $(\eta,T)$. The partial
+function $\val$ on operands is defined by recursion on the op index, which \ref{wf:order}
+makes well founded: $\val(\mathsf{in}(j))=v_j$, $\val(\mathsf{const}(c))=c$, and
+$\val(\mathsf{op}(i,s))=\pi_s(\mathit{Res}_i)$, where the results $\mathit{Res}_i$ of $o_i$
+are, writing $\bar a$ for the values of its operands:
+\begin{itemize}
+\item for a primitive op, $\sem{f_i}(\bar a)$ if $\bar a\in D_{f_i}$;
+\item for $\op{CALL\_HASH}(\mathsf{callee}(h),\bar a)$, the value $\eta(h)(\bar a)$;
+\item for $\op{ASSERT\_GUARD}(c,\mathsf{callee}(h_1),\bar a,\mathsf{callee}(h_2))$, the value
+  $\eta(h_1)(\bar a)$ if $c=\true$ and $\eta(h_2)(\bar a)$ otherwise; only the selected callee
+  is applied;
+\item for $\op{SIMD\_MAP}(\mathsf{callee}(h),xs,\bar b)$, the collection $ys$ of the same shape
+  with $ys[\iota]=\eta(h)(xs[\iota],\bar b)$ for every index $\iota$;
+\item for $\op{FOLD\_BOUNDED}(\mathsf{callee}(h),xs,\bar b,\mathit{init})$, the value
+  $\mathit{acc}_n$ where $n=\mathrm{len}(xs)$, $\mathit{acc}_0=\mathit{init}$ and
+  $\mathit{acc}_{q+1}=\eta(h)(\mathit{acc}_q,xs[q],\bar b)$;
+\item for $\op{GENERATE}(\mathsf{callee}(h),n,\bar b)$, the sequence $ys$ with
+  $ys[q]=\eta(h)(q,\bar b)$ for $q<n$;
+\item for the ops on the effect chain of \cref{lem:chain}, taken in chain order: an effect op
+  receives the pair $(\star,t)$, where $t$ is the next unread entry of $T$, and a call, or a
+  guard whose selected callee is effectful, passes the unread rest of $T$ to that callee, which
+  reads its own entries in the same way;
+\end{itemize}
+and $\mathit{Res}_i$ is undefined, a \emph{trap}, when an operand value is undefined, lies
+outside the domain, or a required callee application is undefined. $N$ \emph{traps} on
+$(v,\eta,T)$ when some $\mathit{Res}_i$ is undefined; otherwise its result is
+$(\val(a_1),\dots,\val(a_r))$ for $\mathit{out}=(a_1,\dots,a_r)$.
+\end{definition}
+
+Evaluation is strict: every op is evaluated whether or not its value is used, and
+\op{ASSERT\_GUARD} is the only op that applies one callee and not the other. The meaning of a
+VG-Sym text is the meaning of its canonical node (\cref{sec:identity}), from which dead ops have
+been removed; a dead partial op therefore never traps.
+
+\begin{proposition}[Determinism]\label{prop:determinism}
+The result of $N$ on $(v,\eta,T)$, or the fact that it traps, is uniquely determined by
+$(v,\eta,T)$. Every evaluation order that respects data dependencies computes the same values.
+\end{proposition}
+\begin{proof}
+\Cref{def:eval} defines $\val$ by well-founded recursion, so it is a function. The value of
+each op depends only on the values of its operands, which precede it. The trace entries an
+effect op receives are fixed by the order of the effect chain, a property of the graph that
+\cref{lem:chain} makes well defined, and, by induction on the call graph, by the same property
+of the callees on the chain; they do not depend on the order in which pure ops are executed.
+\end{proof}
+
+\subsection{Contracts}\label{sec:contracts}
+
+Contract formulas are a small logic over the same values. Terms name inputs by position,
+\kw{result} and \kw{result.j}, ports (in invariants only), bound variables, and typed
+constants; they combine them with integer arithmetic over $\Z$ (no wrapping), float
+arithmetic rounded to nearest-even, IEEE comparisons, the Boolean connectives,
+indexing, projection, bounded quantification $\kw{forall}(i\ \kw{in}\ a..b)\,\{\phi\}$
+(over the integers $a\le i<b$), the built-ins \kw{len}, \kw{is\_finite}, \kw{is\_nan},
+\kw{abs}, \kw{min}, \kw{max}, \kw{as\_bytes}, \kw{same}, \kw{is\_ok}, \kw{ok}, \kw{err}, the
+fold term $\kw{fold:}f(\mathit{init},xs,k,\bar b)$, the specification call
+$\kw{spec:}s(\bar t)$ and kernel applications. On floats, \kw{==} is IEEE equality
+($\NaN\neq\NaN$, $-0=+0$) and $\kw{same}(a,b)$ is identity.
+
+\begin{definition}[Unspecified values]\label{def:unspecified}
+An \emph{interpretation} $\iota$ assigns a value to every application outside its domain:
+integer division or remainder by zero, out-of-range indexing, \kw{ok} of an error and \kw{err}
+of a success, $\kw{spec:}s$ outside the precondition of $s$, $\kw{fold:}f$ with $k$ outside
+$[0,\mathrm{len}(xs)]$, and an op outside its domain inside a kernel applied in a formula. We write
+$\sem{\phi}^\iota_\sigma$ for the value of $\phi$ under an assignment $\sigma$ of inputs,
+results and ports, and under $\iota$.
+\end{definition}
+
+Quantifying over every $\iota$ is how ``unspecified'' is made precise: no proof can depend on
+an unspecified value, because it must hold for every choice of it.
+
+\begin{definition}[Satisfying a contract]\label{def:satisfies}
+Let $\mathit{Box}(v)$ state that each learnable input lies within its bounds. A node $N$
+\emph{satisfies its contract} if for every input $v$ with $\mathit{Box}(v)$, every
+interpretation $\iota$ with $\sem{\Pre}^\iota_v=\true$, every admissible trace $T$, and the
+callee semantics of the nodes $N$ calls: $N$ does not trap on $(v,\eta,T)$, its result $y$
+satisfies $\sem{\Post}^\iota_{v,y}=\true$, and the invariant of every \op{FOLD\_BOUNDED} holds
+at every step of that fold.
+\end{definition}
+
+A trace is admissible when it respects the environment facts the specification states, such
+as the monotonicity of successive clock reads along one chain.
+
+The specification also requires contracts to be \emph{well defined}: each term that could
+read an unspecified value adds an obligation saying that it does not, proven in the context
+where the term occurs (under the left operand of \kw{\&\&} for its right operand, under the
+negated left operand of \kw{||}, under the antecedent of \kw{==>}, under the range bounds
+inside \kw{forall}). Write $\mathit{WD}(\phi)$ for the conjunction of these conditions.
+
+\begin{lemma}[Well-defined formulas have one value]\label{lem:wd}
+If $\sem{\mathit{WD}(\phi)}^\iota_\sigma=\true$ for every $\iota$, then
+$\sem{\phi}^\iota_\sigma=\sem{\phi}^{\iota'}_\sigma$ for all $\iota,\iota'$.
+\end{lemma}
+\begin{proof}
+By induction on $\phi$. Variables and constants do not depend on $\iota$. For an application
+$p(t_1,\dots,t_n)$ that may leave its domain, $\mathit{WD}$ contains $\mathit{WD}(t_k)$ for each
+$k$ and the domain condition of $p$; by induction the arguments have $\iota$-independent values,
+and they lie in the domain, where $p$ is not interpreted by $\iota$. For $t_1\mathbin{\&\&}t_2$,
+$\mathit{WD}$ is $\mathit{WD}(t_1)\wedge(t_1\Rightarrow\mathit{WD}(t_2))$: $t_1$ has an
+$\iota$-independent value; if it is false, so is the conjunction for every $\iota$; if it is
+true, $\mathit{WD}(t_2)$ holds for every $\iota$ and the induction hypothesis applies to $t_2$.
+The cases of \kw{||} and \kw{==>} are symmetric. For $\kw{forall}(i\ \kw{in}\ a..b)\{\psi\}$,
+$\mathit{WD}$ contains $\mathit{WD}(a)$, $\mathit{WD}(b)$ and $\mathit{WD}(\psi)$ for every
+integer $i$ in the range, so the range and every instance have $\iota$-independent values.
+\end{proof}
+
+\subsection{Effects and capabilities}
+
+Effect sets are ordered by inclusion; the empty set is \emph{pure} and union is the join. The
+specification enforces \ref{wf:effects} at every call and counts kernels as callees.
+
+\begin{proposition}[Effect containment]\label{prop:effects}
+Let every node of a program be well formed. During any evaluation of a node $N$, including the
+evaluations of its callees, every effect op that executes has its effect in $\varepsilon_N$.
+\end{proposition}
+\begin{proof}
+By induction on the height of $N$ in the call graph, which is acyclic (\ref{wf:calls}). Effect
+ops in the body of $N$ have their effect in $\varepsilon_N$ by \ref{wf:effects}. An effect op
+executed inside a callee $g$ has its effect in $\varepsilon_g$ by induction, and
+$\varepsilon_g\subseteq\varepsilon_N$ by \ref{wf:effects}. Kernels have empty effect sets
+(\ref{wf:kernel}).
+\end{proof}
+
+\begin{proposition}[No forged capabilities]\label{prop:caps}
+Let every node of a program be well formed, and let a root node be called with handles opened
+by the runtime. Every handle that an effect op receives during the evaluation is one of those
+handles.
+\end{proposition}
+\begin{proof}
+We show by induction on the height of a node $N$ in the call graph that every handle value
+occurring in an evaluation of $N$ is one of the handle values among the inputs of $N$. A handle
+value in the body of $N$ is the value of an operand of handle type. Constants have no handle
+type and no primitive or effect op has a handle result (\ref{wf:handles},
+\cref{app:ops}), and handles cannot be stored in or projected out of tuples, results or
+collections (\ref{wf:handles}). So the operand is an input of $N$, or a result of a call whose
+handle results are, by induction, handle inputs of the callee, that is, handle arguments
+supplied by $N$, which are themselves operands of $N$ of handle type. Induction on the op
+index closes the argument. For the root, the inputs are the handles the runtime opened.
+\end{proof}
+
+The specification extends this confinement to the whole process: the runtime opens the
+handles named by the root's manifest, then drops every other authority through Landlock and
+seccomp on Linux, a generated sandbox profile on macOS, and preopened directories under WASI.
+That step relies on the operating system and is outside the scope of our proofs.

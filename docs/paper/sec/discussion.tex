@@ -1,0 +1,77 @@
+\section{Discussion and limitations}\label{sec:discussion}
+
+\paragraph{What the theorems cover.}
+The results of \cref{sec:calculus,sec:identity,sec:float,sec:verification,sec:case} are about
+the specification and a core calculus, proven by hand. The Rust implementation is not verified;
+its agreement with the laws is tested (\cref{tab:g1}), and an independent review found that it
+violates two of our side conditions (\cref{sec:status}). The calculus omits recursion, sum
+types, generics and explicit memory regions, which the MVP rejects, and treats each operation
+through its typing, domain and meaning without restating the opcode table.
+
+\paragraph{Assumptions.}
+\Cref{thm:hash-char,thm:hash-meaning,lem:eff-never-merged} rest on collision freeness, which
+holds except with the probability of \cref{lem:birthday} in the random-oracle idealization, a
+heuristic for BLAKE3. \Cref{thm:soundness} rests on a faithful encoding of each operation
+(\cref{ass:faithful}), on the solvers, and, for compiled code, on the code generator, LLVM, the
+runtime and the operating system; the specification mitigates these with two-solver agreement
+in release builds, replay of every counterexample, mutation testing of the verifier and
+differential testing of every build, none of which has run yet. Independently checkable
+certificates are planned.
+
+\paragraph{Two corrections to the specification.}
+Formalizing the specification exposed two imprecisions that matter for soundness, and we
+recommend recording both as decisions before the verifier is built. First, an obligation's
+context must contain only the facts of operations that precede it in a topological order
+(\cref{def:ordered}); the current wording allows a program that traps to verify
+(\cref{prop:ordering-needed}). Second, the facts of a \kw{spec:} application must be guarded by
+the specification's precondition (\cref{prop:foldspec}). Four smaller points are matters of
+precision: the cost expression is an upper bound, exact only without guards
+(\cref{prop:cost}); the statement that canonical forms coincide exactly for texts related by the
+listed moves needs the further identifications stated after \cref{cor:canon}; the
+well-definedness condition of a fold term must require $0\le k$ as well as
+$k\le\mathrm{len}(xs)$; and a kernel applied inside a formula can read an unspecified value
+without a well-definedness obligation. The last two are not unsound, but they leave such a
+contract without a single value.
+
+\paragraph{Rules planned after the MVP.}
+The specification already lists proof rules for \op{SCAN\_PREFIX} and \op{MATCH\_DISJOINT}.
+As written, the first requires only associativity of the operator and the second only that the
+arms are exhaustive and disjoint; neither requires the operator's or the arm's precondition to
+hold where it is applied. For a partial operator such as checked addition, a prefix scan can
+trap. These operations are not part of the MVP, but their rules need precondition goals, in the
+style of \cref{tab:rules}, before they are implemented.
+
+\paragraph{The contract--intent gap.}
+A verified node satisfies its contract, not its author's intent. The case study shows both
+sides: the sign clause catches a clamp that maps NaN to $-1$, which a range check alone would
+accept, yet the same clause cannot tell $-0$ from $+0$ (\cref{rem:contract}). The specification
+counts this among its gravest risks, renders every contract in plain words for human
+confirmation, and leaves its measurement to a research track.
+
+\paragraph{Floating point beyond the MVP.}
+The MVP has no transcendental functions, because the solvers' floating-point theory has none.
+They are planned as uninterpreted functions axiomatized from a verified, correctly rounded math
+library, followed by a final clamp. Whether float-heavy obligations solve in acceptable time is
+an empirical question that the verifier will answer; the specification falls back to an explicit
+guard, counted as residual runtime cost, when a solver returns unknown.
+
+\paragraph{What has not been measured.}
+We make no claim about solver times, the share of obligations proven automatically, the speed of
+generated code, the overhead of residual guards, token savings of the textual form, or the rate
+at which models write verified nodes. The project's gates G3 to G8 define how each will be
+measured; none has run.
+
+\section{Conclusion}\label{sec:conclusion}
+
+\VG{} treats a program as a content-addressed, contract-carrying dataflow graph that an AI agent
+writes, checks and repairs through structured judgments. We have given the design formal
+foundations: a core calculus; a characterization of when two bodies share a hash, with the
+capacity condition and the linearity of effect tokens as the precise hypotheses; a proof that no
+efficient canonical form can capture semantic equivalence, which justifies spec classes; a
+one-NaN semantics under which IEEE operations are congruences and the commutative ones commute
+bit for bit; soundness of the combinator rules and of the exact integer encoding, with an
+ordering proviso that we showed necessary; and a complete proof of the case study's kernel,
+confirmed by an exhaustive enumeration. The prototype implements the core representation, and an
+independent review's findings fall exactly on our side conditions. The verifier, the compiler
+and the agent loop remain to be built, and the measurements that would justify claims about them
+remain to be made.

@@ -1,0 +1,159 @@
+\section{Floating point with one NaN}\label{sec:float}
+
+The design promises that a node produces the same bytes in the interpreter and on x86\_64,
+ARM64 and WebAssembly (invariant~I5). For floats this cannot hold at the level of bit patterns.
+LLVM gives a NaN result a nondeterministic sign and a payload chosen among several
+options~\cite{llvm-langref}; x86\_64 and AArch64 produce different default NaNs; WebAssembly is
+deterministic only in its deterministic profile, which produces positive canonical
+NaNs~\cite{wasm-spec}; and the SMT-LIB theory of floating point, in which the verifier reasons,
+has a single NaN~\cite{brain2015fp}. \VG{} therefore gives floats the one-NaN domain of
+\cref{def:onenan}: a float value is a number, an infinity or $\NaN$, and wherever a float
+becomes bytes, $\NaN$ is written as the canonical NaN. This section proves that the choice is
+coherent, and states exactly where it constrains the language.
+
+\subsection{Operations descend to the quotient}
+
+Write $p\sim q$ for bit patterns with $\dec(p)=\dec(q)$; the classes of $\sim$ are the values
+$V_\varphi$. IEEE~754 lets an operation that returns a NaN choose among NaN patterns, so we read
+each operation $g$ as a relation between operand patterns and admissible result patterns. We
+say that $g$ \emph{descends to the quotient} on a set of operand values $D$ if there is a
+function $\hat g : D\to V_\varphi$ (or into $\mathsf{Bool}$, or an integer type) such that
+$\dec(z)=\hat g(\dec(p_1),\dots,\dec(p_n))$ for all operand patterns $p_k$ with
+$(\dec(p_1),\dots,\dec(p_n))\in D$ and every admissible result $z$ of $g(p_1,\dots,p_n)$.
+
+\begin{theorem}[One NaN is a congruence]\label{thm:float-congruence}
+Every MVP float operation descends to the quotient on its whole domain, with one exception:
+\op{FCOPYSIGN}$(x,y)$ descends exactly on the operand values with $y\neq\NaN$. The operations
+covered are \op{FADD}, \op{FSUB}, \op{FMUL}, \op{FDIV}, \op{FMA}, \op{FSQRT}, \op{FNEG},
+\op{FABS}, \op{FMIN}, \op{FMAX}, \op{FCLAMP}, \op{FCOPYSIGN}, the float comparisons, \op{CAST}
+between float formats and between floats and integers, and \op{AS\_BYTES}.
+\end{theorem}
+\begin{proof}
+A non-NaN value has exactly one pattern (\cref{lem:encdec}), so patterns in one class can
+differ only when the class is $\NaN$. It suffices to check, for each operation, that the class
+of the result does not depend on which NaN pattern an operand carries.
+\begin{enumerate}[label=(\alph*)]
+\item \op{FADD}, \op{FSUB}, \op{FMUL}, \op{FDIV}, \op{FMA}, \op{FSQRT} and conversions between
+  formats are general-computational operations. If an operand is a NaN, the result is a quiet
+  NaN; otherwise the result is the correctly rounded exact result, or a NaN for an invalid
+  operation ($\infty-\infty$, $0\cdot\infty$, $0/0$, $\infty/\infty$, the square root of a
+  negative number), or a signed infinity on overflow or division by zero~\cite{ieee754-2019}.
+  In every case the class of the result is a function of the operand values.
+\item \op{FMIN} and \op{FMAX} are the operations \emph{minimum} and \emph{maximum} of IEEE
+  754-2019: the result is a NaN if either operand is a NaN, and otherwise the lesser (greater)
+  operand, with $-0<+0$. They are not the NaN-avoiding operations \emph{minNum} of IEEE
+  754-2008 or \emph{minimumNumber} of IEEE 754-2019, which return the other operand when one
+  is a NaN.
+\item The comparisons are false for $<,\le,>,\ge,=$ and true for $\neq$ when an operand is a NaN,
+  and otherwise depend only on the values.
+\item \op{FNEG} and \op{FABS} are bit operations on the sign; they map NaN patterns to NaN
+  patterns and non-NaN values to determined values.
+\item \op{FCLAMP}$(x,lo,hi)$ is \op{FMIN}(\op{FMAX}$(x,lo),hi)$, a composition of operations
+  that descend.
+\item Conversion from a float to an integer is partial in \VG{}: its domain excludes NaN and
+  the infinities, and on the domain the result depends only on the value. Conversion from an
+  integer never sees a NaN.
+\item \op{AS\_BYTES} writes $\enc(\dec(p))$, which depends only on the class by
+  \cref{lem:encdec}.
+\item \op{FCOPYSIGN}$(x,y)$ returns the magnitude of $x$ with the sign bit of $y$. If $y$ is
+  not a NaN, the sign of $y$ is determined by its value, and a NaN $x$ yields a NaN. If $y$ is a
+  NaN, its sign bit is not determined by its class: in binary32, \texttt{0x7FC00000} and
+  \texttt{0xFFC00000} are both $\NaN$, and \op{FCOPYSIGN}$(1,\cdot)$ maps them to $+1$ and $-1$.
+  So no function $\hat g$ exists on any set of operand values containing a pair $(x,\NaN)$ with
+  $x$ not a NaN. \qedhere
+\end{enumerate}
+\end{proof}
+
+This is why the specification makes \op{FCOPYSIGN} partial, with the obligation
+\op{FCOPYSIGN.sign} that its second operand is not a NaN: the one-NaN semantics is well defined
+only with that restriction, and \cref{sec:case} discharges it in the case study.
+
+\subsection{Bit-exact commutativity}
+
+Canonicalization sorts the operands of \op{FADD}, \op{FMUL}, \op{FMIN} and \op{FMAX}, and the
+first two operands of \op{FMA}. This is sound only if swapping them never changes the value.
+
+\begin{theorem}[Commutativity on the quotient]\label{thm:float-comm}
+For all $a,b,c\in V_\varphi$: $\op{FADD}(a,b)=\op{FADD}(b,a)$, $\op{FMUL}(a,b)=\op{FMUL}(b,a)$,
+$\op{FMIN}(a,b)=\op{FMIN}(b,a)$, $\op{FMAX}(a,b)=\op{FMAX}(b,a)$, $\op{EQ}(a,b)=\op{EQ}(b,a)$,
+$\op{NE}(a,b)=\op{NE}(b,a)$ and $\op{FMA}(a,b,c)=\op{FMA}(b,a,c)$.
+\end{theorem}
+\begin{proof}
+If an operand is $\NaN$, both sides are $\NaN$ (false for \op{EQ}, true for \op{NE}). Otherwise:
+\begin{itemize}
+\item \op{FADD}: an infinite operand determines the result symmetrically ($\infty+(-\infty)$ is
+  invalid in both orders). For finite operands the exact sum is symmetric; if it is non-zero the
+  result is its rounding; if it is exactly zero, the sign is $+0$ under round-to-nearest when
+  the operands have opposite signs, and the common sign when both are zeros of the same
+  sign~\cite{ieee754-2019}. These conditions are symmetric.
+\item \op{FMUL}: the sign is the exclusive or of the operand signs, the magnitude is the
+  rounding of the exact product of the magnitudes, and $0\cdot\infty$ is invalid in both
+  orders.
+\item \op{FMA}: the result is the single rounding of the exact value of $a\cdot b+c$; the
+  exact product, its sign (the exclusive or), the invalid cases ($0\cdot\infty+c$, or an
+  infinite product added to an infinity of opposite sign) and the sign of an exact zero result
+  depend on $a$ and $b$ symmetrically.
+\item \op{FMIN} and \op{FMAX} are defined by the total order on non-NaN values that places
+  $-0$ below $+0$, which is symmetric; \op{EQ} and \op{NE} are symmetric relations. \qedhere
+\end{itemize}
+\end{proof}
+
+On bit patterns the statement is false in practice: when both operands of an addition are
+NaNs, the payload of the result may come from either one~\cite{llvm-langref}. The original
+specification therefore excluded float operations from commutative sorting; with one NaN
+they can be sorted, and canonicalization identifies more float code.
+
+\subsection{Agreement with SMT-LIB}
+
+The SMT-LIB theory of floating point~\cite{brain2015fp,smtlib} has one NaN per sort, and its
+operations \kw{fp.add}, \kw{fp.sub}, \kw{fp.mul}, \kw{fp.div}, \kw{fp.fma}, \kw{fp.sqrt} with
+rounding mode \kw{RNE}, \kw{fp.neg}, \kw{fp.abs} and the comparisons are those of IEEE~754 on
+the one-NaN domain. Three MVP operations need care.
+
+\begin{proposition}[Exact encodings]\label{prop:smt-enc}
+On $V_\varphi$, with $\kw{lt}$ for \kw{fp.lt}, $\kw{isN}$ for \kw{fp.isNaN} and $\kw{neg?}$
+for \kw{fp.isNegative},
+\begin{align*}
+\op{FMIN}(a,b) &= \mathrm{ite}\bigl(\kw{isN}(a)\vee\kw{isN}(b),\ \NaN,\\
+  &\qquad\quad \mathrm{ite}(\kw{lt}(a,b),\,a,\ \mathrm{ite}(\kw{lt}(b,a),\,b,\
+  \mathrm{ite}(\kw{neg?}(a),\,a,\,b)))\bigr),\\
+\op{FMAX}(a,b) &= \mathrm{ite}\bigl(\kw{isN}(a)\vee\kw{isN}(b),\ \NaN,\\
+  &\qquad\quad \mathrm{ite}(\kw{lt}(b,a),\,a,\ \mathrm{ite}(\kw{lt}(a,b),\,b,\
+  \mathrm{ite}(\kw{neg?}(a),\,b,\,a)))\bigr),\\
+\op{FCOPYSIGN}(x,y) &= \mathrm{ite}(\kw{neg?}(y),\ \kw{fp.neg}(\kw{fp.abs}(x)),\
+  \kw{fp.abs}(x)),
+\end{align*}
+the last for $y\neq\NaN$. Moreover, for $x\in V_\varphi$ the constraint
+$\mathrm{ite}(\kw{isN}(x),\ b=c_\varphi,\ \kw{to\_fp}(b)=x)$ on a fresh bit-vector $b$ of width
+$w_\varphi$ has exactly one solution, $b=\enc(x)$, provided $=$ is SMT-LIB's equality, which
+distinguishes $+0$ from $-0$, and not \kw{fp.eq}.
+\end{proposition}
+\begin{proof}
+For \op{FMIN}: NaN operands give $\NaN$. If $a<b$ or $b<a$ the lesser operand is returned. If
+neither holds, $a$ and $b$ are equal as numbers: either the same value, returned by either
+branch, or $\{-0,+0\}$, where the last test returns $-0$ whichever operand carries it. The
+argument for \op{FMAX} is symmetric and returns $+0$ on $\{-0,+0\}$. For \op{FCOPYSIGN}, when $y$
+is not a NaN \kw{fp.isNegative}$(y)$ holds exactly when the sign bit of $y$ is set, including
+$y=-0$ and $y=-\infty$; a NaN $x$ yields a NaN in both branches. For the last claim, if $x$ is a
+NaN the constraint fixes $b=c_\varphi$; otherwise $\kw{to\_fp}(b)$ is $\dec(b)$, and
+$\dec(b)=x$ has the single solution $\enc(x)$ by \cref{lem:encdec}. With \kw{fp.eq} instead of
+$=$, both encodings of zero would satisfy the constraint for $x=\pm0$.
+\end{proof}
+
+SMT-LIB's own \kw{fp.min} and \kw{fp.max} cannot be used: they return the non-NaN operand when
+exactly one operand is a NaN, and leave the result on $\{-0,+0\}$ unspecified~\cite{smtlib}.
+
+\subsection{From semantics to targets}
+
+\Cref{thm:float-congruence,thm:float-comm} make the one-NaN semantics coherent; making
+compiled code implement it is a code-generation obligation that the specification addresses
+with five rules, which we state but do not prove. No fast-math flag and no contraction of a
+multiply and an add; \op{FMA} lowers to \kw{llvm.fma}, never \kw{llvm.fmuladd}. \op{FMIN} and
+\op{FMAX} lower to \kw{llvm.minimum} and \kw{llvm.maximum}, never to the C library's
+\kw{fmin}, whose NaN rule differs. A float that may be NaN is canonicalized before it is stored
+where a caller or another op can read it, unless the verifier proved it is not a NaN. Every
+checked entry point saves the caller's floating-point control register, sets the default
+environment (round to nearest-even, subnormals preserved: MXCSR \texttt{0x1F80} on x86\_64,
+FPCR $0$ on AArch64) and restores it on return. Differential tests compare builds for the three
+targets, with and without proof facts, against the interpreter; they are part of gate G4 and
+have not been run.

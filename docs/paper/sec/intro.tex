@@ -1,0 +1,94 @@
+\section{Introduction}\label{sec:intro}
+
+AI agents now write, test and repair code in loops with little human involvement. The
+artifacts they manipulate were designed for human authors: a program is a set of text files
+whose identity is a path, whose meaning depends on names and declaration order, whose
+diagnostics are prose, and whose compiled behaviour may depend on undefined behaviour and on
+the floating-point unit of the target. Verification-aware languages such as
+Dafny~\cite{leino2010dafny}, Why3~\cite{filliatre2013why3}, F*~\cite{swamy2016fstar} and
+Verus~\cite{lattuada2023verus} close part of the gap: a program carries a contract that a
+solver checks, and language models are becoming competent at writing such
+programs~\cite{bursuc2025vericoding}. Identity, error reporting, determinism and composition
+nevertheless remain organized around text written for people.
+
+\VG{} starts from a different question: what should a program representation look like if
+every design decision is judged by what it does for an agent that writes, checks and repairs
+code with no human in the loop? Its answer has four parts.
+\begin{enumerate}
+\item A program is a set of \emph{nodes}. Each node is one function: a typed,
+  single-assignment dataflow graph of combinators, with a contract (pre- and postconditions,
+  loop invariants, cost bounds) and an effect set. Its identity is a BLAKE3
+  hash~\cite{blake3} of its canonical structure and contract, so equal programs have equal
+  names on every machine and every proof can be cached by content.
+\item Agents write a textual projection, VG-Sym, in which they name things with labels; the
+  toolchain computes every hash. Ports and labels are defined before use, so every prefix of
+  a VG-Sym file can be checked.
+\item Each contract is split into \emph{obligations}, each discharged by one quantifier-free
+  SMT query in a fragment that Z3~\cite{demoura2008z3}, cvc5~\cite{barbosa2022cvc5} and
+  Bitwuzla~\cite{niemetz2023bitwuzla} all accept. A failure comes back as structured data: an
+  obligation identifier, a counterexample that a reference interpreter replays, and a failing
+  slice of the graph.
+\item Verified nodes are meant to compile, through textual LLVM IR~\cite{lattner2004llvm}, to
+  x86\_64, ARM64 and WebAssembly binaries that agree bit for bit with the interpreter, with
+  proven facts turned into optimization hints and an operating-system sandbox derived from the
+  capabilities of the root node.
+\end{enumerate}
+
+These choices raise precise questions that an informal specification answers only loosely.
+When do two programs share a hash, and when must they not? Can effectful operations be merged
+by hash-consing? What does a floating-point value \emph{mean} when x86\_64, AArch64 and
+WebAssembly disagree on the bits of NaN? Which proof rules make bounded loops verifiable with
+quantifier-free queries, and are they sound? What does a counterexample that does not replay
+tell the agent? This paper answers these questions with definitions, theorems and proofs.
+
+\paragraph{Contributions.}
+\begin{itemize}
+\item A core calculus for \VG{} nodes (\cref{sec:calculus}): types with a one-NaN float
+  domain, nodes as term graphs with linear effect tokens, a strict evaluation semantics with
+  traps, contracts with explicitly unspecified values, and two confinement results: a node's
+  effects stay within its declared set, and capabilities cannot be forged.
+\item A characterization of content addressing (\cref{sec:identity}). Under an explicit
+  field-capacity condition and the usual collision-freeness idealization, two bodies have the
+  same hash if and only if their unravelings coincide up to commutativity
+  (\cref{thm:hash-char}); equal node hashes imply equal meaning (\cref{thm:hash-meaning}); and
+  hash-consing never merges two effectful operations when effect tokens are linear
+  (\cref{lem:eff-never-merged}). We also prove that no polynomial-time canonical form
+  identifies exactly the semantically equivalent nodes unless $\mathrm{P}=\mathrm{NP}$
+  (\cref{thm:conp}), which justifies the design's identity by specification.
+\item A one-NaN semantics for IEEE~754 (\cref{sec:float}). Identifying all NaN bit patterns
+  makes every float operation of the minimal viable product (MVP) a congruence, except
+  copySign with a NaN sign operand, which the design therefore treats as partial
+  (\cref{thm:float-congruence}). Under this semantics addition, multiplication, minimum,
+  maximum and the product part of a fused multiply-add are commutative bit for bit
+  (\cref{thm:float-comm}), which licenses sorting their operands during canonicalization.
+\item Soundness of modular verification (\cref{sec:verification}). The combinator proof
+  rules, the fresh-element rule and an exact bit-width encoding of mathematical integers
+  (\cref{thm:widths}) are sound (\cref{thm:soundness}), provided each obligation is checked
+  only against facts of operations that precede it in a topological order. A four-operation
+  program shows that this proviso is necessary (\cref{prop:ordering-needed}); the current
+  specification does not state it. The counterexample-replay classification is sound too
+  (\cref{thm:replay}).
+\item A complete IEEE~754 proof that the case study's soft-knee kernel meets its contract,
+  and an exact characterization of the inputs on which its first draft fails
+  (\cref{sec:case}), cross-checked exhaustively on every finite binary32 input for ten knee
+  values, $4.28\times10^{10}$ evaluations.
+\item An honest account of the prototype (\cref{sec:status}): what exists, what it passes, and
+  the findings of an independent review, two of which we reproduce and show to be exactly
+  violations of the side conditions of our theorems.
+\end{itemize}
+
+\paragraph{Status and scope.}
+\VG{} is at an early stage. Its core intermediate representation (parser, printer,
+canonicalizer, hashing, binary codec and object store) is implemented in about 9,600 lines of
+Rust, tests included. The type checker, interpreter, verifier, code generator, agent loop,
+registry and lifter are specified but not implemented. Our theorems are about the
+specification and the core calculus, not about running code; where we report a measurement,
+we name the commit and the command. We make no claim about verification time, the speed of
+generated code or synthesis success rates, because none of them has been measured.
+
+\paragraph{Organization.}
+\Cref{sec:overview} introduces \VG{} through its case study. \Cref{sec:calculus} defines the
+core calculus. \Cref{sec:identity} studies identity and content addressing,
+\cref{sec:float} floating point, and \cref{sec:verification} verification.
+\Cref{sec:case} proves the case study correct. \Cref{sec:status} reports the prototype,
+\cref{sec:related} discusses related work and \cref{sec:discussion} the limitations.

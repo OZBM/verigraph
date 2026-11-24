@@ -1,0 +1,92 @@
+\section{Related work}\label{sec:related}
+
+\paragraph{Content-addressed code.}
+Naming data by the hash of its content goes back to Merkle's hash trees~\cite{merkle1987}, and
+underlies version control, the Nix package manager~\cite{dolstra2006thesis} and content-addressed
+storage networks~\cite{benet2014ipfs}. Unison~\cite{unison} names each definition by a hash of
+its syntax tree with names abstracted, and hashes mutually recursive definitions as a cycle;
+\VG{} borrows this treatment of cycles for its future recursive nodes. Two differences matter.
+\VG{} hashes the contract together with the body, so that a hash names a function \emph{and}
+what is proven about it, and every proof is cached by the hash of its query; and it does not
+expect different implementations to meet at one hash, using spec classes instead
+(\cref{thm:conp}). Hashing modulo $\alpha$-equivalence~\cite{maziarz2021hashing} is how its
+contract hash ignores bound names.
+
+\paragraph{Term graphs, hash-consing and canonical forms.}
+\VG{} bodies are term graphs~\cite{ariola1996equational}, and their canonical form is the fully
+shared graph of their unraveling, computed by hash-consing~\cite{filliatre2006hashcons}.
+Single-assignment form~\cite{cytron1991ssa} and the sea-of-nodes
+representation~\cite{click1995simple} also represent programs as dataflow graphs, as do the
+dialects of MLIR~\cite{lattner2021mlir}; they serve optimization, not identity, and do not carry
+contracts. Equality saturation~\cite{tate2009equality,willsey2021egg,zhang2023egglog} computes
+larger equivalences than commutativity and could make more programs share a canonical form;
+\cref{thm:conp} bounds what any such efficient procedure can achieve. The soundness of merging
+pure ops rests on the cartesian structure of pure computation~\cite{fox1976coalgebras}.
+
+\paragraph{Verification-aware languages.}
+\VG's contracts follow Hoare logic~\cite{hoare1969,floyd1967} and design by
+contract~\cite{meyer1992}; modular verification against callee contracts is the discipline of
+Boogie~\cite{barnett2005boogie}, Dafny~\cite{leino2010dafny}, Why3~\cite{filliatre2013why3},
+F*~\cite{swamy2016fstar}, Liquid Haskell~\cite{vazou2014refinement} and
+Verus~\cite{lattuada2023verus}. Those systems verify text written for people and accept
+quantified specifications that need triggers or user lemmas. \VG{} restricts loops to bounded
+combinators with mandatory invariants, so that every obligation is one quantifier-free query
+accepted by Z3~\cite{demoura2008z3}, cvc5~\cite{barbosa2022cvc5} and
+Bitwuzla~\cite{niemetz2023bitwuzla}, and returns every judgment as data. Its rule for matching
+registry candidates is behavioral subtyping~\cite{liskov1994behavioral}. The SMT-LIB theory of
+floating point~\cite{brain2015fp,smtlib} fixes the one-NaN domain that \cref{sec:float} adopts
+for the language itself.
+
+\paragraph{Effects and capabilities.}
+Effect systems date back to Lucassen and Gifford~\cite{lucassen1988polymorphic}; monads and
+premonoidal categories give effectful computation its semantics~\cite{moggi1991notions,
+power1997premonoidal}, and string diagrams for effectful categories draw effects on a threaded
+wire~\cite{roman2022promonads}, which is the role of \VG's effect token. Linear
+types~\cite{wadler1990linear} explain why the token must be used exactly once
+(\cref{lem:chain,lem:eff-never-merged}). Capabilities as unforgeable
+references~\cite{dennis1966programming} and object-capability
+security~\cite{miller2006robust} are the model of \VG's handles (\cref{prop:caps}).
+
+\paragraph{Floating-point reasoning.}
+The pitfalls of verifying floating-point programs are well documented~\cite{goldberg1991,
+monniaux2008pitfalls}; Flocq~\cite{boldo2011flocq} formalizes IEEE arithmetic in Coq, and the
+handbook of Muller et al.~\cite{muller2018handbook} collects the lemmas we use, among them
+Sterbenz's~\cite{sterbenz1974}. Our case-study proof is a pen-and-paper instance of such
+reasoning; mechanizing it, or obtaining it from the solver's floating-point theory, is what the
+verifier will do.
+
+\paragraph{Proof-carrying code and certified compilation.}
+Proof-carrying code~\cite{necula1997pcc} ships proofs with code so that a consumer can check
+them; CompCert~\cite{leroy2009formal} and CakeML~\cite{kumar2014cakeml} verify the compiler
+itself. \VG{} neither ships proofs inside nodes nor verifies its compiler: proofs are stored by
+query hash and re-checked, the compiler is in the trusted base, and miscompilation is attacked by
+differential testing and translation validation~\cite{pnueli1998translation}. Alive2's bounded
+translation validation~\cite{lopes2021alive2} is the planned check for lifted legacy code.
+
+\paragraph{Language models, verifiers and constrained decoding.}
+Language models increasingly write verified code: on a benchmark of 12,504 formal
+specifications, off-the-shelf models succeeded on 82\% of the Dafny tasks, 44\% of the Verus
+tasks and 27\% of the Lean tasks~\cite{bursuc2025vericoding},
+and Dafny has been proposed as a verified intermediate language between a request and the
+shipped code~\cite{li2025dafny}, the architecture \VG{} adopts with a graph instead of text.
+Constrained decoding enforces syntax and types during generation~\cite{poesia2022synchromesh,
+mundler2025type}; it distorts the model's distribution~\cite{park2024grammar}, which sequential
+Monte Carlo can correct~\cite{loula2025syntactic}. \VG's define-before-use rule makes every
+prefix checkable, so type-level masks can be exact; its hosted mode uses tools instead, because
+hosted APIs expose no per-token masking. Agent performance depends on the interface the agent
+is given~\cite{yang2024sweagent}; in a study of regular-expression synthesis, counterexample
+feedback let an agent solve 90\% of 30 tasks within four turns, against 23\% with error-only
+feedback~\cite{badrinarayan2026counterexamples}. This is why every \VG{} failure leads with a
+replayable counterexample. Whether a formal specification
+states what a user meant cannot be decided by any algorithm~\cite{lahiri2024evaluating}; \VG{}
+renders every contract in plain words for confirmation and leaves intent validation to research.
+
+\paragraph{Transparency and supply chain.}
+The registry's ingestion log follows Certificate Transparency~\cite{rfc6962} and tamper-evident
+logging~\cite{crosby2009efficient}; software signing and provenance systems such as
+Sigstore~\cite{newman2022sigstore} and in-toto~\cite{torresarias2019intoto} address the same
+attestations. Self-hosting is planned with the stage-2/stage-3 fixpoint and diverse
+double-compiling~\cite{wheeler2005countering}, the standard answer to Thompson's
+attack~\cite{thompson1984reflections}. Checkable SMT certificates in the Alethe
+format~\cite{schurr2021alethe}, checked by Carcara~\cite{andreotti2023carcara}, are the planned
+successor of today's re-solving with pinned solvers.

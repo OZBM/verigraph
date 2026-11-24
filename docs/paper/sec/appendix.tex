@@ -1,0 +1,149 @@
+\section{MVP operations}\label{app:ops}
+
+\Cref{tab:ops} summarizes the MVP operations of the specification's opcode reference: typing,
+the domain of each partial operation (its obligation) and the commutative ones. Integer
+arithmetic requires one of the modes \kw{checked} (partial: no overflow), \kw{wrap} (modular)
+or \kw{sat} (saturating). Every float operation is the IEEE~754-2019 operation rounded to
+nearest-even, on the one-NaN domain.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+Family & Operations & Domain (obligation); commutative operands \\
+\midrule
+Structure & \op{TUPLE}, \op{PROJ}, \op{SELECT} (both branches evaluated), \op{CAST}, \op{AS\_BYTES}
+  (a view), \op{OK}, \op{ERR}, \op{IS\_OK}, \op{GET\_OK}, \op{GET\_ERR}; \op{IDENTITY} is text only
+  & \op{CAST}: the value fits when lossy, and a float source is finite; \op{GET\_OK}: an Ok;
+  \op{GET\_ERR}: an Err \\
+Integer & \op{ADD}, \op{SUB}, \op{MUL}, \op{DIV}, \op{MOD}, \op{NEG}, each with a mode &
+  checked: no overflow; \op{DIV}, \op{MOD}: non-zero divisor, and for signed \op{DIV} not
+  $\mathrm{MIN}/{-1}$; \op{ADD}, \op{MUL} commutative \\
+Bits & \op{AND}, \op{OR}, \op{XOR}, \op{NOT}, \op{SHL}, \op{SHR} (checked or wrap), \op{ROTL},
+  \op{ROTR} & checked shifts: amount below the width; \op{AND}, \op{OR}, \op{XOR} commutative \\
+Float & \op{FADD}, \op{FSUB}, \op{FMUL}, \op{FDIV}, \op{FMA}, \op{FNEG}, \op{FABS}, \op{FMIN},
+  \op{FMAX}, \op{FCLAMP}, \op{FCOPYSIGN}, \op{FSQRT} & \op{FCLAMP}: bounds not NaN and
+  $lo\le hi$; \op{FCOPYSIGN}: sign operand not NaN; \op{FADD}, \op{FMUL}, \op{FMIN}, \op{FMAX}
+  commutative, \op{FMA} in its first two operands \\
+Compare, logic & \op{EQ}, \op{NE}, \op{LT}, \op{LE}, \op{GT}, \op{GE} (mode \kw{s}, \kw{u} or
+  \kw{f}), \op{BAND}, \op{BOR}, \op{BNOT} & total; \op{EQ}, \op{NE}, \op{BAND}, \op{BOR}
+  commutative \\
+Collections & \op{INDEX}, \op{UPDATE}, \op{LEN}, \op{SLICE}, \op{CONCAT} (indices are
+  \kw{u64}) & index below the length; $lo\le hi\le$ length; concatenated length below $2^{64}$ \\
+Combinators & \op{SIMD\_MAP}, \op{FOLD\_BOUNDED} (with a named invariant), \op{GENERATE},
+  \op{ASSERT\_GUARD} (lazy) & see \cref{tab:rules} \\
+Composition & \op{CALL\_HASH} & the callee's precondition \\
+Effects & \op{FILE\_READ}, \op{FILE\_WRITE}, \op{CLOCK\_READ} & take and return the effect
+  token; results come from the environment \\
+\bottomrule
+\end{tabularx}
+\caption{The MVP operations. Partial operations trap in the interpreter outside their domain,
+and a verified node never applies one there.}
+\label{tab:ops}
+\end{table}
+
+\section{The VG-Sym grammar}\label{app:grammar}
+
+The grammar below is reproduced from the specification. A port (\kw{\%12}) and a label
+(\kw{@soft\_knee}) are single tokens; every word the grammar spells out is reserved.
+
+\begin{lstlisting}[language={},basicstyle=\ttfamily\scriptsize,frame=lines]
+Module     ::= "module" Ident ";" Item*
+Item       ::= MeshQuery | NodeDef | SpecDef
+MeshQuery  ::= "@MESH_QUERY" Label "{" "signature" ":" FnType ";" "effects" ":" Effects ";"
+               ("pre" ":" Formula ";")? "post" ":" Formula ";" ("intent" ":" String ";")? "}"
+SpecDef    ::= "SPEC" Label NodeBody          (* executable reference spec *)
+NodeDef    ::= "NODE" Label Attrs? NodeBody
+NodeBody   ::= "{" "SIGNATURE" ":" Params "->" Results ";"
+                   "EFFECTS" ":" Effects ";"
+                   "CONTRACT" "{" Clause* "}"
+                   Learnable?
+                   "BODY" "{" Stmt+ "}" "}"
+Attrs      ::= "[" Attr ("," Attr)* "]"
+Attr       ::= "intent" ":" String | "export" | "inline"
+Params     ::= "(" (Ident ":" Type ("," Ident ":" Type)*)? ")"
+Results    ::= "(" Type ("," Type)* ")"
+FnType     ::= "(" (Type ("," Type)*)? ")" "->" Results
+Clause     ::= "PRE" ":" Formula ";" | "POST" ":" Formula ";"
+             | "INVARIANT" Label "(" Ident "," Ident ")" ":" Formula ";"
+             | "DECREASES" ":" Formula ";" | "COST" ":" Formula ";" | "BUDGET" ":" Formula ";"
+Learnable  ::= "LEARNABLE" "{" (Ident ":" FloatType "in" "[" Signed "," Signed "]"
+               ("loss" ":" Label)? ";")+ "}"
+Stmt       ::= Binding ("," Binding)* "=" Op "(" Args? ")" ";"
+             | "RETURN" "(" Value ("," Value)* ")" ";"
+Binding    ::= Port (":" Type)?
+Op         ::= (OpName | Effect) ("." Mode)?
+Mode       ::= Ident | ScalarType
+Args       ::= Arg ("," Arg)*
+Arg        ::= (Ident "=")? (Value | Label)
+Value      ::= Port | Ident | Literal
+Port       ::= "%" Int
+Label      ::= "@" Ident
+Literal    ::= Signed ":" ScalarType | "true" | "false" | Array ":" Type
+Signed     ::= "-"? Number
+Array      ::= "[" Element ("," Element)* "]"
+Element    ::= Signed | "true" | "false" | Array
+Effects    ::= "[" (Effect ("," Effect)*)? "]"
+Effect     ::= "ARENA" | "CLOCK" | "FILE_READ" | "FILE_WRITE" | "NET_READ" | "NET_WRITE"
+             | "GPU" | "NONDET" | "PARAM_UPDATE" | "TELEMETRY" | "HOST_CALL" | "SPAWN"
+Type       ::= ScalarType | "Bool" | "Eff" | Handle
+             | ("Array" | "Tensor") "<" Type "," Shape ">" | "Slice" "<" Type ">"
+             | "Tuple" "<" Type ("," Type)* ">" | "Result" "<" Type "," Type ">"
+             | "Arena" "<" Int ">" | "{" Ident ":" Type "|" Formula "}"
+Shape      ::= Dim | "[" Dim ("," Dim)* "]"
+Dim        ::= Int | Ident
+Handle     ::= "FileIn" | "FileOut" | "Socket" | "Clock" | "GpuQueue"
+ScalarType ::= IntType | FloatType
+IntType    ::= "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
+FloatType  ::= "f16" | "bf16" | "f32" | "f64"
+Formula    ::= Or ("==>" Formula)?
+Or         ::= And ("||" And)*
+And        ::= Cmp ("&&" Cmp)*
+Cmp        ::= Sum (("==" | "!=" | "<" | "<=" | ">" | ">=") Sum)?
+Sum        ::= Prod (("+" | "-") Prod)*
+Prod       ::= Unary (("*" | "/" | "%") Unary)*
+Unary      ::= ("!" | "-") Unary | Postfix
+Postfix    ::= Primary ("[" Formula ("," Formula)* "]" | "." Int)*
+Primary    ::= Value | Number | "result" | Call | "(" Formula ")"
+             | "forall" "(" Range ("," Range)* ")" "{" Formula "}"
+Range      ::= Ident "in" Sum ".." Sum
+Call       ::= (("spec" | "fold") ":")? Ident "(" (Formula ("," Formula)*)? ")"
+\end{lstlisting}
+
+\section{Reproducing the measurements}\label{app:repro}
+
+All commands run from the repository root at commit \texttt{fe499c8}, on the host described in
+\cref{sec:case}.
+
+\paragraph{Tests.} \kw{cargo test --workspace --locked} reports 26 passing tests. The G1
+evidence of \cref{tab:g1} is regenerated by \kw{make gate-g1}, which writes
+\file{reports/gate-g1.md}; fuzzing takes an hour per target.
+
+\paragraph{The capacity collision (B1).} Generate two modules, each with one node
+\kw{NODE @f \{ SIGNATURE: (x: T) -> (T); EFFECTS: []; CONTRACT \{ \} BODY \{ RETURN(x); \} \}},
+with $T$ equal to \kw{Tuple<Tuple<u8, ..., u8>, u8>} (257 inner members) and to
+\kw{Tuple<Tuple<u8>, u8, ..., u8>} (257 outer members after the inner tuple). Then
+\kw{target/debug/vg hash} prints, for both,
+\begin{center}\footnotesize
+node \texttt{e271d220c54d0cebca0ac788b44471e44d2ffb4039ac865c53e2a301fa7e1c2f}
+\end{center}
+with equal body and contract hashes, whereas the pair with 2 and 1 inner members prints the
+distinct node hashes \texttt{\#25e623e3de21} and \texttt{\#d3edd905070c}.
+\kw{target/debug/vg asm} rejects the wide program with \texttt{VG-S0202 unknown type tag 0x00}.
+
+\paragraph{The ordering example.} \Cref{lst:ordering}, preceded by \kw{module ordering;}, is
+accepted by \kw{vg asm}, which assigns \kw{@g} and \kw{@f} the node hashes
+\texttt{\#78976d2a646b} and \texttt{\#e05de7734ca2}. No verifier exists to run on it; the
+proposition is proven by hand.
+
+\paragraph{The soft-knee enumeration.} Compile and run
+\begin{center}\footnotesize
+\texttt{clang -std=c11 -O2 -ffp-contract=off -fno-fast-math -pthread softknee\_check.c -lm -o
+softknee\_check \&\& ./softknee\_check 16}
+\end{center}
+in \file{docs/paper}. The argument is the number of threads. The program prints the draft's
+trace at $x=3\cdot10^{38}$, then the rows E1 to E4 of \cref{tab:enum}; all of its inputs are
+fixed or derived from fixed seeds, so the counts are reproducible. The output of the run reported
+in \cref{tab:enum} is kept in \file{docs/paper/softknee\_check.out}.

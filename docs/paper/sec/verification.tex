@@ -1,0 +1,446 @@
+\section{Verification}\label{sec:verification}
+
+Every obligation of a \VG{} node becomes one quantifier-free SMT query: the conjunction of
+some assumptions with the negation of a goal. An unsatisfiable query proves the obligation; a
+satisfiable one yields a model, which the interpreter must replay; an unknown answer or a
+timeout proves nothing (invariant~I8). This section defines the queries for the core calculus
+and proves that proving them all makes a node satisfy its contract.
+
+\subsection{Facts, obligations and contexts}
+
+Let $T$ be the standard model of the quantifier-free combination of bit-vectors, floating point
+(with one NaN per sort), arrays and uninterpreted functions. The encoding of a node assigns a
+term to every port, built bottom-up over symbols for the inputs, and records for each op $o_i$
+a set of \emph{facts} $A_i$ (formulas the encoding may assume once $o_i$ has run) and a set of
+\emph{goals} $G_i$ (formulas that must hold for $o_i$ to run). \Cref{tab:rules} lists them. A
+fresh symbol is a new constant that occurs in no earlier formula; fresh symbols in a goal are implicitly
+universally quantified.
+
+\begin{table}[t]
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+Op $o_i$ & Goals $G_i$ & Facts $A_i$ \\
+\midrule
+primitive $f(\bar a)$ & $\mathit{dom}_f(\bar a)$ (absent when $f$ is total) &
+  $p_i=\mathit{enc}_f(\bar a)$ \\
+\op{CALL\_HASH}\newline$(g,\bar a)$ & $\Pre_g(\bar a)$ & $\Post_g(\bar a,p_i)$ \\
+\op{ASSERT\_GUARD}\newline$(c,g_1,\bar a,g_2)$ & $c\Rightarrow\Pre_{g_1}(\bar a)$;\ \
+  $\neg c\Rightarrow\Pre_{g_2}(\bar a)$ &
+  $c\Rightarrow\Post_{g_1}(\bar a,r_1)$;\ \ $\neg c\Rightarrow\Post_{g_2}(\bar a,r_2)$;\ \
+  $p_i=\mathrm{ite}(c,r_1,r_2)$ \\
+\op{SIMD\_MAP}\newline$(g,xs,\bar b)$ & $0\le k<n\Rightarrow\Pre_g(xs[k],\bar b)$, with
+  $n=\mathrm{len}(xs)$ and $k$ fresh & $\forall k<n.\ \Post_g(xs[k],\bar b,p_i[k])$, where $p_i$ has the
+  shape of $xs$ \\
+\op{GENERATE}\newline$(g,n,\bar b)$ & $0\le k<n\Rightarrow\Pre_g(k,\bar b)$, $k$ fresh &
+  $\forall k<n.\ \Post_g(k,\bar b,p_i[k])$ \\
+\op{FOLD\_BOUNDED}\newline$(g,xs,\bar b,\mathit{init})$,\newline invariant $I$ &
+  $I(0,\mathit{init})$;\ \ $0\le k<n\wedge I(k,\mathit{acc})\Rightarrow
+  \Pre_g(\mathit{acc},xs[k],\bar b)$;\ \ $0\le k<n\wedge I(k,\mathit{acc})\wedge
+  \Post_g(\mathit{acc},xs[k],\bar b,r)\Rightarrow I(k+1,r)$; with $n=\mathrm{len}(xs)$ and
+  $k,\mathit{acc},r$ fresh & $I(n,p_i)$ \\
+effect op & none & environment facts (e.g.\ clock reads never decrease) \\
+\bottomrule
+\end{tabularx}
+\caption{Goals and facts per op, following the specification~\cite{vgspec}. $p_i$ is the term
+of the op's result: the encoding of a primitive op, and a fresh symbol for every other op.
+$\Pre_g$ and $\Post_g$ are the callee's contract with its parameters and result replaced by the
+given terms.}
+\label{tab:rules}
+\end{table}
+
+A universally quantified fact is never given to a solver as such. The fresh-element rule of the
+specification instantiates it at the index terms of the same collection that occur in the
+query, in a fixed order, so the query stays quantifier-free. Goals with a \kw{forall} are
+handled dually: the bound variable becomes a fresh constant.
+
+\begin{definition}[Ordered contexts]\label{def:ordered}
+Number the ops of a canonical node in canonical order. This is a topological order in which the
+ports named by a fold's invariant also precede the fold, because canonical numbering treats
+those ports as dependencies of the fold, as the prototype does. The context of op $o_i$ is
+\[
+\ctx_{<i} \;=\; \Pre\wedge\mathit{Box}\wedge\bigwedge_{j<i}A_j .
+\]
+The obligations of the node are $\ctx_{<i}\Rightarrow\gamma$ for every goal $\gamma\in G_i$,
+and $\ctx_{<k}\Rightarrow\Post$ for the postcondition, where $k$ is the number of ops. An
+encoding may drop conjuncts from a context, for instance those that share no symbol with the
+goal.
+\end{definition}
+
+\begin{definition}[Verified node]\label{def:verified}
+A node is \emph{verified} when its contract is non-vacuous ($\Pre\wedge\mathit{Box}$ is
+satisfiable), every obligation is valid in $T$, as witnessed by an unsatisfiable query, and
+every callee is verified, or is a registry binding whose evidence the caller's policy accepts.
+\end{definition}
+
+\begin{assumption}[Faithful encoding]\label{ass:faithful}
+For every primitive op symbol $f$, the formula $\mathit{dom}_f$ defines $D_f$ in $T$, and the
+term $\mathit{enc}_f$ denotes $\sem{f}$ on $D_f$. For contracts, formula terms denote their
+meaning of \cref{sec:contracts}, with unspecified values as uninterpreted functions.
+\end{assumption}
+
+\Cref{ass:faithful} is the part of the verification-condition generator that must be trusted;
+\cref{sec:float} discharges the delicate float cases, and \cref{thm:widths} below the integer
+terms of formulas.
+
+\subsection{Two logical lemmas}
+
+\begin{lemma}[Generalization]\label{lem:gen}
+Let $\Delta$ be a set of formulas in which the constant $k$ does not occur. If
+$\Delta\wedge\rho(k)\wedge\neg\psi(k)$ is unsatisfiable, then
+$\Delta\models\forall i.\ \rho(i)\Rightarrow\psi(i)$.
+\end{lemma}
+\begin{proof}
+If a model $M$ of $\Delta$ had an element $i_0$ with $\rho(i_0)$ and $\neg\psi(i_0)$, then
+reinterpreting $k$ as $i_0$ would leave $\Delta$ true, since $k$ does not occur in it, and
+satisfy the query.
+\end{proof}
+
+\begin{lemma}[Weakening]\label{lem:weak}
+If $\Delta'$ is a set of logical consequences of $\Delta$ and $\Delta'\wedge\neg\psi$ is
+unsatisfiable, then $\Delta\models\psi$. In particular, instantiating a universally quantified
+fact at any finite set of terms, or dropping conjuncts, is sound.
+\end{lemma}
+\begin{proof}
+Every model of $\Delta\wedge\neg\psi$ is a model of $\Delta'\wedge\neg\psi$.
+\end{proof}
+
+The converse of \cref{lem:weak} fails, which is why a model of a weakened query may be
+spurious: it satisfies the instances that were kept but may violate one that was dropped. The
+specification reports such a model as \emph{unknown}, never as a counterexample
+(\cref{thm:replay}).
+
+\subsection{Soundness}
+
+\begin{theorem}[Soundness of modular verification]\label{thm:soundness}
+Let $N$ be a well-formed canonical node, let every callee of $N$ satisfy its contract, and
+suppose every obligation of $N$ (\cref{def:ordered}) is valid in $T$. Under
+\cref{ass:faithful}, $N$ satisfies its contract (\cref{def:satisfies}).
+\end{theorem}
+\begin{proof}
+Fix an input $v$ with $\mathit{Box}(v)$, an interpretation $\iota$ with $\sem{\Pre}^\iota_v$,
+and an admissible trace. We build, op by op, a $T$-model $M$ that interprets the input symbols
+as $v$, the uninterpreted functions of unspecified values as $\iota$, and the symbols of each op
+that has run as the values it computed. We prove by induction on $i\le k$:
+\begin{center}
+\emph{ops $o_0,\dots,o_{i-1}$ do not trap, and $M\models\ctx_{<i}$.}
+\end{center}
+For $i=0$, $\ctx_{<0}=\Pre\wedge\mathit{Box}$ holds by the choice of $v$ and $\iota$. For the
+step, assume the claim for $i$. Each goal $\gamma\in G_i$ satisfies $\ctx_{<i}\Rightarrow\gamma$
+in $T$, with its fresh symbols universally quantified (\cref{lem:gen}); interpreting those
+symbols as any values keeps $M\models\ctx_{<i}$, since they do not occur there, so $\gamma$
+holds in $M$ for every such choice. We show that $o_i$ does not trap and that $A_i$ can be made
+true by interpreting the fresh symbols of $A_i$, which occur in no earlier formula.
+\begin{itemize}
+\item \emph{Primitive op.} If $f$ is partial, its goal $\mathit{dom}_f(\bar a)$ holds of the
+  operand values, so $\bar a\in D_f$ by \cref{ass:faithful}, and $o_i$ does not trap. Setting
+  $p_i$ to $\sem{f}(\bar a)$ satisfies $p_i=\mathit{enc}_f(\bar a)$.
+\item \emph{Call.} $\Pre_g(\bar a)$ holds, so the callee, which satisfies its contract, does not
+  trap and returns a result satisfying $\Post_g$; interpret the fresh $p_i$ as that result.
+\item \emph{Guard.} Exactly one branch runs. If $c$ holds, $\Pre_{g_1}(\bar a)$ holds, $g_1$
+  returns $r_1$ with $\Post_{g_1}$, and we interpret $r_2$ arbitrarily, which satisfies the
+  implication guarded by $\neg c$; symmetrically if $c$ fails. Then $p_i=\mathrm{ite}(c,r_1,r_2)$
+  is the value computed.
+\item \emph{Map and generate.} Instantiating the fresh $k$ at each index shows
+  $\Pre_g(xs[k],\bar b)$ for every element, so no kernel application traps, and each result
+  satisfies $\Post_g$; interpret $p_i$ as the computed collection. Every finite set of
+  instances of the universal fact then holds (\cref{lem:weak}).
+\item \emph{Fold.} Let $\mathit{acc}_0=\mathit{init}$ and
+  $\mathit{acc}_{q+1}=g(\mathit{acc}_q,xs[q],\bar b)$. By induction on $q\le n$, $I(q,
+  \mathit{acc}_q)$ holds and steps $0,\dots,q-1$ do not trap: the case $q=0$ is the first goal;
+  for $q<n$, instantiating $k,\mathit{acc}$ as $q,\mathit{acc}_q$ in the second goal gives
+  $\Pre_g(\mathit{acc}_q,xs[q],\bar b)$, so the kernel does not trap and its result
+  $\mathit{acc}_{q+1}$ satisfies $\Post_g$; instantiating $r$ as $\mathit{acc}_{q+1}$ in the
+  third goal gives $I(q+1,\mathit{acc}_{q+1})$. Interpret $p_i$ as $\mathit{acc}_n$, so
+  $I(n,p_i)$ holds. The invariant therefore holds at every step.
+\item \emph{Effect op.} It does not trap, and an admissible trace satisfies the environment
+  facts.
+\end{itemize}
+Hence $M\models\ctx_{<i+1}$. For $i=k$, no op traps, so by \cref{lem:unr-sem} the outputs of $N$
+are the values of the output terms in $M$, and the postcondition obligation gives
+$\sem{\Post}^\iota$ of the result.
+\end{proof}
+
+Applied bottom-up along the acyclic call graph, \cref{thm:soundness} shows that every node of a
+verified program, all of whose registry bindings have \emph{proved} evidence, satisfies its
+contract. The guarantee is relative to the trusted computing base: the canonicalizer, the type
+checker, the verification-condition generator (\cref{ass:faithful}), the solvers, and, for
+compiled code, the code generator, LLVM, the runtime and the operating system.
+
+\begin{corollary}[No local vacuity]\label{cor:local-vacuity}
+Under the hypotheses of \cref{thm:soundness}, if $\Pre\wedge\mathit{Box}$ is satisfiable, then
+so is every context $\ctx_{<i}$.
+\end{corollary}
+\begin{proof}
+For any input satisfying $\Pre\wedge\mathit{Box}$, the model built in the proof satisfies
+$\ctx_{<i}$.
+\end{proof}
+
+So once the contract itself is shown non-vacuous, no obligation can be proven merely because
+the facts of earlier ops contradict each other; this would fail for registry bindings whose
+evidence is only \emph{tested}, whose postconditions may be false.
+
+\subsection{The ordering proviso is necessary}
+
+\Cref{def:ordered} lets an op's goals see only the facts of earlier ops. The specification
+describes contexts as ``the caller's facts'' and keeps ``only assumptions that share symbols
+with the goal, closed under sharing''; it does not exclude an op's own facts or those of later
+ops. That omission is unsound.
+
+\begin{lstlisting}[float=t,caption={A program that traps at $x=5$ but whose obligations all
+become valid if contexts may contain an op's own facts.},label=lst:ordering]
+NODE @g {
+  SIGNATURE: (y: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  y != 0;
+    POST: y != 0 && result == 1;
+  }
+  BODY {
+    RETURN(1:i32);
+  }
+}
+
+NODE @f {
+  SIGNATURE: (x: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    POST: true;
+  }
+  BODY {
+    %0 = SUB.wrap(x, 5:i32);
+    %1 = DIV.checked(100:i32, %0);
+    %2 = CALL_HASH(@g, %0);
+    %3 = ADD.wrap(%1, %2);
+    RETURN(%3);
+  }
+}
+\end{lstlisting}
+
+\begin{proposition}[Unordered contexts are unsound]\label{prop:ordering-needed}
+In \cref{lst:ordering}, \kw{@g} satisfies its contract and is non-vacuous, and \kw{@f} traps at
+$x=5$. If each obligation of \kw{@f} may use the facts of every op that shares a symbol with
+its goal, then all obligations of \kw{@f} are valid.
+\end{proposition}
+\begin{proof}
+\kw{@g} returns $1$, so its postcondition holds whenever its precondition does, and $y=1$
+satisfies the precondition. Write $p_j$ for the port \kw{\%j} of the listing. In \kw{@f},
+$p_0=x-5$ in wrapping \kw{i32} arithmetic; at $x=5$,
+$p_0=0$ and \op{DIV.checked} traps (so does the call, whose precondition fails). The goals of
+\kw{@f} are $p_0\neq0$ for \op{DIV.nonzero}, a trivially true \op{DIV.no\_overflow} (the
+dividend is $100$), and $p_0\neq0$ for \op{CALL.pre.0}. The fact of the call is
+$\Post_g(p_0,p_2)=(p_0\neq0\wedge p_2=1)$, which shares the symbol $p_0$ with both goals. With it in
+the context, both goals follow immediately; the postcondition \kw{true} is valid. So every
+obligation is valid although \kw{@f} traps.
+\end{proof}
+
+Under \cref{def:ordered} the call's own fact is excluded from the context of its goal, the goal
+$p_0\neq0$ fails, and \kw{@f} is rejected, as it must be. The listing parses and assembles with
+the prototype's toolchain (\cref{app:repro}). Guarding call facts by the callee's precondition,
+$\Pre_g(\bar a)\Rightarrow\Post_g(\bar a,p_i)$, would also reject this program, but it does not
+suffice for folds: an invariant may name a port of the body, and a fold whose own fact
+$I(n,p_i)$ entered the context of its own goals could prove its base case from its conclusion.
+Ordering contexts by a topological order handles every op uniformly, and canonical numbering
+already provides one.
+
+\subsection{Exact integers in bit-vectors}
+
+Formula integers are mathematical integers, but every query is quantifier-free bit-vector
+arithmetic, which all three solvers accept and which is decidable, whereas integer arithmetic
+with products of variables is not~\cite{matiyasevich1970}. The specification encodes each
+integer term $t$ as a signed bit-vector of a width $w(t)$ chosen so that nothing wraps.
+
+\begin{definition}[Widths]\label{def:widths}
+$w$ is defined on integer terms by: $w(x)=N+1$ for an input of type $\mathsf{u}N$ or
+$\mathsf{i}N$; $w(\mathrm{len}(xs))=65$; $w(c)=\mathrm{bits}(|c|)+1$ for a literal $c$, where
+$\mathrm{bits}(m)$ is the number of binary digits of $m$ ($\mathrm{bits}(0)=0$); for a variable
+bound by $\kw{forall}(i\ \kw{in}\ a..b)$, $w(i)=\max(w(a),w(b))$;
+$w(a\pm b)=\max(w(a),w(b))+1$; $w(a\cdot b)=w(a)+w(b)$; $w(-a)=w(\mathrm{abs}(a))=w(a)$;
+$w(a/b)=w(a)$; $w(a\mathbin{\%}b)=\min(w(a),w(b))$; $w(\min(a,b))=w(\max(a,b))=\max(w(a),w(b))$.
+An operator sign-extends its operands to the largest of their widths and its result width,
+computes there with \kw{bvadd}, \kw{bvsub}, \kw{bvmul}, \kw{bvneg}, \kw{bvsdiv} or
+\kw{bvsrem}, and truncates to its result width; a comparison sign-extends both sides to the
+wider width. Division and remainder by zero are uninterpreted functions of their operands.
+\end{definition}
+
+\begin{theorem}[Exact integer encoding]\label{thm:widths}
+For every integer term $t$ and every assignment of in-range values to its free variables under
+which every range variable satisfies its bounds and every divisor is non-zero, the bit-vector
+value of $t$, read as a signed integer of width $w(t)$, equals the mathematical value
+$\sem{t}$, and $|\sem{t}|<2^{w(t)-1}$. Every comparison of integer terms is therefore decided
+exactly.
+\end{theorem}
+\begin{proof}
+By induction on $t$. Write $W$ for the computation width of an operator and recall that a
+$W$-bit signed bit-vector holds exactly the integers in $[-2^{W-1},2^{W-1}-1]$, so a value of
+magnitude below $2^{W-1}$ is held without wrapping and is never the most negative value.
+\begin{itemize}
+\item Inputs: a $\mathsf{u}N$ value lies in $[0,2^N-1]$ and an $\mathsf{i}N$ value in
+  $[-2^{N-1},2^{N-1}-1]$; both have magnitude below $2^N=2^{w-1}$, and zero- or sign-extension
+  by one bit preserves the value. $\mathrm{len}$ is below $2^{64}=2^{65-1}$. A literal satisfies
+  $|c|<2^{\mathrm{bits}(|c|)}=2^{w(c)-1}$.
+\item A range variable satisfies $a\le i<b$, so $-2^{w(a)-1}<i<2^{w(b)-1}$, and
+  $|i|<2^{w(i)-1}$. Where the bounds fail, $i$ occurs only under the guard
+  $a\le i<b$, which is evaluated exactly, so its value there does not matter.
+\item $a\pm b$: $W=w(a\pm b)$ and $|a\pm b|\le|a|+|b|<2^{w(a)-1}+2^{w(b)-1}\le2^{W-1}$.
+\item $a\cdot b$: $W=w(a)+w(b)$ and $|ab|<2^{w(a)-1}2^{w(b)-1}=2^{W-2}$.
+\item $-a$ and $\mathrm{abs}(a)$: the magnitude is $|a|<2^{w(a)-1}$, so \kw{bvneg} is exact.
+\item $a/b$ with $b\neq0$: $W=\max(w(a),w(b))$; since $|a|<2^{w(a)-1}\le2^{W-1}$, $a$ is not
+  the most negative $W$-bit value, so \kw{bvsdiv}, which truncates toward zero as \op{DIV} does,
+  is exact, and $|a/b|\le|a|<2^{w(a)-1}$ survives truncation to $w(a)$ bits.
+\item $a\mathbin{\%}b$ with $b\neq0$: \kw{bvsrem} takes the sign of the dividend, as \op{MOD}
+  does, and is exact in width $W$; $|a\mathbin{\%}b|\le|a|<2^{w(a)-1}$ and
+  $|a\mathbin{\%}b|\le|b|-1<2^{w(b)-1}$, so the value fits $\min(w(a),w(b))$ bits.
+\item $\min$ and $\max$ return an operand, of magnitude below $2^{\max(w(a),w(b))-1}$.
+\end{itemize}
+A comparison extends both sides to a common width that holds both values, where the signed
+comparison is the integer comparison.
+\end{proof}
+
+A width that is too narrow would be a soundness bug: a wrapped sum can make a false
+postcondition look proven. The independent reviews of this paper's proofs found no term on which
+the widths fail (\cref{sec:status}).
+
+\subsection{Folds and specifications inside formulas}
+
+A postcondition such as \kw{result == spec:sha256(arg0)} needs a way to say what a fold has
+computed. The specification adds two terms. $\kw{fold:}f(\mathit{init},xs,k,\bar b)$ is the
+left fold of kernel $f$ over the first $k$ elements; the solver sees an uninterpreted function
+$F$ and receives, for each ground application, the two instances
+\begin{gather*}
+k=0\Rightarrow F(\mathit{init},xs,k,\bar b)=\mathit{init},\\
+0<k\le\mathrm{len}(xs)\Rightarrow F(\mathit{init},xs,k,\bar b)=
+f(F(\mathit{init},xs,k-1,\bar b),xs[k-1],\bar b),
+\end{gather*}
+never chained further. $\kw{spec:}s(\bar t)$ is an uninterpreted function $S$ for the executable
+reference node $s$, unfolded one level.
+
+\begin{proposition}[Fold and spec instances are sound]\label{prop:foldspec}
+Adding any set of the fold instances above is sound. Adding, for an application of
+$\kw{spec:}s$, the guarded facts
+$\Pre_s(\bar t)\Rightarrow S(\bar t)=\mathit{body}_s(\bar t)$ and
+$\Pre_s(\bar t)\Rightarrow\Post_s(\bar t,S(\bar t))$ is sound when $s$ satisfies its contract.
+Adding $\Pre_s(\bar t)$ unguarded is unsound, and so is adding $\Post_s(\bar t,S(\bar t))$
+unguarded, since a postcondition may restate the precondition.
+\end{proposition}
+\begin{proof}
+The intended interpretation of $F$, the true fold for $0\le k\le\mathrm{len}(xs)$ and anything
+for other $k$,
+satisfies both instance schemes for all arguments, and it is one of the interpretations over
+which validity quantifies; so every instance is a consequence of the intended meaning, and
+\cref{lem:weak} applies. The same holds for $S$ interpreted as the function computed by $s$ on
+its precondition: on $\Pre_s$, $s$ does not trap, returns $\mathit{body}_s(\bar t)$ and
+satisfies $\Post_s$. For the last claim, let $s$ return an integer and have
+$\Pre_s(y)\equiv y>0$, and give a node with precondition \kw{true} the postcondition
+$\Post\equiv x>0\wedge(x>0\Rightarrow\kw{spec:}s(x)=\kw{spec:}s(x))$, in which the
+\kw{spec:} term is well defined because it is guarded by $x>0$. The postcondition is false at
+$x=0$, yet the unguarded fact $\Pre_s(x)$, that is $x>0$, makes its obligation valid. The same
+happens with an unguarded $\Post_s$ if $s$ has the postcondition $y>0$, which $s$ satisfies.
+\end{proof}
+
+The specification says that the precondition and postcondition of a \kw{spec:} call ``are added
+as facts''; \cref{prop:foldspec} shows they must be added under the guard $\Pre_s(\bar t)$, and
+the well-definedness obligations of \cref{sec:contracts} then establish that guard wherever
+the term is read. The independent soundness review reached the same conclusion
+(\cref{sec:status}).
+
+The natural invariant of a fold, $\mathit{acc}=\kw{fold:}f(\mathit{init},xs,k,\bar b)$,
+becomes provable with one instance per query: the base case uses the instance at $k=0$, and the
+step goal $r=F(\dots,k+1,\dots)$ follows from the instance at $k+1$ and the hypothesis
+$\mathit{acc}=F(\dots,k,\dots)$, provided the step query relates $r$ to
+$f(\mathit{acc},xs[k],\bar b)$ exactly. That holds when the kernel is inlined in the step query,
+as it is inside formulas; if the step used only $\Post_f$, the natural invariant would be
+provable exactly when $\Post_f$ determines the result. Either way soundness is unaffected.
+
+\subsection{Non-vacuity}
+
+\begin{lemma}[Ex falso]\label{lem:exfalso}
+If $\Pre\wedge\mathit{Box}$ is unsatisfiable, every obligation of the node is valid.
+\end{lemma}
+\begin{proof}
+Every context contains $\Pre\wedge\mathit{Box}$.
+\end{proof}
+
+A node with an unsatisfiable precondition would therefore verify whatever its body does, which
+is why \cref{def:verified} requires non-vacuity. The specification establishes it by an input
+from the concrete pre-screen, or by a solver model that the interpreter replays; either is a
+certificate of satisfiability that can be checked by evaluation, and a check that ends in
+\emph{unknown} rejects the node.
+
+\subsection{Counterexamples and their replay}
+
+Modular verification abstracts on purpose: a callee is replaced by its contract, a \kw{spec:}
+or \kw{fold:} application by an uninterpreted function, and a universal fact by some of its
+instances. A model of a query may therefore choose values that no real execution produces. The
+specification replays every model twice: \emph{model-guided} replay runs the interpreter with
+the model's inputs and with the model's values for every abstracted term, and checks every
+assumption in full; \emph{concrete} replay runs the real callees.
+
+\begin{assumption}[Interpreter fidelity]\label{ass:interp}
+For any inputs and any values assigned to the abstracted terms, the interpreter computes, for
+every port, the value that the port's term denotes under that assignment.
+\end{assumption}
+
+\begin{theorem}[Replay classification]\label{thm:replay}
+Let $M$ be a model of an obligation query $\Delta\wedge\neg\gamma$, and suppose every
+assumption of the node, including every universal fact in full, holds in $M$.
+\begin{enumerate}[label=(\alph*)]
+\item Under \cref{ass:faithful,ass:interp}, model-guided replay reproduces the violation of
+  $\gamma$. Hence a model-guided replay that does not reproduce it reveals an unfaithful encoding,
+  a verifier bug.
+\item If concrete replay reproduces the violation, the model's inputs satisfy the precondition
+  and the box, and the node, run on them, violates $\gamma$: a genuine counterexample.
+\item If model-guided replay reproduces the violation but concrete replay does not, then
+  $\gamma$ does not follow from the precondition and the callees' contracts: a contract gap.
+\end{enumerate}
+If some universal fact that was only partially instantiated fails in $M$, $M$ is evidence of
+nothing, and the verdict is unknown.
+\end{theorem}
+\begin{proof}
+(a) Model-guided replay fixes the inputs and the abstracted terms to their values in $M$; by
+\cref{ass:faithful,ass:interp} every port then takes its value in $M$, so $\gamma$ evaluates as
+in $M$, to false. (b) Concrete replay evaluates the precondition and $\gamma$ on the real
+execution; a reproduction is a real input satisfying the precondition on which $\gamma$ fails.
+(c) $M$ satisfies every assumption, among them all that the encoding knows about the callees,
+namely their contracts, and falsifies $\gamma$; so $\gamma$ is not a consequence of them. For
+the last claim, a model that violates an assumption is not a model of the full set of
+assumptions, so it neither refutes $\gamma$ nor reveals a bug.
+\end{proof}
+
+Only an unsatisfiable query proves an obligation. Counterexample, contract gap, unknown and
+error are all failures, distinguished only to tell the agent which repair applies: fix the
+body; strengthen a callee's postcondition or the node's precondition; split the obligation or
+guard the operation; or, for an error, stop, since the verifier itself is wrong.
+
+\subsection{Costs}
+
+The specification proves \kw{COST} bounds in an abstract model: one unit per executed op; a
+map, fold or generate adds $n$ times its kernel's cost; \op{ASSERT\_GUARD} adds the larger of
+its branches; \op{CALL\_HASH} adds the callee's proven bound.
+
+\begin{proposition}[Cost bounds]\label{prop:cost}
+For every input on which a node does not trap, the number of op executions, counted through
+kernels and callees, is at most the computed cost expression. Equality holds when the node and
+its callees contain no \op{ASSERT\_GUARD} and every callee's bound is exact.
+\end{proposition}
+\begin{proof}
+By induction on the call graph and the op order: straight-line ops contribute exactly one each;
+a map over $n$ elements executes its kernel $n$ times, each costing its kernel's constant cost
+(kernels are fixed-size); a guard executes one branch, whose cost is at most the larger; a call
+executes at most its callee's proven bound.
+\end{proof}
+
+The specification calls the cost expression exact; \cref{prop:cost} shows it is an upper bound
+in general, exact only without guards. Arena usage is bounded the same way.
+
+\subsection{The trust boundary}
+
+Compiled code assumes preconditions: proven facts become \kw{nsw}, \kw{inbounds} and
+\kw{llvm.assume}. A caller written in C or Rust is not verified, so every exported node gets a
+checked entry point that evaluates the precondition on the actual inputs, rejects Boolean
+bytes other than $0$ and $1$ and non-canonical NaN patterns, checks the arena size, sets the
+default floating-point environment, and only then calls the internal function. When the checked
+entry returns success, the hypotheses of \cref{thm:soundness} hold for that call, so the proof
+facts are never applied to inputs that falsify them.

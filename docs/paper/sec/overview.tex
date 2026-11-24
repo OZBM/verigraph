@@ -1,0 +1,197 @@
+\section{\VG{} by example}\label{sec:overview}
+
+The running example is the milestone the project must reach first. Its plain-language request
+reads: \emph{write a verified real-time audio limiter that takes a 512-sample stereo FP32
+buffer, clamps peaks smoothly using a learnable knee threshold so that no sample ever exceeds
+$[-1, 1]$, computes a SHA-256 digest of the output frame, and runs in under 500 microseconds
+with zero heap allocation.} \Cref{lst:softknee,lst:frame} show the reference solution,
+verbatim from \file{examples/audio\_limiter.vgs}.
+
+\subsection{Nodes, ports and contracts}
+
+\begin{lstlisting}[float=t,caption={The soft-knee kernel, repaired version.},label=lst:softknee]
+NODE @soft_knee [intent: "Soft-knee clip of one sample into [-1, 1]"] {
+  SIGNATURE: (x: f32, knee: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  is_finite(x) && knee >= 0.5 && knee <= 0.99;
+    POST: result >= -1.0 && result <= 1.0 && ((x >= 0.0) == (result >= 0.0));
+  }
+  BODY {
+    %0  = FABS(x);
+    %1  = FSUB(%0, knee);
+    %2  = FMAX(%1, 0.0:f32);           // excess over the knee, >= 0
+    %3  = FSUB(1.0:f32, knee);         // exact for knee in [0.5, 1]
+    %4  = FDIV(%2, %3);                // t; overflows to +inf for huge x
+    %5  = FADD(1.0:f32, %4);
+    %6  = FDIV(1.0:f32, %5);
+    %7  = FSUB(1.0:f32, %6);           // u = 1 - 1/(1+t), in [0, 1]
+    %8  = FMA(%3, %7, knee);           // knee + (1 - knee) * u
+    %9  = FCOPYSIGN(%8, x);
+    %10 = LE.f(%0, knee);
+    %11 = SELECT(%10, x, %9);          // linear below the knee
+    %12 = FCLAMP(%11, -1.0:f32, 1.0:f32);
+    RETURN(%12);
+  }
+}
+\end{lstlisting}
+
+A node has a signature, an effect set, a contract and a body (\cref{lst:softknee}). The body is
+a list of single-assignment statements over \emph{ports} \kw{\%0}, \kw{\%1}, \dots; each
+statement applies one operation (an \emph{op}) to ports, parameters and typed literals, and
+the outputs leave through \kw{RETURN}. There are no inline expressions, no implicit
+conversions and no default arithmetic modes: a comparison names its domain (\op{LE.f} compares
+floats), integer arithmetic names one of the modes \kw{checked}, \kw{wrap} or \kw{sat}, and
+every literal carries its type. \kw{EFFECTS: []} declares the node pure.
+
+The contract states what callers must guarantee (\kw{PRE}) and what the node guarantees
+(\kw{POST}). The postcondition has a range part and a sign part; the sign part matters,
+because a clamp that mapped NaN to $-1$ would satisfy the range while flipping loud positive
+samples negative. A \emph{verified} node never applies an op outside its domain and always
+satisfies \kw{POST}, for every input that satisfies \kw{PRE} (\cref{def:verified}).
+
+\begin{lstlisting}[float=t,basicstyle=\ttfamily\scriptsize,caption={The exported frame node and the registry query it calls.},label=lst:frame]
+@MESH_QUERY @sha256 {
+  signature: (Slice<u8>) -> (Array<u8, 32>);
+  effects: [];
+  post: result == spec:sha256(arg0);
+  intent: "SHA-256 digest of a byte slice";
+}
+
+NODE @limit_frame [intent: "Limit a 512x2 stereo frame and digest it", export] {
+  SIGNATURE: (frame: Tensor<f32, [512, 2]>) -> (Tensor<f32, [512, 2]>, Array<u8, 32>);
+  EFFECTS: [];
+  CONTRACT {
+    PRE:  forall(i in 0..512, c in 0..2) { is_finite(frame[i, c]) };
+    POST: forall(i in 0..512, c in 0..2) { result.0[i, c] >= -1.0 && result.0[i, c] <= 1.0
+                                           && ((frame[i, c] >= 0.0) == (result.0[i, c] >= 0.0)) }
+          && result.1 == spec:sha256(as_bytes(result.0));
+    COST: heap_bytes == 0 && arena_bytes == 0;
+    BUDGET: latency_p99_us <= 500;
+  }
+  LEARNABLE {
+    knee: f32 in [0.5, 0.99];          // frozen in the MVP; a loss arrives with the tuner (P9, R-07)
+  }
+  BODY {
+    %0 = SIMD_MAP(@soft_knee, frame, knee);
+    %1 = AS_BYTES(%0);
+    %2 = CALL_HASH(@sha256, %1);
+    RETURN(%0, %2);
+  }
+}
+\end{lstlisting}
+
+\subsection{Composition, learnable parameters and the registry}
+
+\Cref{lst:frame} composes the kernel. \op{SIMD\_MAP} applies \kw{@soft\_knee} to every element
+of the frame, broadcasting \kw{knee}; kernels are pure, fixed-size and capture nothing
+implicitly, so the order of application is irrelevant and loops never allocate. \kw{knee} is
+a \emph{learnable parameter}: an implicit trailing input that a tuner may adjust at run time,
+and the verifier proves the contract for every value in the declared box
+$[0.5, 0.99]$, so tuning can never break a proof. \op{AS\_BYTES} is a view of the frame's
+bytes; \op{CALL\_HASH} calls \kw{@sha256}, which is not written here: \kw{@MESH\_QUERY} asks the
+registry (VG-Mesh) for a pure implementation whose postcondition is
+\kw{result == spec:sha256(arg0)}, where \kw{spec:sha256} is an executable reference
+specification. The caller's proof uses only the callee's contract, never its body.
+
+\kw{COST} bounds resources in an abstract cost model, and it is proven; \kw{BUDGET} states a
+latency target, and it is measured, never proven. The text names everything with labels such
+as \kw{@soft\_knee}; the assembler resolves each label to the hash of a node and pins the
+resolution in a lock file, because a model cannot compute BLAKE3 and should never write a
+hash.
+
+\subsection{The pipeline}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners=2pt, align=center, font=\small, minimum height=1.05cm,
+              text width=2.45cm, fill=gray!8},
+  built/.style={box, fill=ForestGreen!12},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  back/.style={-{Stealth[length=2mm]}, dashed, BrickRed},
+  node distance=1.1cm and 0.7cm]
+\node[box] (agent) {AI agent\\[-1pt]\footnotesize drafts VG-Sym};
+\node[built, right=of agent] (struct) {1. Structure\\[-1pt]\footnotesize vg-core: parse,\\[-2pt]\footnotesize canonicalize, hash};
+\node[box, right=of struct] (types) {2. Types, effects\\[-1pt]\footnotesize vg-types};
+\node[box, right=of types] (proofs) {3. Proofs\\[-1pt]\footnotesize vg-smt; replay\\[-2pt]\footnotesize in vg-interp};
+\node[box, below=of proofs] (codegen) {Compilation\\[-1pt]\footnotesize LLVM IR, clang, vg-rt};
+\node[box, left=1.15cm of codegen] (bin) {Binaries\\[-1pt]\footnotesize x86\_64, ARM64, wasm32\\[-2pt]\footnotesize + sandbox manifest};
+\node[box, left=1.15cm of bin] (mesh) {VG-Mesh\\[-1pt]\footnotesize registry, query\\[-2pt]\footnotesize by contract};
+\node[built, below=0.55cm of mesh] (store) {Object store\\[-1pt]\footnotesize vg-store};
+\draw[arr] (agent) -- (struct);
+\draw[arr] (struct) -- (types);
+\draw[arr] (types) -- (proofs);
+\draw[arr] (proofs) -- node[right, font=\footnotesize, align=left] {all\\proven} (codegen);
+\draw[arr] (codegen) -- (bin);
+\draw[arr] (bin) -- node[above, font=\footnotesize] {publish} (mesh);
+\draw[arr] (mesh) -- (store);
+\draw[back] (proofs.north) -- ++(0,0.5) -| node[pos=0.25, above, font=\footnotesize]
+  {every rejection: error code, location, counterexample, failing slice} (agent.north);
+\draw[dashed, BrickRed] (struct.north) -- ++(0,0.5);
+\draw[dashed, BrickRed] (types.north) -- ++(0,0.5);
+\draw[back] (mesh.west) -| node[pos=0.75, left, font=\footnotesize] {candidates} (agent.south);
+\end{tikzpicture}
+\caption{The checking pipeline. Every draft passes structure, then types and effects, then
+proofs; every rejection returns to the agent as structured data. Shaded green: implemented at
+commit \texttt{fe499c8}; grey: specified, not implemented.}
+\label{fig:pipeline}
+\end{figure}
+
+\Cref{fig:pipeline} shows the path from a draft to a binary. Each stage is a check whose
+rejections return to the agent as typed JSON with stable codes, located in the agent's own
+names: structural errors from vg-core, type and effect errors from vg-types, and, from vg-smt,
+a verdict per obligation. A refutation carries a counterexample that the reference
+interpreter must replay, and the part of the graph that the violation depends on. Agents may
+also query the registry by contract before drafting. Only verified graphs reach code
+generation.
+
+\subsection{The counterexample-and-repair story}
+
+The first draft of \kw{@soft\_knee} computed $u = t/(1+t)$ instead of $u = 1-1/(1+t)$
+(\file{examples/soft\_knee\_draft.vgs}). For $x = 3\cdot 10^{38}$ and $\mathit{knee} = 0.5$ the
+excess $t$ overflows to $+\infty$, the quotient $\infty/\infty$ is NaN, every later op
+propagates it, and the first conjunct of \kw{POST}, \kw{result >= -1.0}, is false. The repaired
+form is exactly $1$ at $t = +\infty$. The project's first milestone requires the verifier to
+reject the draft with a counterexample that replays and to prove the repair.
+\Cref{sec:case} proves both facts by hand, characterizes the failing inputs exactly, and
+checks both claims by exhaustive enumeration.
+
+\subsection{Design invariants}\label{sec:invariants}
+
+The specification states eight invariants that follow from designing for agents; a change
+that breaks one needs a recorded decision. We paraphrase them, because the formal results
+below are about them.
+\begin{enumerate}[label=(I\arabic*)]
+\item \emph{Every judgment is data}: errors, verdicts, counterexamples and costs are typed
+  JSON with stable codes.
+\item \emph{Local reasoning}: types follow from operands, one op at a time, and a node is
+  verified against its callees' contracts, never their bodies.
+\item \emph{Prefix-checkable text}: ports and labels are defined before use, so every prefix
+  of a file can be checked and a constrained decoder can mask by type.
+\item \emph{Identity by content}: one canonical graph has one hash on every machine, so each
+  obligation is proven once and the proof is reusable.
+\item \emph{Same input, same bytes}: hashes, proofs, diagnostics, binaries and NaN bits are
+  deterministic.
+\item \emph{Nothing implicit}: no implicit conversion, no default arithmetic mode, no undefined
+  behaviour in verified code, no inline expression.
+\item \emph{Contracts are the shared language} between humans, agents, the verifier and the
+  registry.
+\item \emph{Honest guarantees}: an unknown solver answer is never a proof, a measurement is
+  never a proof, and every guarantee names what it trusts.
+\end{enumerate}
+
+\subsection{What the specification corrected}
+
+\VG{}'s specification began as a visionary source document. The current specification keeps
+its goals and records 27 technical errors in it, each with a fix. Four fixes shape this paper.
+First, the source let models write hashes, including invented ``built-in'' ones; now models
+write labels and the toolchain computes hashes. Second, the source claimed that SHA-256 lifted
+from two languages would converge to the same hash; structurally different implementations
+cannot share a structural hash, and \cref{thm:conp} shows that no efficient canonical form
+could make them do so in general, so implementations proven to refine one reference
+specification join a \emph{spec class} instead. Third, the source assumed that every model
+exposes per-token logit masking; hosted models do not, so they use a generate, verify and
+repair loop through tools, and masking is reserved for local open-weight models. Fourth, the
+source stated wall-clock latency as an SMT-provable postcondition; latency is now a measured
+budget and only abstract costs are proven.
