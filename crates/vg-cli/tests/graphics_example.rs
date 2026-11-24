@@ -18,8 +18,22 @@ fn example() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/mandelbrot.vgs")
 }
 
+/// A fresh working directory for this test process: vg keeps its proof cache in `./.vg`, which must
+/// neither land in the source tree nor serve records from an earlier run.
+fn scratch_cwd() -> &'static std::path::Path {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let d =
+            std::env::temp_dir().join(format!("vg-test-graphics_example-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    })
+}
+
 fn vg(args: &[&str]) -> J {
     let out = Command::new(env!("CARGO_BIN_EXE_vg"))
+        .current_dir(scratch_cwd())
         .args(args)
         .output()
         .expect("vg runs");

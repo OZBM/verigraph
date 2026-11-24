@@ -7,9 +7,22 @@ use serde_json::{Value, json};
 
 const MODULE: &str = "module m;\n\nNODE @inc {\n  SIGNATURE: (x: u8) -> (u8);\n  EFFECTS: [];\n  CONTRACT {\n    PRE: x < 255;\n    POST: result == x + 1;\n  }\n  BODY {\n    %0 = ADD.checked(x, 1:u8);\n    RETURN(%0);\n  }\n}\n";
 
+/// A fresh working directory for this test process: vg keeps its proof cache in `./.vg`, which must
+/// neither land in the source tree nor serve records from an earlier run.
+fn scratch_cwd() -> &'static std::path::Path {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = std::env::temp_dir().join(format!("vg-test-mcp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    })
+}
+
 #[test]
 fn mcp_lists_and_calls_tools() {
     let mut vg = Command::new(env!("CARGO_BIN_EXE_vg"))
+        .current_dir(scratch_cwd())
         .arg("mcp")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
