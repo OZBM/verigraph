@@ -1,0 +1,75 @@
+// expect: verify
+// CRC-32 (IEEE 802.3, reflected, polynomial 0xEDB88320), the zlib checksum, table-driven: a
+// benchmark kernel of docs/06 and docs/16, run here over 1 MiB.
+module bench_crc32;
+
+// One of the eight shifts that build a table entry.
+NODE @crc_bit [intent: "Shift one bit out of a CRC-32 table entry"] {
+  SIGNATURE: (c: u32, t: u8) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = AND(c, 1:u32);
+    %1 = SHR.checked(c, 1:u32);
+    %2 = XOR(%1, 3988292384:u32);
+    %3 = EQ(%0, 1:u32);
+    %4 = SELECT(%3, %2, %1);
+    RETURN(%4);
+  }
+}
+
+NODE @tick [intent: "One of the eight bit steps"] {
+  SIGNATURE: (k: u64) -> (u8);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    RETURN(0:u8);
+  }
+}
+
+// Table entry n: the CRC of the one byte n.
+NODE @table_entry [intent: "Entry n of the CRC-32 table"] {
+  SIGNATURE: (n: u64) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: n < 256;
+    INVARIANT @any(k, c): c >= 0;
+  }
+  BODY {
+    %0 = CAST.u32(n);
+    %1 = GENERATE(@tick, 8:u64);
+    %2 = FOLD_BOUNDED(@crc_bit, %1, init=%0, invariant=@any);
+    RETURN(%2);
+  }
+}
+
+// One byte into the running CRC. The table index is masked to 8 bits, so the read is in bounds.
+NODE @step [intent: "Fold one byte into a running CRC-32"] {
+  SIGNATURE: (crc: u32, b: u8, table: Array<u32, 256>) -> (u32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY {
+    %0 = CAST.u32(b);
+    %1 = XOR(crc, %0);
+    %2 = AND(%1, 255:u32);
+    %3 = CAST.u64(%2);
+    %4 = INDEX(table, %3);
+    %5 = SHR.checked(crc, 8:u32);
+    %6 = XOR(%5, %4);
+    RETURN(%6);
+  }
+}
+
+NODE @crc32 [intent: "The CRC-32 of a byte slice, as zlib's crc32 computes it", export] {
+  SIGNATURE: (data: Slice<u8>) -> (u32);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @running(k, crc): crc >= 0;
+  }
+  BODY {
+    %0 = GENERATE(@table_entry, 256:u64);
+    %1 = FOLD_BOUNDED(@step, data, %0, init=4294967295:u32, invariant=@running);
+    %2 = XOR(%1, 4294967295:u32);
+    RETURN(%2);
+  }
+}

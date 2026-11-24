@@ -1,0 +1,130 @@
+{
+  "host": {
+    "cpu": "Apple M3 Max",
+    "os": "Darwin 27.3.0",
+    "clang": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "flags": "-O2 -ffp-contract=off, the target's CPU baseline (docs/06)"
+  },
+  "kernels": [
+    {
+      "name": "blend",
+      "target": "aarch64-apple-darwin",
+      "identical_output": true,
+      "median_vg_ns": 44416,
+      "median_c_ns": 56708,
+      "ratio": 0.7832,
+      "ci_low": 0.7825,
+      "ci_high": 0.7833,
+      "calls_vg": 10000,
+      "calls_c": 10000
+    },
+    {
+      "name": "blend",
+      "target": "wasm32-wasip1",
+      "identical_output": true,
+      "median_vg_ns": 37625,
+      "median_c_ns": 27833,
+      "ratio": 1.3518,
+      "ci_low": 1.3518,
+      "ci_high": 1.3533,
+      "calls_vg": 10000,
+      "calls_c": 10000
+    },
+    {
+      "name": "crc32",
+      "target": "aarch64-apple-darwin",
+      "identical_output": true,
+      "median_vg_ns": 2233125,
+      "median_c_ns": 2232875,
+      "ratio": 1.0001,
+      "ci_low": 0.9984,
+      "ci_high": 1.0016,
+      "calls_vg": 4409,
+      "calls_c": 4388
+    },
+    {
+      "name": "crc32",
+      "target": "wasm32-wasip1",
+      "identical_output": true,
+      "median_vg_ns": 2367000,
+      "median_c_ns": 2365167,
+      "ratio": 1.0008,
+      "ci_low": 0.9994,
+      "ci_high": 1.0026,
+      "calls_vg": 4153,
+      "calls_c": 4163
+    },
+    {
+      "name": "mandelbrot",
+      "target": "aarch64-apple-darwin",
+      "identical_output": true,
+      "median_vg_ns": 11445500,
+      "median_c_ns": 2556542,
+      "ratio": 4.4769,
+      "ci_low": 4.4713,
+      "ci_high": 4.4825,
+      "calls_vg": 875,
+      "calls_c": 3871
+    },
+    {
+      "name": "mandelbrot",
+      "target": "wasm32-wasip1",
+      "identical_output": true,
+      "median_vg_ns": 11750458,
+      "median_c_ns": 2439250,
+      "ratio": 4.8172,
+      "ci_low": 4.8113,
+      "ci_high": 4.8231,
+      "calls_vg": 851,
+      "calls_c": 4055
+    },
+    {
+      "name": "matmul",
+      "target": "aarch64-apple-darwin",
+      "identical_output": true,
+      "median_vg_ns": 13439834,
+      "median_c_ns": 9755354,
+      "ratio": 1.3777,
+      "ci_low": 1.3754,
+      "ci_high": 1.3799,
+      "calls_vg": 751,
+      "calls_c": 1030
+    },
+    {
+      "name": "matmul",
+      "target": "wasm32-wasip1",
+      "identical_output": true,
+      "median_vg_ns": 14139834,
+      "median_c_ns": 10152083,
+      "ratio": 1.3928,
+      "ci_low": 1.3907,
+      "ci_high": 1.3947,
+      "calls_vg": 712,
+      "calls_c": 989
+    },
+    {
+      "name": "sha256",
+      "target": "aarch64-apple-darwin",
+      "identical_output": true,
+      "median_vg_ns": 7774875,
+      "median_c_ns": 2944750,
+      "ratio": 2.6402,
+      "ci_low": 2.6369,
+      "ci_high": 2.6433,
+      "calls_vg": 1289,
+      "calls_c": 3353
+    },
+    {
+      "name": "sha256",
+      "target": "wasm32-wasip1",
+      "identical_output": true,
+      "median_vg_ns": 9472000,
+      "median_c_ns": 3335709,
+      "ratio": 2.8396,
+      "ci_low": 2.8356,
+      "ci_high": 2.8425,
+      "calls_vg": 1058,
+      "calls_c": 2989
+    }
+  ]
+}

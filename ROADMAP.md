@@ -126,7 +126,7 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [ ] P4.5 vg-rt in C: entry point, handles, arenas, effect shims, telemetry, Linux sandbox
 - [ ] P4.6 Sandbox manifests: macOS entitlements, Linux Landlock and seccomp, WASI preopens
 - [ ] P4.7 Differential tests against vg-interp on 1,000 or more generated programs
-- [ ] P4.8 Five kernels benchmarked against equivalent `clang -O2` C
+- [x] P4.8 Five kernels benchmarked against equivalent `clang -O2` C
 - [ ] P4.9 `vg build`, `vg run`
 
 ### P5 · Agent loop — W5 — Nov 11 → Nov 27 — G5

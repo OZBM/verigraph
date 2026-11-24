@@ -1,0 +1,31 @@
+// expect: verify
+// A saturating 8-bit blend of two 1 MiB images, byte by byte: a benchmark kernel of docs/06 and
+// docs/16. Every read is proven in bounds, and saturation means no byte wraps.
+module bench_blend;
+
+NODE @px [intent: "Byte i of the saturating sum of two images"] {
+  SIGNATURE: (i: u64, a: Array<u8, 1048576>, b: Array<u8, 1048576>) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: i < 1048576;
+    POST: result >= a[i] && result >= b[i];
+  }
+  BODY {
+    %0 = INDEX(a, i);
+    %1 = INDEX(b, i);
+    %2 = ADD.sat(%0, %1);
+    RETURN(%2);
+  }
+}
+
+NODE @blend [intent: "The saturating sum of two 1 MiB 8-bit images", export] {
+  SIGNATURE: (a: Array<u8, 1048576>, b: Array<u8, 1048576>) -> (Array<u8, 1048576>);
+  EFFECTS: [];
+  CONTRACT {
+    POST: forall(i in 0..1048576) { result[i] >= a[i] && result[i] >= b[i] };
+  }
+  BODY {
+    %0 = GENERATE(@px, 1048576:u64, a, b);
+    RETURN(%0);
+  }
+}
