@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VeriGraph — Project brief</title>
+<!-- Print with: Chrome --headless --no-pdf-header-footer --print-to-pdf=VeriGraph-brief.pdf brochure.html
+     The hero picture is rendered by hero.py (Blender, headless). Every figure here is a gate target unless stated. -->
+<style>
+@font-face{font-family:"VG Serif";src:url("file:///System/Library/Fonts/NewYork.ttf");font-weight:100 1000}
+@font-face{font-family:"VG Serif";src:url("file:///System/Library/Fonts/NewYorkItalic.ttf");font-weight:100 1000;font-style:italic}
+@font-face{font-family:"VG Sans";src:url("file:///System/Library/Fonts/SFNS.ttf");font-weight:100 1000}
+@font-face{font-family:"VG Sans";src:url("file:///System/Library/Fonts/SFNSItalic.ttf");font-weight:100 1000;font-style:italic}
+@font-face{font-family:"VG Mono";src:url("file:///System/Library/Fonts/SFNSMono.ttf");font-weight:100 1000}
+
+:root{
+  --navy:#01050F; --ink:#0D1526; --text:#2B3445; --muted:#5F6B7E; --faint:#667085;
+  --paper:#FBFAF7; --line:#E5E2DA;
+  --green:#12B76A; --green-d:#067647; --green-l:#A6F4C5; --green-xl:#EDFCF2; --green-n:#3BD488;
+  --coral:#F04438; --coral-d:#B42318; --coral-l:#FECDCA; --coral-xl:#FEF3F2;
+  --blue:#2E6BF0; --blue-d:#1D4ED8; --blue-l:#C7D7FE; --blue-xl:#EEF4FF;
+  --violet:#6E56CF; --violet-d:#5135B5; --violet-xl:#F4F1FD;
+  --slate:#344054; --slate-xl:#F1F3F6;
+  --serif:"VG Serif","Iowan Old Style",Georgia,serif;
+  --sans:"VG Sans",-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --mono:"VG Mono",Menlo,monospace;
+}
+@page{size:210mm 297mm;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);color:var(--text);font-size:10.5pt;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:210mm;height:297mm;position:relative;overflow:hidden;background:var(--paper);padding:14mm 18mm 0;break-after:page}
+.page:last-child{break-after:auto}
+p{margin:0}
+b,strong{color:var(--ink);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;color:var(--ink)}
+
+/* running header and footer */
+.top{display:flex;justify-content:space-between;align-items:center;font-size:7.4pt;color:var(--faint);letter-spacing:.03em;margin-bottom:8mm}
+.brand-s{display:flex;align-items:center;gap:1.6mm;color:var(--ink);font-weight:650;font-size:8.6pt;letter-spacing:.01em}
+.brand-s svg{width:5mm;height:5mm}
+.foot{position:absolute;left:18mm;right:18mm;bottom:8mm;display:flex;justify-content:space-between;font-size:7.2pt;color:var(--faint);border-top:1px solid var(--line);padding-top:2.2mm}
+
+/* type */
+.kicker{font-size:7.8pt;font-weight:700;letter-spacing:.17em;text-transform:uppercase;color:var(--green-d);display:flex;align-items:center;gap:2.4mm}
+.kicker::before{content:"";width:6mm;height:1.3px;background:currentColor}
+.kicker.coral{color:var(--coral-d)} .kicker.blue{color:var(--blue-d)} .kicker.slate{color:var(--slate)}
+h1{font-family:var(--serif);font-weight:600;font-size:27pt;line-height:1.08;letter-spacing:-.012em;color:var(--ink);margin:2.2mm 0 3.6mm}
+h2{font-family:var(--serif);font-weight:600;font-size:18pt;line-height:1.15;letter-spacing:-.006em;color:var(--ink);margin:2mm 0 3mm}
+.h3{font-family:var(--sans);font-size:10.5pt;line-height:1.5;font-weight:700;color:var(--ink);margin:0 0 1.2mm;letter-spacing:-.003em}
+.lead{font-size:11.3pt;line-height:1.55;color:var(--text);max-width:162mm}
+
+/* the expert layer */
+.xp{background:var(--slate-xl);border-left:2px solid var(--slate);border-radius:0 2mm 2mm 0;padding:2.6mm 4mm 2.8mm;font-size:8.3pt;line-height:1.5;color:#3A4558}
+.xp .tag,.tag{display:block;font-family:var(--mono);font-size:6.6pt;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin-bottom:.8mm}
+.xp b{color:var(--ink)}
+
+/* ---------- cover ---------- */
+.cover{background:var(--navy);color:#E9EEF7;padding:15mm 18mm 0}
+.cover::before{content:"";position:absolute;left:0;right:0;top:0;height:160mm;
+  background:radial-gradient(130mm 95mm at 14% 6%,rgba(46,107,240,.20),rgba(46,107,240,0) 70%),
+             radial-gradient(80mm 60mm at 96% 26%,rgba(18,183,106,.09),rgba(18,183,106,0) 70%)}
+.cover>*{position:relative}
+.cover-top{display:flex;justify-content:space-between;align-items:center}
+.brand{display:flex;align-items:center;gap:2.4mm;font-weight:650;font-size:13pt;color:#fff;letter-spacing:.01em}
+.brand svg{width:7.5mm;height:7.5mm}
+.cover .meta{font-size:8pt;color:#8A96AD;letter-spacing:.04em}
+.eyebrow{margin-top:28mm;font-size:8.4pt;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#7FA6FF}
+.cover-title{font-family:var(--serif);font-weight:600;font-size:45pt;line-height:1.03;letter-spacing:-.018em;color:#fff;margin:4mm 0 0}
+.cover-title span{color:var(--green-n)}
+.cover-sub{margin-top:7mm;font-size:12.2pt;line-height:1.55;color:#B4BFD3;max-width:160mm}
+.cover-sub b{color:#fff;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:2mm;margin-top:7mm;padding:2mm 4.2mm 2mm 3mm;border:1px solid rgba(59,212,136,.45);background:rgba(18,183,106,.12);color:#86F2BC;border-radius:99px;font-size:9.6pt;font-weight:600;letter-spacing:.01em}
+.pill svg{width:4.2mm;height:4.2mm}
+.hero{position:absolute;left:-3mm;bottom:0;width:230mm;height:143.75mm;margin:0}
+.hero img{width:230mm;height:143.75mm;display:block}
+.legend{position:absolute;left:18mm;right:18mm;bottom:17.5mm;display:flex;gap:6.5mm;font-size:7.6pt;color:#AEB9CC;align-items:center}
+.legend span{display:flex;align-items:center;gap:1.6mm;white-space:nowrap}
+.legend i{display:inline-block;width:2.6mm;height:2.6mm;border-radius:50%}
+.legend .ok{background:var(--green-n);box-shadow:0 0 0 .8mm rgba(59,212,136,.22)}
+.legend .bug{background:#FF6A4D;box-shadow:0 0 0 .8mm rgba(255,106,77,.22)}
+.legend .draft{border-radius:.7mm;background:rgba(200,215,240,.25);border:1px solid rgba(220,230,250,.6)}
+.legend .scan{width:.7mm;height:3.6mm;border-radius:.3mm;background:var(--green-n)}
+.cover-foot span:last-child,.foot span:last-child{white-space:nowrap;margin-left:4mm}
+.cover-foot{position:absolute;left:18mm;right:18mm;bottom:8mm;display:flex;justify-content:space-between;font-size:7.3pt;color:#7D8AA3;border-top:1px solid rgba(255,255,255,.10);padding-top:2.4mm}
+
+/* ---------- page 2 ---------- */
+.grids{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin:5mm 0 0}
+.grid-card{background:#fff;border:1px solid var(--line);border-radius:3mm;padding:3.4mm 4mm 3.6mm}
+.grid-card .gt{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2mm}
+.grid-card .gt b{font-size:10.5pt}
+.grid-card .gt em{font-style:normal;font-family:var(--mono);font-size:6.8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.grid-card svg{width:100%;height:auto;display:block}
+.grid-card p{font-size:8.5pt;line-height:1.45;color:var(--muted);margin-top:2.2mm}
+.grid-card.proof{border-color:var(--green-l)}
+.grid-card.proof .gt em{color:var(--green-d)}
+.idea{margin-top:6mm}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;margin:3mm 0 4mm}
+.step{border-top:2px solid var(--ink);padding-top:3mm}
+.step .n{font-family:var(--serif);font-size:24pt;line-height:1;font-weight:600;color:var(--ink);display:flex;align-items:baseline;gap:2.4mm}
+.step .n small{font-family:var(--sans);font-size:11pt;font-weight:700;letter-spacing:-.003em}
+.step p{font-size:9.6pt;line-height:1.5;margin-top:2mm}
+.step.s1{border-color:var(--blue)} .step.s1 .n{color:var(--blue-d)}
+.step.s2{border-color:var(--green)} .step.s2 .n{color:var(--green-d)}
+.step.s3{border-color:var(--coral)} .step.s3 .n{color:var(--coral-d)}
+.quote{display:flex;gap:5mm;align-items:center;margin-top:3.5mm;padding:3.2mm 0 0;border-top:1px solid var(--line)}
+.quote p{font-family:var(--serif);font-style:italic;font-size:14pt;line-height:1.35;color:var(--ink);flex:1}
+.guide{width:62mm;font-size:7.8pt;line-height:1.45;color:var(--muted)}
+.guide .tag{margin-bottom:.6mm}
+
+/* ---------- page 3 ---------- */
+.schem{display:block;width:174mm;height:auto;margin:5mm 0 0}
+.schem text{font-family:"VG Sans",-apple-system,"Helvetica Neue",Arial,sans-serif}
+.schem .mono{font-family:"VG Mono",Menlo,monospace}
+.gloss{display:grid;grid-template-columns:repeat(5,1fr);gap:3.6mm;margin-top:2mm;border-top:1px solid var(--line);padding-top:3mm}
+.gloss div{font-size:8pt;line-height:1.45;color:var(--muted)}
+.gloss b{display:block;font-size:8.8pt;margin-bottom:.6mm}
+.gloss-h{font-family:var(--mono);font-size:6.8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin-top:5mm}
+
+/* ---------- page 4 ---------- */
+.chart{display:block;width:174mm;height:auto;margin:3mm 0 1mm}
+.chart text{font-family:"VG Sans",-apple-system,Arial,sans-serif}
+.story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4mm}
+.sc{background:#fff;border:1px solid var(--line);border-top:2.5px solid var(--ink);border-radius:0 0 2.4mm 2.4mm;padding:3mm 3.6mm 3.2mm}
+.sc .h3{display:flex;align-items:center;gap:2mm}
+.sc .h3 .b{display:inline-flex;align-items:center;justify-content:center;width:4.6mm;height:4.6mm;border-radius:50%;font-size:7.6pt;color:#fff;background:var(--ink)}
+.sc p{font-size:8.6pt;line-height:1.45}
+.sc.green{border-top-color:var(--green)} .sc.green .h3 .b{background:var(--green)}
+.sc.blue{border-top-color:var(--blue)} .sc.blue .h3 .b{background:var(--blue)}
+.sc.coral{border-top-color:var(--coral)} .sc.coral .h3 .b{background:var(--coral)}
+.said{margin-top:1.8mm;font-family:var(--serif);font-style:italic;font-size:8.7pt;line-height:1.45;color:var(--ink);background:var(--green-xl);border-radius:1.6mm;padding:2mm 2.6mm}
+.code{margin-top:2mm;background:#0B1426;color:#DCE3F0;border-radius:1.6mm;padding:2mm 2.8mm;font-family:var(--mono);font-size:7pt;line-height:1.55;white-space:pre}
+.code .p{color:#8FB4FF} .code .c{color:#7D8AA3} .code .l{color:#F7C46C} .code .bad{color:#FF8A7A} .code .good{color:#5EE0A0}
+.trace{margin-top:1.8mm;border-collapse:collapse;width:100%;font-size:7.9pt}
+.trace td{padding:.75mm 1.2mm;border-bottom:1px solid #F0EEE8;vertical-align:baseline}
+.trace td:first-child{font-family:var(--mono);color:var(--blue-d);width:8mm}
+.trace td:last-child{text-align:right;font-family:var(--mono);font-weight:600;white-space:nowrap}
+.trace .inf{color:#B54708} .trace .nan{color:var(--coral-d)}
+.small{font-size:7.8pt;line-height:1.45;color:var(--muted);margin-top:1.6mm}
+.next{display:flex;gap:4mm;align-items:flex-start;margin-top:4mm;background:var(--ink);color:#C9D2E3;border-radius:2.4mm;padding:3mm 4.4mm;font-size:8.6pt;line-height:1.48}
+.next b{color:#fff}
+.next svg{flex:none;width:6mm;height:6mm;margin-top:.4mm}
+
+/* ---------- page 5 ---------- */
+.adv{display:grid;grid-template-columns:1fr 1fr;gap:4.2mm 5mm;margin-top:5.5mm}
+.card{background:#fff;border:1px solid var(--line);border-radius:2.6mm;padding:3.4mm 4mm 3.2mm;display:grid;grid-template-columns:8.6mm 1fr;grid-template-rows:auto auto 1fr;column-gap:3mm}
+.card .ic{width:8.6mm;height:8.6mm;border-radius:2.2mm;display:flex;align-items:center;justify-content:center}
+.card .ic svg{width:5.2mm;height:5.2mm;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.card .h3{font-size:11pt;margin:0;align-self:center}
+.card .plain,.card .tech{grid-column:1/-1}
+.card .plain{margin-top:2mm}
+.card .plain{font-size:9.3pt;line-height:1.48;color:var(--text)}
+.card .tech{align-self:end;margin-top:2.4mm;padding-top:2.2mm;border-top:1px dashed #DDD9D0;font-size:7.6pt;line-height:1.45;color:#4A5568}
+.card .tech .tag{display:inline;margin-right:1.2mm}
+.i-green{background:var(--green-xl)} .i-green svg{stroke:var(--green-d)}
+.i-coral{background:var(--coral-xl)} .i-coral svg{stroke:var(--coral-d)}
+.i-blue{background:var(--blue-xl)} .i-blue svg{stroke:var(--blue-d)}
+.i-violet{background:var(--violet-xl)} .i-violet svg{stroke:var(--violet-d)}
+.i-slate{background:var(--slate-xl)} .i-slate svg{stroke:var(--slate)}
+
+/* ---------- page 6 ---------- */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:7mm;margin-top:3mm}
+.colh{font-family:var(--mono);font-size:6.8pt;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--slate);border-bottom:1px solid var(--line);padding-bottom:1.6mm;margin-bottom:2.4mm}
+.bul{margin:0;padding:0;list-style:none}
+.bul li{position:relative;padding-left:5.2mm;font-size:8.4pt;line-height:1.42;margin-bottom:1.5mm;color:var(--text)}
+.bul li svg{position:absolute;left:0;top:.5mm;width:3.6mm;height:3.6mm}
+.qa{margin-bottom:1.8mm}
+.qa b{display:block;font-size:8.9pt;margin-bottom:.4mm}
+.qa p{font-size:8.1pt;line-height:1.45;color:var(--text)}
+.qa .open{font-family:var(--mono);font-size:6.6pt;font-weight:600;letter-spacing:.06em;color:#B54708;background:#FFFAEB;border:1px solid #FEDF89;border-radius:1mm;padding:0 1.1mm;margin-left:.6mm;white-space:nowrap}
+.road{margin-top:2.6mm;border-top:1px solid var(--line);padding-top:2.6mm}
+.road-svg{display:block;width:174mm;height:auto}
+.road-svg text{font-family:"VG Sans",-apple-system,Arial,sans-serif}
+.status{display:grid;grid-template-columns:1fr 1fr;gap:5mm;margin-top:2.2mm}
+.status div{font-size:8pt;line-height:1.45;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:2mm;padding:2.6mm 3.4mm}
+.status .tag{color:var(--green-d)}
+.status .todo .tag{color:#B54708}
+.close{position:absolute;left:0;right:0;bottom:0;height:22mm;background:var(--navy);color:#fff;padding:5mm 18mm 0;display:flex;justify-content:space-between;align-items:flex-start}
+.close .t{font-family:var(--serif);font-size:17pt;font-weight:600;letter-spacing:-.01em;line-height:1.15}
+.close .t span{color:var(--green-n)}
+.close .r{text-align:right;font-size:7.6pt;line-height:1.55;color:#8A96AD;margin-top:.6mm}
+.close .r b{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- ======================= 1 · COVER ======================= -->
+<section class="page cover">
+  <header class="cover-top">
+    <div class="brand">
+      <svg viewBox="0 0 24 24"><path d="M5 12 12 6M5 12l7 6m0-12 7 6m-7 6 7-6" stroke="#9FB3D9" stroke-width="1.5" fill="none"/><circle cx="5" cy="12" r="2.4" fill="#E9EEF7"/><circle cx="12" cy="6" r="2.4" fill="#E9EEF7"/><circle cx="12" cy="18" r="2.4" fill="#E9EEF7"/><circle cx="19" cy="12" r="3.6" fill="#12B76A"/><path d="m17.3 12.1 1.2 1.2 2.1-2.4" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      VeriGraph
+    </div>
+    <div class="meta">PROJECT BRIEF · OCTOBER 2026</div>
+  </header>
+
+  <div class="eyebrow">An AI-native programming system</div>
+  <h1 class="cover-title">AI writes the code. <br><span>Math proves it.</span></h1>
+  <p class="cover-sub">VeriGraph is a programming system built for AI. Every piece of a program states a <b>promise</b>: what it needs, and what it guarantees. A <b>solver</b> checks each promise for <b>every possible input</b> before the program is built. When a promise can break, the AI gets the exact input that breaks it, and fixes the code.</p>
+  <div class="pill"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Nothing ships unverified.</div>
+
+  <figure class="hero"><img src="hero.jpg" alt="A program drawn as a graph of pieces; a green scan line has proven the pieces behind it, one piece glows red where a bug was caught, and the pieces ahead are glass drafts"></figure>
+  <div class="legend">
+    <span><i class="ok"></i>Proven piece</span>
+    <span><i class="bug"></i>Bug caught, with the input that triggers it</span>
+    <span><i class="draft"></i>Draft, not checked yet</span>
+    <span><i class="scan"></i>The checker</span>
+  </div>
+  <div class="cover-foot"><span>Status: design written, tools being built. First working version (MVP) expected December 2026.</span><span>1 / 6</span></div>
+</section>
+
+<!-- ======================= 2 · PROBLEM AND IDEA ======================= -->
+<section class="page">
+  <div class="top"><div class="brand-s"><svg viewBox="0 0 24 24"><path d="M5 12 12 6M5 12l7 6m0-12 7 6m-7 6 7-6" stroke="#98A2B3" stroke-width="1.5" fill="none"/><circle cx="5" cy="12" r="2.4" fill="#0D1526"/><circle cx="12" cy="6" r="2.4" fill="#0D1526"/><circle cx="12" cy="18" r="2.4" fill="#0D1526"/><circle cx="19" cy="12" r="3.6" fill="#12B76A"/></svg>VeriGraph</div><span>The problem, and the idea</span></div>
+
+  <div class="kicker coral">The problem</div>
+  <h1>AI writes code faster than anyone can check it.</h1>
+  <p class="lead">The usual safety net is testing: run the code on some inputs and see whether the answers look right. But a piece of code that takes just two ordinary numbers (32 bits each) has about <b>18 billion billion</b> possible inputs (2<sup>64</sup>). Even a large collection of tests tries a tiny fraction. A bug can hide in any of the rest.</p>
+
+  <div class="grids">
+    <div class="grid-card">
+      <div class="gt"><b>Testing</b><em>samples a few inputs</em></div>
+      <svg id="grid-test" viewBox="0 0 75 36"></svg>
+      <p>Each blue dot is one tested input: all passed. The red one was never tried, and it breaks the program.</p>
+    </div>
+    <div class="grid-card proof">
+      <div class="gt"><b>Proving</b><em>covers every input</em></div>
+      <svg id="grid-proof" viewBox="0 0 75 36"></svg>
+      <p>The solver reasons about all inputs at once. If any input breaks the promise, it returns that exact input.</p>
+    </div>
+  </div>
+
+  <div class="idea">
+    <div class="kicker">The idea</div>
+    <h2>Give every piece of code a promise. Check the promise with math.</h2>
+  </div>
+  <div class="steps">
+    <div class="step s1"><div class="n">1<small>Promise</small></div><p>Each piece says what it needs and what it guarantees. <i>“Give me any finite number; I return one between −1 and 1, with the same sign.”</i></p></div>
+    <div class="step s2"><div class="n">2<small>Proof</small></div><p>A <b>solver</b>, software that reasons about logic like a tireless mathematician, checks the promise for all inputs at once, not one at a time.</p></div>
+    <div class="step s3"><div class="n">3<small>Repair</small></div><p>If the promise can break, the solver returns the exact input that breaks it. The AI fixes the code and asks again, until every promise is proven.</p></div>
+  </div>
+
+  <div class="xp"><span class="tag">&lt;/&gt; For experts</span>Contract clauses (PRE, POST, INVARIANT, DECREASES, COST) produce proof obligations. Each obligation is <b>one quantifier-free SMT query</b> over bit-vectors, IEEE floats, arrays and uninterpreted functions; bounded <code>forall</code> is discharged by fresh-element rules. UNSAT means proven. SAT yields a model that is <b>replayed in the reference interpreter</b> before it is reported as a counterexample. <b>UNKNOWN or a timeout never counts as a proof.</b></div>
+
+  <div class="quote">
+    <p>Testing is a spot check. A proof inspects every beam of the building, and points to the weak one.</p>
+    <div class="guide"><span class="tag">How to read this brief</span>The large text tells the story. Grey boxes marked <b>&lt;/&gt;&nbsp;For experts</b> give the technical detail behind it.</div>
+  </div>
+
+  <div class="foot"><span>VeriGraph · Project brief · October 2026</span><span>2 / 6</span></div>
+</section>
+
+<!-- ======================= 3 · HOW IT WORKS ======================= -->
+<section class="page">
+  <div class="top"><div class="brand-s"><svg viewBox="0 0 24 24"><path d="M5 12 12 6M5 12l7 6m0-12 7 6m-7 6 7-6" stroke="#98A2B3" stroke-width="1.5" fill="none"/><circle cx="5" cy="12" r="2.4" fill="#0D1526"/><circle cx="12" cy="6" r="2.4" fill="#0D1526"/><circle cx="12" cy="18" r="2.4" fill="#0D1526"/><circle cx="19" cy="12" r="3.6" fill="#12B76A"/></svg>VeriGraph</div><span>How it works</span></div>
+
+  <div class="kicker blue">How it works</div>
+  <h1>From a sentence to a proven program.</h1>
+  <p class="lead">A VeriGraph program is not a text file but a <b>graph</b>: small pieces connected by wires that carry data. Each piece states its promise and gets a <b>fingerprint</b> computed from its own content. Here is the path from your request to running software.</p>
+
+  <svg class="schem" viewBox="0 0 174 131.5" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ah" viewBox="0 0 6 6" refX="5.2" refY="3" markerWidth="3.1" markerHeight="3.1" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6z" fill="#0D1526"/></marker>
+      <marker id="ahc" viewBox="0 0 6 6" refX="5.2" refY="3" markerWidth="3.1" markerHeight="3.1" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6z" fill="#F04438"/></marker>
+      <marker id="ahg" viewBox="0 0 6 6" refX="5.2" refY="3" markerWidth="3.1" markerHeight="3.1" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6z" fill="#12B76A"/></marker>
+      <marker id="ahb" viewBox="0 0 6 6" refX="5.2" refY="3" markerWidth="3.1" markerHeight="3.1" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6z" fill="#2E6BF0"/></marker>
+      <marker id="ahv" viewBox="0 0 6 6" refX="5.2" refY="3" markerWidth="3.1" markerHeight="3.1" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6z" fill="#6E56CF"/></marker>
+    </defs>
+
+    <!-- row 1: you, AI, Mesh -->
+    <rect x="0.3" y="2.3" width="54.7" height="19" rx="3" fill="#fff" stroke="#D0D5DD" stroke-width=".35"/>
+    <circle cx="6.8" cy="8.6" r="3.2" fill="#0D1526"/><text x="6.8" y="9.85" font-size="3.5" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+    <text x="12.4" y="9.6" font-size="3.35" font-weight="700" fill="#0D1526">You ask in plain words</text>
+    <text x="12.4" y="14.6" font-size="2.75" fill="#5F6B7E" font-style="italic">“Keep every sound sample</text>
+    <text x="12.4" y="18" font-size="2.75" fill="#5F6B7E" font-style="italic">between −1 and 1.”</text>
+
+    <line x1="55.4" y1="11.8" x2="61.6" y2="11.8" stroke="#0D1526" stroke-width=".5" marker-end="url(#ah)"/>
+
+    <rect x="62" y="2.3" width="56.7" height="19" rx="3" fill="#EEF4FF" stroke="#B9CCFB" stroke-width=".35"/>
+    <circle cx="68.5" cy="8.6" r="3.2" fill="#2E6BF0"/><text x="68.5" y="9.85" font-size="3.5" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+    <text x="74.1" y="9.6" font-size="3.35" font-weight="700" fill="#0D1526">An AI writes the code</text>
+    <text x="74.1" y="14.6" font-size="2.75" fill="#3B4A63">and the promise it must keep:</text>
+    <text x="74.1" y="18" font-size="2.75" fill="#3B4A63">Claude, Gemini, GPT or local.</text>
+
+    <rect x="127" y="2.3" width="46.7" height="19" rx="3" fill="#F4F1FD" stroke="#D9D0F7" stroke-width=".35"/>
+    <text x="130.6" y="8.4" font-size="3.3" font-weight="700" fill="#5135B5">VG-Mesh library</text>
+    <text x="130.6" y="12.9" font-size="2.55" fill="#4B3F75">Proven parts, found by what</text>
+    <text x="130.6" y="16.2" font-size="2.55" fill="#4B3F75">they do. Existing C and Rust</text>
+    <text x="130.6" y="19.5" font-size="2.55" fill="#4B3F75">code is imported by OmniLift.</text>
+    <line x1="126.6" y1="11.8" x2="119.2" y2="11.8" stroke="#6E56CF" stroke-width=".5" marker-end="url(#ahv)"/>
+    <text x="122.9" y="10" font-size="2.3" fill="#6E56CF" text-anchor="middle">reuse</text>
+
+    <!-- exchanges between row 1 and the checker -->
+    <line x1="24" y1="36.2" x2="24" y2="22" stroke="#2E6BF0" stroke-width=".5" stroke-dasharray="1.2 .9" marker-end="url(#ahb)"/>
+    <text x="26.3" y="28" font-size="2.55" fill="#1D4ED8" font-weight="600">the promise in plain</text>
+    <text x="26.3" y="31.4" font-size="2.55" fill="#1D4ED8" font-weight="600">English: you confirm it</text>
+    <line x1="86" y1="36.2" x2="86" y2="22" stroke="#F04438" stroke-width=".6" marker-end="url(#ahc)"/>
+    <text x="84" y="28" font-size="2.55" fill="#B42318" font-weight="700" text-anchor="end">fails? the exact</text>
+    <text x="84" y="31.4" font-size="2.55" fill="#B42318" font-weight="700" text-anchor="end">breaking input</text>
+    <line x1="104" y1="21.9" x2="104" y2="36" stroke="#0D1526" stroke-width=".5" marker-end="url(#ah)"/>
+    <text x="106.2" y="29.4" font-size="2.55" fill="#5F6B7E">draft</text>
+
+    <!-- row 2: the checker -->
+    <rect x="0.3" y="36.5" width="173.4" height="45" rx="4" fill="#0B1426"/>
+    <circle cx="7" cy="43.4" r="3.2" fill="#12B76A"/><text x="7" y="44.65" font-size="3.5" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+    <text x="12.6" y="44.6" font-size="3.8" font-weight="700" fill="#fff">The checker</text>
+    <text x="38" y="44.6" font-size="2.75" fill="#9FB0CC">Three gates. Nothing passes until all three say yes.</text>
+
+    <rect x="4" y="50" width="53.3" height="27.5" rx="2.4" fill="#142038" stroke="#26365A" stroke-width=".35"/>
+    <text x="8" y="55.2" font-size="2.2" fill="#8B98B0" class="mono" letter-spacing=".25">GATE 1</text>
+    <text x="8" y="60.4" font-size="3.5" font-weight="700" fill="#fff">Shape</text>
+    <text x="8" y="65.1" font-size="2.7" fill="#C3CCDB">Is the program well-formed?</text>
+    <text x="8" y="68.7" font-size="2.7" fill="#C3CCDB">Then give it a fingerprint.</text>
+    <text x="8" y="74.2" font-size="2.2" fill="#8B98B0" class="mono">vg-core · canonical BLAKE3 hash</text>
+
+    <rect x="60.3" y="50" width="53.3" height="27.5" rx="2.4" fill="#142038" stroke="#26365A" stroke-width=".35"/>
+    <text x="64.3" y="55.2" font-size="2.2" fill="#8B98B0" class="mono" letter-spacing=".25">GATE 2</text>
+    <text x="64.3" y="60.4" font-size="3.5" font-weight="700" fill="#fff">Types &amp; permissions</text>
+    <text x="64.3" y="65.1" font-size="2.7" fill="#C3CCDB">Do the pieces fit together, and</text>
+    <text x="64.3" y="68.7" font-size="2.7" fill="#C3CCDB">touch only what they declare?</text>
+    <text x="64.3" y="74.2" font-size="2.2" fill="#8B98B0" class="mono">vg-types · effects, capabilities</text>
+
+    <rect x="116.6" y="50" width="53.3" height="27.5" rx="2.4" fill="#10261F" stroke="#12B76A" stroke-width=".45"/>
+    <text x="120.6" y="55.2" font-size="2.2" fill="#6FD3A0" class="mono" letter-spacing=".25">GATE 3</text>
+    <text x="120.6" y="60.4" font-size="3.5" font-weight="700" fill="#fff">Proof</text>
+    <text x="120.6" y="65.1" font-size="2.7" fill="#C3CCDB">Does every promise hold</text>
+    <text x="120.6" y="68.7" font-size="2.7" fill="#C3CCDB">for every possible input?</text>
+    <text x="120.6" y="74.2" font-size="2.2" fill="#6F9E88" class="mono">vg-smt · z3 · cvc5 · bitwuzla</text>
+    <circle cx="164" cy="55.4" r="2.6" fill="#12B76A"/><path d="m162.7 55.5 .95.95 1.75-1.9" stroke="#fff" stroke-width=".55" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="57.5" y1="63.8" x2="60.1" y2="63.8" stroke="#3A4B70" stroke-width=".45" marker-end="url(#ah)"/>
+    <line x1="113.8" y1="63.8" x2="116.4" y2="63.8" stroke="#3A4B70" stroke-width=".45" marker-end="url(#ah)"/>
+
+    <!-- row 3: compiler and targets -->
+    <line x1="34" y1="81.6" x2="34" y2="89.6" stroke="#12B76A" stroke-width=".7" marker-end="url(#ahg)"/>
+    <text x="36.4" y="86.6" font-size="2.75" fill="#067647" font-weight="700">all proven ✓</text>
+
+    <rect x="0.3" y="89.8" width="69" height="25" rx="3" fill="#fff" stroke="#D0D5DD" stroke-width=".35"/>
+    <circle cx="6.8" cy="96.1" r="3.2" fill="#0D1526"/><text x="6.8" y="97.35" font-size="3.5" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+    <text x="12.4" y="97.1" font-size="3.6" font-weight="700" fill="#0D1526">The compiler builds it</text>
+    <text x="12.4" y="102" font-size="2.65" fill="#3B4A63">Checks that are already proven are</text>
+    <text x="12.4" y="105.4" font-size="2.65" fill="#3B4A63">removed, so the program does not</text>
+    <text x="12.4" y="108.8" font-size="2.65" fill="#3B4A63">pay for them when it runs.</text>
+    <text x="12.4" y="112.6" font-size="2.2" fill="#667085" class="mono">textual LLVM IR → clang + vg-rt</text>
+    <line x1="69.6" y1="102.3" x2="76.6" y2="102.3" stroke="#0D1526" stroke-width=".5" marker-end="url(#ah)"/>
+
+    <rect x="77" y="89.8" width="96.7" height="25" rx="3" fill="#EDFCF2" stroke="#A6F4C5" stroke-width=".35"/>
+    <circle cx="82.6" cy="94.6" r="2.7" fill="#12B76A"/><text x="82.6" y="95.65" font-size="3" font-weight="700" fill="#fff" text-anchor="middle">5</text>
+    <text x="87" y="95.6" font-size="3.05" font-weight="700" fill="#067647">It runs on three kinds of machine</text>
+    <rect x="80" y="98.6" width="29.2" height="13.4" rx="1.8" fill="#fff" stroke="#A6F4C5" stroke-width=".3"/>
+    <text x="83" y="104.2" font-size="3.2" font-weight="700" fill="#0D1526">x86-64</text>
+    <text x="83" y="108.6" font-size="2.35" fill="#5F6B7E">Linux PCs and servers</text>
+    <rect x="111.8" y="98.6" width="29.2" height="13.4" rx="1.8" fill="#fff" stroke="#A6F4C5" stroke-width=".3"/>
+    <text x="114.8" y="104.2" font-size="3.2" font-weight="700" fill="#0D1526">ARM64</text>
+    <text x="114.8" y="108.6" font-size="2.35" fill="#5F6B7E">Apple silicon Macs</text>
+    <rect x="143.6" y="98.6" width="27.4" height="13.4" rx="1.8" fill="#fff" stroke="#A6F4C5" stroke-width=".3"/>
+    <text x="146.6" y="104.2" font-size="3.2" font-weight="700" fill="#0D1526">WebAssembly</text>
+    <text x="146.6" y="108.6" font-size="2.35" fill="#5F6B7E">portable, sandboxed</text>
+
+    <!-- row 4: sandbox -->
+    <rect x="0.3" y="118.4" width="173.4" height="12.8" rx="3" fill="#0D1526"/>
+    <g transform="translate(4.4 120.9)" stroke="#3BD488" stroke-width=".55" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x=".6" y="3.2" width="5.6" height="4.4" rx=".8"/><path d="M1.9 3.2V2a1.5 1.5 0 0 1 3 0v1.2"/></g>
+    <text x="12.4" y="124.7" font-size="2.85" fill="#fff" font-weight="600">Each program is designed to ship locked down: the OS blocks any file or network access it did not declare.</text>
+    <text x="12.4" y="128.9" font-size="2.1" fill="#8B98B0" class="mono">Linux: Landlock + seccomp · macOS: mechanism chosen in P4.6 · WASI: granted dirs only</text>
+  </svg>
+
+  <div class="gloss-h">Words you will see</div>
+  <div class="gloss">
+    <div><b>Promise</b>The contract of a piece: what it needs (precondition) and what it guarantees (postcondition).</div>
+    <div><b>Solver</b>Software that decides whether a logical statement can ever be false. VeriGraph uses three: z3, cvc5, bitwuzla.</div>
+    <div><b>Counterexample</b>A concrete input that breaks a promise, replayed to confirm it really does.</div>
+    <div><b>Fingerprint</b>An ID computed from the content itself: same content, same ID, on every machine.</div>
+    <div><b>Graph</b>The program drawn as pieces (nodes) joined by wires (data). So an AI can write, check and repair it piece by piece.</div>
+  </div>
+
+  <div class="xp" style="margin-top:5mm"><span class="tag">&lt;/&gt; For experts · the three gates</span><b>Gate 1</b> parses VG-Sym, canonicalizes each node and Merkle-hashes it with BLAKE3 in derive-key mode; mutually recursive nodes are hashed together. <b>Gate 2</b> infers types one op at a time, checks effects as a capability set and orders side effects with Eff tokens. <b>Gate 3</b> runs a seeded concrete pre-screen in the interpreter, rejects vacuous contracts, then sends one SMT query per obligation, cached under the hash of its canonical SMT-LIB2 text.</div>
+
+  <div class="foot"><span>VeriGraph · Project brief · October 2026</span><span>3 / 6</span></div>
+</section>
+
+<!-- ======================= 4 · EXAMPLE ======================= -->
+<section class="page">
+  <div class="top"><div class="brand-s"><svg viewBox="0 0 24 24"><path d="M5 12 12 6M5 12l7 6m0-12 7 6m-7 6 7-6" stroke="#98A2B3" stroke-width="1.5" fill="none"/><circle cx="5" cy="12" r="2.4" fill="#0D1526"/><circle cx="12" cy="6" r="2.4" fill="#0D1526"/><circle cx="12" cy="18" r="2.4" fill="#0D1526"/><circle cx="19" cy="12" r="3.6" fill="#12B76A"/></svg>VeriGraph</div><span>A worked example</span></div>
+
+  <div class="kicker coral">A worked example</div>
+  <h1>The input no test would try.</h1>
+  <p class="lead">The first milestone is an audio limiter that keeps every sound sample between&nbsp;−1&nbsp;and&nbsp;1. Real audio stays near that range, but the promise says <b>any finite number</b>, so the checker must find the huge input that breaks the AI’s first draft.</p>
+
+  <svg class="chart" id="chart" viewBox="0 0 174 42" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <div class="story">
+    <div class="sc green">
+      <h2 class="h3"><span class="b">1</span>The promise, in plain English</h2>
+      <p>The toolchain renders the formal contract in English by fixed rules, so you confirm what will actually be proven:</p>
+      <div class="said">Requires: x is finite, and knee ≥ 0.5, and knee ≤ 0.99 (the f32 value 0.9900000095367431640625). Ensures: the result ≥ −1.0, and the result ≤ 1.0, and (x ≥ 0.0) is true exactly when (the result ≥ 0.0) is true.</div>
+    </div>
+    <div class="sc blue">
+      <h2 class="h3"><span class="b">2</span>The AI’s first draft</h2>
+      <p>To squeeze loud samples smoothly, it computes <b>t&nbsp;÷&nbsp;(1&nbsp;+&nbsp;t)</b>, where t measures how far the sample goes past the knee (the level where squeezing starts). For any sound you will ever hear, that works.</p>
+<div class="code"><span class="p">%4</span> = FDIV(<span class="p">%2</span>, <span class="p">%3</span>);   <span class="c">// t: overflows for huge x</span>
+<span class="p">%5</span> = FADD(<span class="l">1.0:f32</span>, <span class="p">%4</span>);
+<span class="p">%6</span> = FDIV(<span class="p">%4</span>, <span class="p">%5</span>);   <span class="bad">// BUG: inf / inf is NaN</span></div>
+    </div>
+    <div class="sc coral">
+      <h2 class="h3"><span class="b">3</span>The checker’s answer</h2>
+      <p>A counterexample: <b>x&nbsp;=&nbsp;3.0&nbsp;×&nbsp;10<sup>38</sup>, knee&nbsp;=&nbsp;0.5</b>, with the few steps that matter:</p>
+      <table class="trace">
+        <tr><td>%4</td><td>t, the excess past the knee</td><td class="inf">∞</td></tr>
+        <tr><td>%5</td><td>1 + t</td><td class="inf">∞</td></tr>
+        <tr><td>%6</td><td>∞ ÷ ∞</td><td class="nan">NaN</td></tr>
+        <tr><td>%12</td><td>final step: force into [−1, 1]</td><td class="nan">NaN, fails</td></tr>
+      </table>
+      <p class="small">NaN (“not a number”) fails every comparison, so “the result ≥ −1.0” is false: the promise breaks.</p>
+    </div>
+    <div class="sc green">
+      <h2 class="h3"><span class="b">4</span>The repair</h2>
+      <p>Compute <b>1&nbsp;−&nbsp;1&nbsp;÷&nbsp;(1&nbsp;+&nbsp;t)</b> instead: on paper the same curve, but when t is infinite, 1 ÷ ∞ is 0, so the answer is exactly 1.</p>
+<div class="code"><span class="p">%6</span> = FDIV(<span class="l">1.0:f32</span>, <span class="p">%5</span>);
+<span class="p">%7</span> = FSUB(<span class="l">1.0:f32</span>, <span class="p">%6</span>);   <span class="good">// u = 1 - 1/(1+t)</span></div>
+    </div>
+  </div>
+
+  <div class="next">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#3BD488" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    <div><b>Next, the checker must prove the repair for every input.</b> The specification records a float32 simulation over 400,000 inputs, extremes included, with no violation, but a simulation is not a proof. Milestone M1 (expected 4 December 2026) must reproduce this whole story with the real toolchain.</div>
+  </div>
+
+  <div class="xp" style="margin-top:3.6mm"><span class="tag">&lt;/&gt; For experts</span>Why the sign clause: a clamp that mapped NaN to −1.0 would pass the range check while flipping loud positive samples negative. <b>Range checks alone let wrong answers through; relational facts catch them.</b> The frame’s COST clause (<code>heap_bytes == 0 &amp;&amp; arena_bytes == 0</code>) is proven; its 500 µs latency BUDGET is measured, never claimed as proven.</div>
+
+  <div class="foot"><span>VeriGraph · Project brief · October 2026</span><span>4 / 6</span></div>
+</section>
+
+<!-- ======================= 5 · ADVANTAGES ======================= -->
+<section class="page">
+  <div class="top"><div class="brand-s"><svg viewBox="0 0 24 24"><path d="M5 12 12 6M5 12l7 6m0-12 7 6m-7 6 7-6" stroke="#98A2B3" stroke-width="1.5" fill="none"/><circle cx="5" cy="12" r="2.4" fill="#0D1526"/><circle cx="12" cy="6" r="2.4" fill="#0D1526"/><circle cx="12" cy="18" r="2.4" fill="#0D1526"/><circle cx="19" cy="12" r="3.6" fill="#12B76A"/></svg>VeriGraph</div><span>Why it matters</span></div>
+
+  <div class="kicker">Why it matters</div>
+  <h1>Eight advantages, in plain words.</h1>
+  <p class="lead">Each card says what it means for you, then what makes it true.</p>
+
+  <div class="adv">
+    <div class="card">
+      <div class="ic i-green"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z"/><path d="m9 12 2.2 2.2L15.5 10"/></svg></div>
+      <h2 class="h3">Proven, not sampled</h2>
+      <p class="plain">Every promise is checked for every possible input, not for a handful of test cases.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span>One quantifier-free SMT query per obligation; bounded <code>forall</code> via fresh-element rules; UNKNOWN is never a proof.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-coral"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 1.8v4M12 18.2v4M1.8 12h4M18.2 12h4"/></svg></div>
+      <h2 class="h3">Every bug comes with its cause</h2>
+      <p class="plain">A failure arrives with the exact input that triggers it and the few steps that matter, so the AI knows what to fix.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span>Models replayed in vg-interp; verdicts counterexample, contract_gap, vacuous, unknown. G6 target: failing slices of 5 ops or fewer on 80% of seeded bugs.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-blue"><svg viewBox="0 0 24 24"><path d="M9 2.8v5M15 2.8v5M6 7.8h12v3.4a6 6 0 0 1-12 0zM12 17.2v4"/></svg></div>
+      <h2 class="h3">Works with any AI</h2>
+      <p class="plain">Claude, Gemini, GPT or any other model that can use tools writes VeriGraph through one standard interface.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span><code>vg mcp</code>, a stdio MCP server with 8 tools; typed JSON diagnostics with stable codes; define-before-use text, so every prefix can be checked.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-blue"><svg viewBox="0 0 24 24"><path d="M4 4.5h16v11.5H9.5L4 20.5z"/><path d="m8.6 10.4 2.2 2.2 4.4-4.4"/></svg></div>
+      <h2 class="h3">You confirm what gets proven</h2>
+      <p class="plain">The promise is read back to you in plain English, so you can catch a perfect proof of the wrong idea before it ships.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span><code>contract_text</code> renders contracts from fixed templates, not from the agent’s summary. Intent validation with solver-chosen examples is research track R-14.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-violet"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M10.2 7 8.8 17M15.2 7l-1.4 10M7.2 10.2h10.6M6.4 13.8H17"/></svg></div>
+      <h2 class="h3">Prove once, reuse everywhere</h2>
+      <p class="plain">Each piece is identified by its content, so a proof done once holds for everyone who uses that exact piece.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span>BLAKE3 derive-key hash of the canonical graph and contract; proofs cached under the hash of canonical SMT-LIB2 text; same input, same bytes.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-violet"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.4 15.4 5.2 5.2"/><path d="m7.8 10.6 1.9 1.9 3.3-3.4"/></svg></div>
+      <h2 class="h3">Find code by what it does</h2>
+      <p class="plain">Search a library of proven parts by the promise you need, not by a package name you have to guess.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span>VG-Mesh: spec-class match, effect-mask filter, then solver-checked behavioral subtyping, cached and asynchronous; six-check ingestion gate. G7 target: indexed queries under 5 ms p99 on 100,000 nodes.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-green"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 2.5v3.5M14.5 2.5v3.5M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/><path d="m9.6 12.1 1.7 1.7 3.1-3.3"/></svg></div>
+      <h2 class="h3">Native programs, locked down</h2>
+      <p class="plain">Proven code compiles to native programs for PCs, Macs and WebAssembly, each allowed to touch only what it declares.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span>Proofs erased; proven facts become <code>nsw</code>, <code>nuw</code>, <code>inbounds</code>. G4 target: within 20% of <code>clang -O2</code> C. OS sandbox manifest per target.</div>
+    </div>
+    <div class="card">
+      <div class="ic i-slate"><svg viewBox="0 0 24 24"><path d="M12 3.5v17M7.5 20.5h9M4.5 7h15"/><path d="m4.5 7-2.8 6a2.9 2.9 0 0 0 5.6 0zM19.5 7l-2.8 6a2.9 2.9 0 0 0 5.6 0z"/></svg></div>
+      <h2 class="h3">Honest by design</h2>
+      <p class="plain">It never calls a guess a proof, never calls a measurement a guarantee, and says exactly what it trusts.</p>
+      <div class="tech"><span class="tag">&lt;/&gt;</span>Measured (BUDGET) is never reported as proven (COST); release proofs need two solvers to agree; the trusted computing base is listed in the spec.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span>VeriGraph · Project brief · October 2026</span><span>5 / 6</span></div>
+</section>
+
+<!-- ======================= 6 · FOR EXPERTS, ROADMAP ======================= -->
+<section class="page">
+  <div class="top"><div class="brand-s"><svg viewBox="0 0 24 24"><path d="M5 12 12 6M5 12l7 6m0-12 7 6m-7 6 7-6" stroke="#98A2B3" stroke-width="1.5" fill="none"/><circle cx="5" cy="12" r="2.4" fill="#0D1526"/><circle cx="12" cy="6" r="2.4" fill="#0D1526"/><circle cx="12" cy="18" r="2.4" fill="#0D1526"/><circle cx="19" cy="12" r="3.6" fill="#12B76A"/></svg>VeriGraph</div><span>For the expert · Roadmap</span></div>
+
+  <div class="kicker slate">For the expert</div>
+  <h1 style="font-size:24pt">A verifier is only as good as its worst bug. VeriGraph attacks its own.</h1>
+  <p class="lead" style="font-size:10.2pt">In plain words: it assumes its own checker can be wrong, and says what is still unsolved.</p>
+
+  <div class="cols">
+    <div>
+      <div class="colh">How soundness is engineered</div>
+      <ul class="bul">
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Two solvers agree.</b> z3, cvc5 and bitwuzla run as separate processes over SMT-LIB2; a release proof needs two of them to agree.</li>
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Every solver model is replayed</b> in the reference interpreter, first with the model’s own values, then with the real code. A model that fails the first replay is a verifier bug, and it stops the build.</li>
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>No empty proofs.</b> A contract that no input can satisfy is rejected as vacuous.</li>
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Exact formulas.</b> Integer terms in contracts become bit-vectors wide enough never to overflow, so no query needs the Int or Real sorts. Program arithmetic names its mode: checked, wrapping or saturating.</li>
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>The verifier is attacked on every change:</b> a known-bad corpus, mutation testing, differential testing of native and WASM builds against the interpreter, and fuzzing.</li>
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Bit-exact floats on every target:</b> one canonical NaN, no fast-math, no flush-to-zero; checked entry points pin the floating-point environment.</li>
+        <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#12B76A"/><path d="m7.5 12.3 3 3 6-6.3" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Proofs survive tuning.</b> Learnable parameters are proven over their whole declared range.</li>
+      </ul>
+      <div class="qa" style="margin-top:3.4mm"><b>Can it prove speed?</b><p>No, and it does not pretend to. Operation counts and memory are proven (COST); wall-clock latency is measured per target (BUDGET).</p></div>
+    </div>
+    <div>
+      <div class="colh">Questions an expert will ask</div>
+      <div class="qa"><b>What if the AI writes the wrong promise?</b><p>The spec rates this risk likely and severe. The promise is read back in plain English for a human to confirm, and vacuous promises are rejected. Closing the rest of the intent gap is research track R-14. <span class="open">OPEN</span></p></div>
+      <div class="qa"><b>Why trust the solvers and LLVM?</b><p>They are in the trusted base, listed openly. Two solvers must agree on release proofs, and builds are tested against the interpreter with and without proof facts. Checkable proof certificates are research track R-05. <span class="open">OPEN</span></p></div>
+      <div class="qa"><b>What about loops and timeouts?</b><p>Loops are bounded combinators with a mandatory invariant, checked by one base case and one inductive step; every query stays quantifier-free. A timeout is never a proof: the operation must sit behind an explicit runtime guard, counted in every build.</p></div>
+      <div class="qa"><b>How is this different from Dafny or Verus?</b><p>It reuses proven ideas: SMT-checked contracts (Dafny, Verus), content-addressed code (Unison), bounded translation validation (Alive2). The difference: every query is quantifier-free by construction, with no triggers to tune, and the format, diagnostics and proof cache are built for agents that repair code unattended.</p></div>
+    </div>
+  </div>
+
+  <div class="road">
+    <div class="colh" style="border:0;margin-bottom:1mm">Roadmap · expected dates for an agent-only build</div>
+    <svg class="road-svg" viewBox="0 0 174 31" xmlns="http://www.w3.org/2000/svg">
+      <line x1="4" y1="7" x2="170" y2="7" stroke="#E5E2DA" stroke-width=".8"/>
+      <line x1="4" y1="7" x2="20" y2="7" stroke="#12B76A" stroke-width=".8"/>
+      <g font-size="2.4">
+        <circle cx="4" cy="7" r="2.2" fill="#12B76A"/><circle cx="4" cy="7" r="3.6" fill="none" stroke="#12B76A" stroke-width=".35" opacity=".5"/>
+        <text x="1" y="2.4" font-size="2.2" fill="#067647" font-weight="700" letter-spacing=".2">YOU ARE HERE</text>
+        <text x="1" y="14" font-size="2.9" font-weight="700" fill="#0D1526">Oct 2026</text>
+        <text x="1" y="18" fill="#5F6B7E">Specification and</text>
+        <text x="1" y="21.2" fill="#5F6B7E">scaffold; gate G0</text>
+        <text x="1" y="24.4" fill="#5F6B7E">awaits approval</text>
+
+        <circle cx="40" cy="7" r="2.2" fill="#fff" stroke="#0D1526" stroke-width=".7"/>
+        <text x="37" y="14" font-size="2.9" font-weight="700" fill="#0D1526">4 Dec 2026 · M1 MVP</text>
+        <text x="37" y="18" fill="#5F6B7E">The audio limiter: plain request</text>
+        <text x="37" y="21.2" fill="#5F6B7E">to verified binaries on three</text>
+        <text x="37" y="24.4" fill="#5F6B7E">targets, with the repair story</text>
+
+        <circle cx="79" cy="7" r="2.2" fill="#fff" stroke="#0D1526" stroke-width=".7"/>
+        <text x="76" y="14" font-size="2.9" font-weight="700" fill="#0D1526">29 Jan 2027 · M2 Alpha</text>
+        <text x="76" y="18" fill="#5F6B7E">Generics, tensors, MLIR;</text>
+        <text x="76" y="21.2" fill="#5F6B7E">overhead within 5% of C</text>
+
+        <circle cx="117" cy="7" r="2.2" fill="#fff" stroke="#0D1526" stroke-width=".7"/>
+        <text x="114" y="14" font-size="2.9" font-weight="700" fill="#0D1526">30 Apr 2027 · M3</text>
+        <text x="114" y="18" fill="#5F6B7E">Self-hosted: the compiler</text>
+        <text x="114" y="21.2" fill="#5F6B7E">compiles itself, bit for bit</text>
+
+        <circle cx="150" cy="7" r="2.2" fill="#fff" stroke="#0D1526" stroke-width=".7"/>
+        <text x="147" y="14" font-size="2.9" font-weight="700" fill="#0D1526">22 Oct 2027 · 1.0</text>
+        <text x="147" y="18" fill="#5F6B7E">Public Mesh,</text>
+        <text x="147" y="21.2" fill="#5F6B7E">frozen format v2</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="status">
+    <div><span class="tag">Built so far</span>The specification draft: 17 chapters, the 27 errors of the original design fixed, 10 decision records (nine await approval), 14 research tracks kept off the critical path. A 12-crate Rust workspace whose automated checks pass on Linux x86-64 and macOS ARM64.</div>
+    <div class="todo"><span class="tag">Not built yet</span>The checker, the compiler and the agent loop: that is the MVP. Every performance and success figure in this brief is a gate target, not a measurement. A gate passes only when its automated checks pass and the owner approves its report.</div>
+  </div>
+
+  <div class="close">
+    <div class="t">AI writes the code. <span>Math proves it.</span></div>
+    <div class="r"><b>VeriGraph</b> · Project brief · October 2026<br>The repository is planned to go public at milestone M1.<br>6 / 6</div>
+  </div>
+</section>
+
+<script>
+// Dot grids of page 2: every dot is one possible input (illustrative, not to scale).
+(function(){
+  const C=24, R=11, S=3.05, X0=2.4, Y0=2.6, BUG=[21,1];
+  const tested=[[2,3],[5,8],[7,1],[9,6],[11,9],[13,4],[15,7],[4,5],[17,2],[19,9],[1,9],[22,6]];
+  const isT=(c,r)=>tested.some(t=>t[0]===c&&t[1]===r);
+  let a="", b=`<rect x="0.6" y="0.6" width="${2*X0+(C-1)*S-1.2}" height="${2*Y0+(R-1)*S-1.2}" rx="2.2" fill="#ECFDF3" stroke="#A6F4C5" stroke-width=".3"/>`;
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const x=(X0+c*S).toFixed(2), y=(Y0+r*S).toFixed(2), bug=c===BUG[0]&&r===BUG[1];
+    if(bug){
+      a+=`<circle cx="${x}" cy="${y}" r="2.1" fill="none" stroke="#F04438" stroke-width=".3" stroke-dasharray=".7 .5"/><circle cx="${x}" cy="${y}" r=".9" fill="#F04438"/>`;
+      b+=`<circle cx="${x}" cy="${y}" r="2.3" fill="none" stroke="#F04438" stroke-width=".45"/><circle cx="${x}" cy="${y}" r="1.05" fill="#F04438"/>`;
+    } else if(isT(c,r)){
+      a+=`<circle cx="${x}" cy="${y}" r="1.05" fill="#2E6BF0"/>`;
+      b+=`<circle cx="${x}" cy="${y}" r=".62" fill="#12B76A"/>`;
+    } else {
+      a+=`<circle cx="${x}" cy="${y}" r=".52" fill="#C9CED6"/>`;
+      b+=`<circle cx="${x}" cy="${y}" r=".62" fill="#12B76A"/>`;
+    }
+  }
+  const bx=X0+BUG[0]*S, by=Y0+BUG[1]*S;
+  a+=`<rect x="${bx-17.4}" y="${by-1.9}" width="14.6" height="4.2" rx="1" fill="#fff" stroke="#FECDCA" stroke-width=".3"/><text x="${bx-10.1}" y="${by+1}" font-size="2.3" fill="#B42318" text-anchor="middle" font-family="VG Sans, sans-serif" font-weight="600">never tried</text>`;
+  b+=`<rect x="${bx-29}" y="${by-1.9}" width="25.2" height="4.4" rx="1" fill="#fff" stroke="#FECDCA" stroke-width=".3"/><text x="${bx-16.4}" y="${by+1.1}" font-size="2.3" fill="#B42318" text-anchor="middle" font-family="VG Sans, sans-serif" font-weight="700">found: x = 3.0 × 10³⁸</text>`;
+  document.getElementById("grid-test").innerHTML=a;
+  document.getElementById("grid-proof").innerHTML=b;
+})();
+
+// The repaired soft-knee curve of page 4 (knee = 0.5), from examples/audio_limiter.vgs.
+(function(){
+  const k=0.5, f=x=>{const a=Math.abs(x); if(a<=k) return x; const t=(a-k)/(1-k); return Math.sign(x)*Math.min(1,k+(1-k)*(1-1/(1+t)));};
+  const X=x=>72+x*19.4, Y=y=>21-y*13.6, L=-3.2, H=3.2;
+  let d=""; for(let x=L;x<=H+1e-9;x+=0.02) d+=(d?"L":"M")+X(x).toFixed(2)+" "+Y(f(x)).toFixed(2);
+  const s=`
+  <rect x="${X(L)}" y="1.2" width="${X(H)-X(L)}" height="39.6" fill="#fff" stroke="#E5E2DA" stroke-width=".3" rx="1.6"/>
+  <line x1="${X(L)}" y1="${Y(0)}" x2="${X(H)}" y2="${Y(0)}" stroke="#D0D5DD" stroke-width=".3"/>
+  <line x1="${X(0)}" y1="1.2" x2="${X(0)}" y2="40.8" stroke="#D0D5DD" stroke-width=".3"/>
+  <line x1="${X(L)}" y1="${Y(1)}" x2="${X(H)}" y2="${Y(1)}" stroke="#F04438" stroke-width=".35" stroke-dasharray="1.2 .9"/>
+  <line x1="${X(L)}" y1="${Y(-1)}" x2="${X(H)}" y2="${Y(-1)}" stroke="#F04438" stroke-width=".35" stroke-dasharray="1.2 .9"/>
+  <text x="${X(L)+1.6}" y="${Y(1)-1.2}" font-size="2.4" fill="#B42318" font-weight="600">ceiling +1</text>
+  <text x="${X(L)+1.6}" y="${Y(-1)+3.2}" font-size="2.4" fill="#B42318" font-weight="600">ceiling −1</text>
+  <line x1="${X(-1.4)}" y1="${Y(-1.4)}" x2="${X(1.4)}" y2="${Y(1.4)}" stroke="#98A2B3" stroke-width=".35" stroke-dasharray=".8 .8"/>
+  <text x="${X(1.36)+1.2}" y="${Y(1.3)+0.8}" font-size="2.2" fill="#667085">no limiter</text>
+  <line x1="${X(k)}" y1="${Y(0)-1.4}" x2="${X(k)}" y2="${Y(0)+1.4}" stroke="#0D1526" stroke-width=".35"/>
+  <line x1="${X(-k)}" y1="${Y(0)-1.4}" x2="${X(-k)}" y2="${Y(0)+1.4}" stroke="#0D1526" stroke-width=".35"/>
+  <text x="${X(k)+0.8}" y="${Y(0)+4}" font-size="2.2" fill="#5F6B7E">knee</text>
+  <path d="${d}" fill="none" stroke="#12B76A" stroke-width=".95" stroke-linejoin="round"/>
+  <text x="${X(-3.05)}" y="${Y(0)-1.6}" font-size="2.3" fill="#5F6B7E">input sample x →</text>
+  <text x="${X(0)+1.2}" y="4.2" font-size="2.3" fill="#5F6B7E">output</text>
+  <text x="${X(1.25)}" y="${Y(0.45)}" font-size="2.6" fill="#067647" font-weight="700">loud: squeezed smoothly</text>
+  <text x="${X(1.25)}" y="${Y(0.45)+3.4}" font-size="2.6" fill="#067647" font-weight="700">under the ceiling</text>
+  <text x="${X(-2.95)}" y="${Y(-0.42)}" font-size="2.6" fill="#344054" font-weight="600">quiet: passes unchanged</text>
+  <line x1="${X(-1.18)}" y1="${Y(-0.36)}" x2="${X(-0.26)}" y2="${Y(-0.24)}" stroke="#98A2B3" stroke-width=".3"/>
+
+  <line x1="${X(H)+0.6}" y1="${Y(0.85)}" x2="${X(H)+6.5}" y2="${Y(0.85)}" stroke="#0D1526" stroke-width=".45" stroke-dasharray=".8 .7"/>
+  <path d="M${X(H)+6.3} ${Y(0.85)-1.1} l1.6 1.1 -1.6 1.1z" fill="#0D1526"/>
+  <text x="${X(H)+9.6}" y="5.4" font-size="2.6" font-weight="700" fill="#0D1526">Far off the chart:</text>
+  <text x="${X(H)+9.6}" y="9.6" font-size="2.5" fill="#344054">x = 3.0 × 10³⁸, knee = 0.5</text>
+  <rect x="${X(H)+9.6}" y="12.6" width="29.6" height="9" rx="1.4" fill="#FEF3F2" stroke="#FECDCA" stroke-width=".3"/>
+  <text x="${X(H)+11.4}" y="16.4" font-size="2.4" fill="#B42318" font-weight="700">First draft</text>
+  <text x="${X(H)+11.4}" y="19.9" font-size="2.4" fill="#B42318">output: NaN, broken</text>
+  <rect x="${X(H)+9.6}" y="23.8" width="29.6" height="9" rx="1.4" fill="#ECFDF3" stroke="#A6F4C5" stroke-width=".3"/>
+  <text x="${X(H)+11.4}" y="27.6" font-size="2.4" fill="#067647" font-weight="700">Repaired</text>
+  <text x="${X(H)+11.4}" y="31.1" font-size="2.4" fill="#067647">output: exactly 1.0</text>
+  <text x="${X(H)+9.6}" y="36.8" font-size="2.1" fill="#667085">Curve: the repaired piece,</text>
+  <text x="${X(H)+9.6}" y="39.5" font-size="2.1" fill="#667085">computed with knee = 0.5.</text>
+  `;
+  document.getElementById("chart").innerHTML=s;
+})();
+</script>
+</body>
+</html>
