@@ -1021,6 +1021,79 @@ fn fold_bounded_matches_a_rust_fold() {
     assert_eq!(run(&e, &cat(&[le(3001, 4), le(1, 4)])).code, 1);
 }
 
+// FNEG turns the canonical NaN 0x7FC00000 into 0xFFC00000 on every target. A node writes a scalar
+// float result raw, so each path where one becomes bytes must canonicalize it (ADR 0002).
+const NAN_PATHS: &str = "module nan_paths;
+NODE @neg [intent: \"Sign flipped\"] {
+  SIGNATURE: (x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { %0 = FNEG(x); RETURN(%0); }
+}
+NODE @neg_at [intent: \"Sign flipped, for GENERATE\"] {
+  SIGNATURE: (i: u64, x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { %0 = FNEG(x); RETURN(%0); }
+}
+NODE @neg_step [intent: \"Sign of the element flipped, for FOLD\"] {
+  SIGNATURE: (acc: f32, x: f32) -> (f32);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { %0 = FNEG(x); RETURN(%0); }
+}
+NODE @neg_map [intent: \"MAP\", export] {
+  SIGNATURE: (xs: Array<f32, 4>) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { %0 = SIMD_MAP(@neg, xs); RETURN(%0); }
+}
+NODE @neg_gen [intent: \"GENERATE\", export] {
+  SIGNATURE: (x: f32) -> (Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT { }
+  BODY { %0 = GENERATE(@neg_at, 4:u64, x); RETURN(%0); }
+}
+NODE @neg_fold [intent: \"FOLD into a tuple and an array\", export] {
+  SIGNATURE: (xs: Array<f32, 4>) -> (Tuple<f32, u8>, Array<f32, 4>);
+  EFFECTS: [];
+  CONTRACT { INVARIANT @any(k, acc): k <= 4; }
+  BODY {
+    %0 = FOLD_BOUNDED(@neg_step, xs, init=0.0:f32, invariant=@any);
+    %1 = TUPLE(%0, 7:u8);
+    %2 = CALL_HASH(@neg, %0);
+    %3 = GENERATE(@neg_at, 4:u64, %2);
+    RETURN(%1, %3);
+  }
+}";
+
+#[test]
+fn a_nan_becomes_canonical_bytes_on_every_path() {
+    let m = Module::new(NAN_PATHS);
+    let nan = f32::from_bits(0x7fc0_0000);
+    let canon = 0x7fc0_0000u32.to_le_bytes();
+    let o = run(&exe(&m, "neg", true, true), &f32s(&[nan]));
+    assert_eq!((o.code, o.stdout), (0, canon.to_vec()), "exported scalar");
+    let o = run(
+        &exe(&m, "neg_map", true, true),
+        &f32s(&[1.0, nan, -2.0, nan]),
+    );
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.stdout, f32s(&[-1.0, nan, 2.0, nan]), "SIMD_MAP elements");
+    let o = run(&exe(&m, "neg_gen", true, true), &f32s(&[nan]));
+    assert_eq!(o.stdout, canon.repeat(4), "GENERATE elements");
+    let o = run(
+        &exe(&m, "neg_fold", true, true),
+        &f32s(&[1.0, 2.0, 3.0, nan]),
+    );
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    // The fold's -NaN reaches a tuple member, and a CALL's result reaches GENERATE's broadcast.
+    let mut want = canon.to_vec();
+    want.push(7); // docs/13: tuple members packed, no padding
+    want.extend(canon.repeat(4));
+    assert_eq!(o.stdout, want, "FOLD, TUPLE and CALL");
+}
+
 #[test]
 fn generate_builds_arrays_and_slices() {
     // a35: Array<u64, 8> from a literal count; the kernel is a saturating product.

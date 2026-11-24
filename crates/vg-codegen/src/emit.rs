@@ -12,10 +12,10 @@ use crate::analysis::{
 };
 use crate::formula::{FormulaCx, emit_arena_bytes_fn, eval_bool_term};
 use crate::ir::{
-    FnBuilder, IrVal, ModBuilder, emit_branch_trap_if_false, emit_canon_float, emit_const_val,
-    emit_gep_bytes, emit_load_scalar, emit_memcpy, emit_memcpy_dyn, emit_slice_parts,
-    emit_store_scalar_canon, emit_store_slice, emit_store_value_canon, f32_const_expr,
-    f64_const_expr, needs_input_validation,
+    FnBuilder, IrVal, ModBuilder, emit_branch_trap_if_false, emit_canon_float,
+    emit_canon_raw_output, emit_const_val, emit_gep_bytes, emit_load_scalar, emit_memcpy,
+    emit_memcpy_dyn, emit_slice_parts, emit_store_scalar_canon, emit_store_slice,
+    emit_store_value_canon, f32_const_expr, f64_const_expr, is_raw_output, needs_input_validation,
 };
 use crate::layout::{
     CallGraph, align_of, collect_graph, docs13_fixed_byte_size, is_erased, is_scalar_abi,
@@ -195,7 +195,8 @@ fn emit_internal_node(
         op_vals.push(res);
     }
 
-    // Store outputs (canonicalizing NaN on every float store/output, `docs/06`).
+    // Store outputs, canonicalizing NaN (`docs/06`) except in a scalar float, which the caller
+    // canonicalizes where it becomes bytes (`is_raw_output`).
     let non_eff_outputs: Vec<(&Type, &Operand)> = node
         .results
         .iter()
@@ -204,11 +205,30 @@ fn emit_internal_node(
         .collect();
     for ((ty, opnd), out_ptr) in non_eff_outputs.into_iter().zip(&out_ptrs) {
         let val = operand_val(&mut f, m, node, *opnd, &inputs, &op_vals)?;
-        emit_store_value_canon(&mut f, m, ty, &val, out_ptr)?;
+        if is_raw_output(ty) {
+            let lty = llvm_type(ty, m.target)?;
+            let align = align_of(ty, m.target)?;
+            f.emit(format!(
+                "store {lty} {}, ptr {out_ptr}, align {align}",
+                val.ssa
+            ));
+        } else {
+            emit_store_value_canon(&mut f, m, ty, &val, out_ptr)?;
+        }
     }
 
     f.ret_void();
-    let header = format!("define void @vgi_{prefix}({})", sig_params.join(", "));
+    // A callee is internal, so LLVM may inline its body into its callers (a kernel into its loop)
+    // and drop it. The root's stays external: vg-omnilift's fuzz harness calls it directly.
+    let linkage = if *node_hash == graph.root_hash {
+        ""
+    } else {
+        "internal "
+    };
+    let header = format!(
+        "define {linkage}void @vgi_{prefix}({})",
+        sig_params.join(", ")
+    );
     m.fns.push(f.finish(&header));
     Ok(())
 }
@@ -1801,6 +1821,7 @@ fn emit_simd_map(
     }
     cargs.push(format!("ptr {dp}"));
     f.emit(format!("call void @vgi_{kprefix}({})", cargs.join(", ")));
+    emit_canon_raw_output(f, &out_elem_ty, &dp, m.target)?;
 
     let next = f.reg();
     f.emit(format!("{next} = add nuw i64 {idx}, 1"));
@@ -2000,6 +2021,7 @@ fn emit_generate(
     }
     cargs.push(format!("ptr {dp}"));
     f.emit(format!("call void @vgi_{kprefix}({})", cargs.join(", ")));
+    emit_canon_raw_output(f, &out_elem_ty, &dp, m.target)?;
 
     let next = f.reg();
     f.emit(format!("{next} = add nuw i64 {idx}, 1"));
@@ -2626,6 +2648,11 @@ fn emit_checked_entry(
     let saved_fp = f.reg();
     f.emit(format!("{saved_fp} = call i64 @vg_fp_enter()"));
     f.emit(format!("call void @vgi_{prefix}({})", call_args.join(", ")));
+    for (j, ty) in root.results.iter().enumerate() {
+        if !is_erased(ty) {
+            emit_canon_raw_output(&mut f, ty, &format!("%out{j}"), m.target)?;
+        }
+    }
     f.emit(format!("call void @vg_fp_leave(i64 {saved_fp})"));
     f.ret("i32 0");
 

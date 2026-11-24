@@ -442,6 +442,28 @@ pub fn emit_store_scalar_canon(
     Ok(())
 }
 
+/// A node writes a scalar float result to its out pointer as it is, NaN payload included: a fold
+/// step or a call reads it back as a value, so canonicalizing there would only put a compare and
+/// select on the loop's critical path. Whoever turns that result into bytes (a MAP or GENERATE
+/// element, an exported output) canonicalizes it in place with this (ADR 0002).
+pub fn is_raw_output(ty: &Type) -> bool {
+    matches!(ty, Type::Float(_) | Type::BFloat16)
+}
+
+/// Canonicalizes, in place, a result a node wrote raw to `ptr` (see `is_raw_output`).
+pub fn emit_canon_raw_output(
+    f: &mut FnBuilder,
+    ty: &Type,
+    ptr: &str,
+    target: Target,
+) -> Result<(), Diagnostic> {
+    if is_raw_output(ty) {
+        let v = emit_load_scalar(f, ty, ptr, target)?;
+        emit_store_scalar_canon(f, ty, &v, ptr, target)?;
+    }
+    Ok(())
+}
+
 /// Copies a value into `dst_ptr`, canonicalizing floats if scalar or recursively if aggregate
 /// containing floats (`docs/06`, ADR 0002).
 pub fn emit_store_value_canon(
