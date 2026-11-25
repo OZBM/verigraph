@@ -2264,6 +2264,30 @@ pub fn compute_intervals(func: &Function, param_kinds: &[ParamKind]) -> BTreeMap
                             res_iv
                         }
                     }
+                    // umax(a, b) >= each operand and umin(a, b) <= each: the bounds that prove a
+                    // divisor nonzero or a clamped index in range.
+                    InstKind::Call { callee, args, .. }
+                        if args.len() == 2
+                            && (callee.starts_with("llvm.umax.")
+                                || callee.starts_with("llvm.umin.")) =>
+                    {
+                        let a = val_iv(&args[0].1, &args[0].0, &env);
+                        let b = val_iv(&args[1].1, &args[1].0, &env);
+                        let (umin, umax) = if callee.starts_with("llvm.umax.") {
+                            (a.umin.max(b.umin), a.umax.max(b.umax))
+                        } else {
+                            (a.umin.min(b.umin), a.umax.min(b.umax))
+                        };
+                        let bits = args[0].0.bit_width().unwrap_or(64);
+                        let full = Interval::full(bits);
+                        let fits = umax <= full.smax as u64;
+                        Interval {
+                            umin,
+                            umax,
+                            smin: if fits { umin as i64 } else { full.smin },
+                            smax: if fits { umax as i64 } else { full.smax },
+                        }
+                    }
                     InstKind::Cast {
                         op: CastKind::ZExt,
                         from_ty,

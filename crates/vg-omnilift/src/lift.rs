@@ -253,7 +253,8 @@ pub fn lift_llvm_ir(
             input: null_witness,
         });
     }
-    let has_dynamic_ub = detect_dynamic_ub(&func, &param_kinds, &intervals, &mut initial_ub);
+    let has_dynamic_ub =
+        detect_dynamic_ub(&module, &func, &param_kinds, &intervals, &mut initial_ub);
 
     let mut mem_specs = BTreeMap::new();
     for a in &allocas {
@@ -734,7 +735,63 @@ fn collect_used_globals(
     Ok(())
 }
 
+/// For a load through a GEP into a constant global array, the element count and the index
+/// when the index is not proven in bounds; such a read is UB in the source, which the lift
+/// cures to Err (docs/08) instead of reading a clamped element.
+fn unproven_global_load<'f>(
+    module: &Module,
+    func: &'f Function,
+    intervals: &BTreeMap<String, Interval>,
+    ptr: &ValueRef,
+) -> Option<(u64, &'f LlvmType, &'f ValueRef)> {
+    let ValueRef::Local(p) = ptr else {
+        return None;
+    };
+    let (gname, base_ty, indices) =
+        func.blocks
+            .iter()
+            .flat_map(|b| &b.insts)
+            .find_map(|i| match (&i.result, &i.kind) {
+                (
+                    Some(r),
+                    InstKind::Gep {
+                        ptr: ValueRef::Global(g),
+                        base_ty,
+                        indices,
+                        ..
+                    },
+                ) if r == p => Some((g, base_ty, indices)),
+                _ => None,
+            })?;
+    let gty = &module.globals.get(gname)?.ty;
+    let LlvmType::Array(_, elem) = gty else {
+        return None;
+    };
+    // The bound counts GEP strides: clang writes `T[i]` over an i64 table as
+    // `getelementptr [8 x i8], ptr @T, i64 %i`, and `&T[0][i]` as `[N x T], ptr @T, 0, %i`.
+    let (stride_ty, idx_ty, idx) = match indices.as_slice() {
+        [(t, i)] => (base_ty, t, i),
+        [(_, ValueRef::ConstInt { value: 0, .. }), (t, i)] if base_ty == gty => {
+            (elem.as_ref(), t, i)
+        }
+        _ => return None,
+    };
+    let total = module.sizeof(gty).ok()?;
+    let stride = module.sizeof(stride_ty).ok()?;
+    if stride == 0 || total % stride != 0 {
+        return None;
+    }
+    let n = &(total / stride);
+    let proven = match idx {
+        ValueRef::ConstInt { value, .. } => *value >= 0 && (*value as u64) < *n,
+        ValueRef::Local(v) => intervals.get(v).is_some_and(|iv| iv.umax < *n),
+        _ => false,
+    };
+    (!proven).then_some((*n, idx_ty, idx))
+}
+
 fn detect_dynamic_ub(
+    module: &Module,
     func: &Function,
     param_kinds: &[ParamKind],
     intervals: &BTreeMap<String, Interval>,
@@ -847,6 +904,22 @@ fn detect_dynamic_ub(
                                 ),
                             });
                         }
+                    }
+                }
+                InstKind::Load { ptr, .. }
+                    if unproven_global_load(module, func, intervals, ptr).is_some() =>
+                {
+                    found_dynamic = true;
+                    if seen_kinds.insert("out_of_bounds") {
+                        ub_found.push(UbFinding {
+                            kind: "out_of_bounds".to_string(),
+                            input: build_witness_inputs(
+                                func,
+                                param_kinds,
+                                Some(("out_of_bounds", 64)),
+                                false,
+                            ),
+                        });
                     }
                 }
                 _ => {}
@@ -1015,13 +1088,35 @@ fn emit_scalar_const(v: i128, bits: u32, ty: &str) -> String {
     }
 }
 
+/// The same N-bit pattern read as the other signedness. A plain CAST is CAST.in_range and
+/// traps on negative values (docs/14), so the sign bit goes through AND and SELECT.
+fn reinterpret(nb: &mut NodeBuilder, port: &str, from_ty: &str, bits: u32) -> String {
+    let sign = 1u128 << (bits - 1);
+    let low_mask = sign - 1;
+    if from_ty.starts_with('i') {
+        let low = nb.emit(format!("AND({port}, {low_mask}:{from_ty})"));
+        let low_u = nb.emit(format!("CAST.u{bits}({low})"));
+        let neg = nb.emit(format!("LT.s({port}, 0:{from_ty})"));
+        let with_sign = nb.emit(format!("OR({low_u}, {sign}:u{bits})"));
+        nb.emit(format!("SELECT({neg}, {with_sign}, {low_u})"))
+    } else {
+        let low_u = nb.emit(format!("AND({port}, {low_mask}:{from_ty})"));
+        let low = nb.emit(format!("CAST.i{bits}({low_u})"));
+        let sign_bit = nb.emit(format!("AND({port}, {sign}:{from_ty})"));
+        let neg = nb.emit(format!("NE({sign_bit}, 0:{from_ty})"));
+        let min = emit_scalar_const(-(sign as i128), bits, &format!("i{bits}"));
+        let with_sign = nb.emit(format!("OR({low}, {min})"));
+        nb.emit(format!("SELECT({neg}, {with_sign}, {low})"))
+    }
+}
+
 fn coerce_to_unsigned(nb: &mut NodeBuilder, val: &VgVal) -> (String, u32) {
     match val {
         VgVal::Scalar { port, ty, bits } => {
             if *bits == 1 {
                 (nb.emit(format!("CAST.u8({port})")), 8)
             } else if ty.starts_with('i') {
-                (nb.emit(format!("CAST.u{bits}({port})")), *bits)
+                (reinterpret(nb, port, ty, *bits), *bits)
             } else {
                 (port.clone(), *bits)
             }
@@ -1043,10 +1138,7 @@ fn coerce_to_type(nb: &mut NodeBuilder, val: &VgVal, target_ty: &str, target_bit
                 return nb.emit(format!("CAST.{target_ty}({port})"));
             }
             if *bits == target_bits {
-                // Signed <-> unsigned bitcast via CAST (wait: vg-types requires CAST.in_range for i32 <-> u32? Let's check!).
-                // In docs/14, CAST i32 <-> u32 adds CAST.in_range! Instead of signed types internally,
-                // keep all intermediate arithmetic in uN and CAST to iN only if needed!
-                return nb.emit(format!("CAST.{target_ty}({port})"));
+                return reinterpret(nb, port, ty, *bits);
             }
             if target_bits > *bits {
                 nb.emit(format!("CAST.{target_ty}({port})"))
@@ -1212,7 +1304,14 @@ fn lower_region_impl(
                         .filter(|(n, _)| {
                             post_uses.contains(n) && !merge_phis.iter().any(|(pn, _)| pn == n)
                         })
-                        .map(|(n, bits)| (n, format!("u{bits}"), bits))
+                        .map(|(n, bits)| {
+                            let ty = if bits == 1 {
+                                "Bool".to_string()
+                            } else {
+                                format!("u{bits}")
+                            };
+                            (n, ty, bits)
+                        })
                         .collect();
 
                     let mem_keys: Vec<MemSlot> = mem_ports.keys().cloned().collect();
@@ -1773,6 +1872,15 @@ fn emit_ub_guard_cond(
                     let ok2 = nb.emit(format!("GE.u({end}, {off_port})"));
                     nb.emit(format!("BAND({ok1}, {ok2})"))
                 };
+                return Ok(Some((cond, 4)));
+            }
+            // Compare the element index, not the byte offset: index * size wraps.
+            if let Some((n, idx_ty, idx)) =
+                unproven_global_load(ctx.module, ctx.func, ctx.intervals, ptr)
+            {
+                let iv = resolve_value(ctx, nb, idx, idx_ty, env, &BTreeMap::new())?;
+                let (iu, ibits) = coerce_to_unsigned(nb, &iv);
+                let cond = nb.emit(format!("LT.u({iu}, {n}:u{ibits})"));
                 return Ok(Some((cond, 4)));
             }
             Ok(None)
