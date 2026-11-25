@@ -52,6 +52,7 @@ def draw(rng, kind, small):
 
 def main(src, name, cases, seed):
     cases, rng = int(cases), random.Random(int(seed))
+    sys.dont_write_bytecode = True  # no __pycache__ in the repository
     sys.path.insert(0, HERE)
     from compare import load, param_kinds  # installed modules by dotted name, others by file
 
