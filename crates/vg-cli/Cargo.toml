@@ -12,6 +12,10 @@ repository.workspace = true
 name = "vg"
 path = "src/main.rs"
 
+[features]
+# Research track R-13: `vg lift --lang python`.
+r-13 = ["vg-omnilift/r-13"]
+
 [dependencies]
 vg-core = { path = "../vg-core" }
 vg-store = { path = "../vg-store" }

@@ -624,7 +624,11 @@ fn root_manifest(a: &Assembled, d: &NodeDef) -> String {
 /// vg_lift: lift a function through OmniLift from any ingest language (P8.7, docs/08, docs/15).
 pub fn lift(path: &Path, function: &str, language: Option<&str>, root: &Path) -> J {
     use vg_omnilift::ingest::Language;
-    let names = Language::ALL.map(Language::as_str).join(", ");
+    let names = Language::ALL
+        .iter()
+        .map(|l| l.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
     let lang = match language {
         Some(name) => Language::from_name(name)
             .ok_or_else(|| format!("unsupported language {name}; expected one of {names}")),
