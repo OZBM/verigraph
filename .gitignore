@@ -8,3 +8,4 @@
 /site/data
 /.impeccable/hook.cache.json
 .DS_Store
+/.claude/

@@ -1,50 +1,118 @@
-# VeriGraph build kit
+# VeriGraph (VG-IR)
 
-Everything an AI coding agent needs to build VeriGraph (VG-IR) from an empty repository: the corrected specification, the roadmap and its gates, the rules every agent follows, the research tracks, and ready-to-paste prompts.
+[![ci](https://github.com/OZBM/verigraph/actions/workflows/ci.yml/badge.svg)](https://github.com/OZBM/verigraph/actions/workflows/ci.yml)
+[![license: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-VeriGraph is an AI-native programming system. Programs are typed, content-addressed dataflow graphs with machine-checked contracts; SMT solvers check them while the AI writes them; verified graphs compile to native x86_64, ARM64 and WASM binaries; VG-Mesh lets agents find code by contract, and OmniLift imports legacy libraries.
+VeriGraph is an AI-native programming system. Programs are typed, content-addressed dataflow graphs
+with machine-checked contracts. SMT solvers check them while an AI writes them, verified graphs compile
+to native ARM64, x86_64 and WASM binaries, VG-Mesh lets agents find code by contract, and OmniLift
+imports legacy C and Rust functions.
 
-## Start
+```text
+NODE @add_sat [intent: "Add two bytes, saturating at 255"] {
+  SIGNATURE: (a: u8, b: u8) -> (u8);
+  EFFECTS: [];
+  CONTRACT {
+    POST: result >= a && result >= b && (a + b <= 255 ==> result == a + b);
+  }
+  BODY {
+    %0 = ADD.sat(a, b);
+    RETURN(%0);
+  }
+}
+```
 
-1. Unzip; the `verigraph/` folder is the repo root. Inside it run `git init && git add . && git commit -m "VeriGraph kit"`.
-2. Install: Rust stable; clang/LLVM 19 or newer; the `z3`, `cvc5` and `bitwuzla` command-line solvers; Python 3.11+; wasi-sdk. Later phases add Alive2 (P8) and a local model runtime such as llama.cpp, Ollama or vLLM (R-01, R-09).
-3. Open your coding agent at the repo root. Claude Code reads CLAUDE.md and Gemini tools read GEMINI.md; both import AGENTS.md. Any other agent gets AGENTS.md from the Kickoff prompt.
-4. Paste the **Kickoff** prompt from PROMPTS.md. For parallel agents, give each one the **Workstream** prompt.
-5. At every gate, read `reports/gate-gN.md`, run the **Gate review** prompt in a fresh session, then approve or send the findings back.
+`vg verify` proves the contract for every input, or returns a counterexample that it replays in the
+reference interpreter; `vg build` refuses to compile a node with an unproven obligation.
 
-Your part: about 15–30 minutes a day reading PROGRESS.md, reviewing gate reports and answering the agents' questions. Agents never mark a gate passed themselves.
+## Status
 
-## Use the toolchain
+Version 0, pre-release. The toolchain is built and tested on macOS Apple Silicon; CI runs on macOS
+ARM64 and Linux x86_64. Each gate of [ROADMAP.md](ROADMAP.md) has a script (`make gate-gN`) that
+writes its evidence to [reports/](reports/):
 
-The v0 toolchain checks, runs, verifies and builds VG-Sym programs, and serves them to AI agents over
-MCP: see docs/quickstart.md, and docs/guide/ for the complete user guide. `editors/antigravity/install.sh`
-integrates it into Antigravity IDE: an editor extension for `.vgs` files, and an agent plugin with the
-MCP server and the synthesis skill.
+| Gate | Script result | Missing |
+| --- | --- | --- |
+| G0 scaffold, G1 core IR | every criterion holds | owner approval |
+| G2 types and interpreter, G3 verification | every criterion holds | owner approval |
+| G4 codegen and runtime | fails one criterion | the OS sandbox refusal test on a Linux host |
+| G5 agent loop | not run | the hosted-model benchmark (paid API credits) |
+| G6 telemetry, G7 VG-Mesh lite, G8 OmniLift lite | every criterion holds | owner approval |
 
-## Map
+M1, the end-to-end audio limiter from a plain-language request, depends on G5. The `.vgir` format is
+not frozen until G1 is approved, so it may still change.
+
+## Quick start
+
+Requirements: Rust (the version in `rust-toolchain.toml` is installed by rustup), z3 and clang.
+Optional: Bitwuzla, cvc5, Homebrew LLVM, zig, the WASI sysroot and wasmtime for the other solvers and
+targets. [docs/guide/install.md](docs/guide/install.md) lists the pinned versions.
+
+```bash
+brew install z3
+```
+
+```bash
+cargo install --path crates/vg-cli --locked
+```
+
+```bash
+vg verify examples/quickstart.vgs
+```
+
+```bash
+vg run examples/quickstart.vgs @soft_knee '{"x": "3e38", "knee": "0.5"}'
+```
+
+```bash
+vg build examples/quickstart.vgs @soft_knee -o target/vg
+```
+
+The counterexample-and-repair story of [docs/03-vg-sym.md](docs/03-vg-sym.md):
+
+```bash
+vg verify examples/soft_knee_draft.vgs
+```
+
+`vg mcp` serves `vg_check`, `vg_verify`, `vg_run` and `vg_build` to AI agents over MCP stdio.
+[docs/quickstart.md](docs/quickstart.md) is the short tour; [docs/guide/](docs/guide/README.md) is the
+user guide (tutorial, language, verification, CLI, MCP, diagnostics, troubleshooting).
+
+## Repository map
 
 | Path | What it holds |
 | --- | --- |
-| AGENTS.md | The rules every agent follows |
-| PROMPTS.md | Kickoff, workstream, continue, gate review, research track, build an app |
-| ROADMAP.md | Milestones, dates, gates, tasks by phase, research waves |
-| PROGRESS.md | The agents' log; starts empty |
-| docs/00-vision.md … docs/10-bootstrap.md | The corrected specification, one chapter per subsystem |
-| docs/11-errata.md | The 27 errors of the source spec and their fixes |
-| docs/12-risks-and-open-questions.md | Risks, budget, and the decisions waiting on the owner |
-| docs/13-semantics.md | What a node means: values, one NaN, evaluation, memory, formulas, the guarantee, and the mathematics behind them |
-| docs/14-opcode-reference.md | Every MVP op: number, typing, meaning, obligation, SMT encoding, LLVM lowering |
-| docs/15-agent-interface.md | What agents read: error codes, obligation IDs, JSON values, MCP tool schemas, failure reports, plain-language contracts |
-| docs/16-conformance-and-gates.md | Test file formats, the laws property tests check, benchmarks, and what each gate script runs |
-| docs/guide/ | The user guide: installation, tutorial, language, verification, command line, MCP, Antigravity IDE, diagnostics, troubleshooting |
-| docs/adr/ | Decisions that changed the spec; 0002–0010 await the owner's approval |
-| docs/research/ | The research protocol, 14 research tracks with their prompts, and the October 2026 literature survey |
-| docs/source/original-spec.md | The source document, kept for history; docs/ wins where they disagree |
-| skills/verigraph-synthesis/SKILL.md | The skill AIs use to write VeriGraph programs once the toolchain exists |
-| examples/ | The audio-limiter example, its plain-language request, and the buggy first draft the verifier must reject |
-| tools/ | An executable reference grammar for VG-Sym (Lark) and a script that parses every example |
-| editors/antigravity/ | The Antigravity IDE integration: the editor extension, the agent plugin and their installer |
+| `crates/` | The Rust workspace: vg-core (IR, parser, canonicalizer, hashes), vg-store, vg-types, vg-interp, vg-smt, vg-codegen, vg-rt, vg-decode, vg-telemetry, vg-mesh, vg-omnilift, vg-cli (the `vg` binary) |
+| `runtime/` | The C runtime of vg-rt |
+| `docs/` | The specification, one chapter per subsystem; docs/13-16 hold the normative semantics, opcode reference, agent interface and conformance rules |
+| `docs/adr/` | Decisions that changed the spec |
+| `docs/research/` | The research protocol and 14 research tracks |
+| `tests/corpus/` | Programs that must verify (`good/`), be rejected with a counterexample (`bad/`), or hash identically (`alpha/`) |
+| `examples/` | Example programs, including the audio limiter and its buggy first draft |
+| `benchmarks/` | The G4 kernels and the G5 synthesis tasks |
+| `skills/verigraph-synthesis/` | The skill AI agents use to write VeriGraph programs |
+| `editors/antigravity/` | Antigravity IDE integration: `.vgs` editor extension, agent plugin, installer |
+| `site/` | A French pedagogical website built with VeriGraph |
+| `reports/` | Gate reports and benchmark results |
 
-## Labels
+## How it is built
 
-**[MVP]** ships in v0.1 · **[ALPHA]** ships in v0.2 · **[R-xx]** research track, never on the MVP path.
+VeriGraph is written by AI coding agents under a human owner who approves the gates. The agents follow
+[AGENTS.md](AGENTS.md) (Claude Code reads it through CLAUDE.md, Gemini tools through GEMINI.md), take
+tasks from [ROADMAP.md](ROADMAP.md), and log every change with its evidence in
+[PROGRESS.md](PROGRESS.md). [PROMPTS.md](PROMPTS.md) holds the kickoff, workstream, gate review and
+research prompts. [docs/11-errata.md](docs/11-errata.md) lists the 27 errors of the original spec
+(kept in docs/source/ for history) that must never come back.
+
+Before a change lands:
+
+```bash
+cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked
+```
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT),
+at your option. Unless you explicitly state otherwise, any contribution intentionally submitted for
+inclusion in this work, as defined in the Apache-2.0 license, shall be dual licensed as above, without
+any additional terms or conditions.

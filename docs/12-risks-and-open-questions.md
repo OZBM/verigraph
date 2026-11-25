@@ -25,10 +25,10 @@ The gravest risk is a verifier that accepts wrong programs; the largest cost is 
 
 ## Open questions for the owner
 
-- [ ] License: Apache-2.0, MIT, or both?
+- [x] License: Apache-2.0, MIT, or both? MIT OR Apache-2.0, dual (owner, 2026-11-25).
 - [ ] Start date and agent count: ROADMAP.md assumes 26 October 2026 and up to six build agents in parallel.
 - [ ] Which hosted model drives the G5 benchmark?
-- [x] Public or private repository during the MVP? Private until M1, then public (owner, 2026-10-29). Going public needs the license question settled first.
+- [x] Public or private repository during the MVP? Private until M1, then public (owner, 2026-10-29); made public before M1 once the license was settled (owner, 2026-11-25).
 - [ ] Is "VeriGraph" free to use as a project name?
 - [ ] Approve ADRs 0002 to 0009, written on 2026-10-29 and already applied to the spec draft, before G1 freezes the format.
 - [ ] x86-64-v3 (AVX2, FMA) as the Linux x86_64 baseline, so FMA is one instruction?
