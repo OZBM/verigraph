@@ -280,6 +280,11 @@ fn prepare_original_llvm_for_alive(
         {
             l = l.replacen("define ", "define noundef ", 1);
         }
+        // VG-IR inputs are always defined values (and alive-tv runs with --disable-undef-input),
+        // so entry params carry `noundef` in `src` as in `tgt`; Zig and Swift omit it.
+        if l.trim_start().starts_with("define ") && l.contains(&target_marker) {
+            l = add_noundef_params(&l, &target_marker);
+        }
         // When `null_pointer` was cured into a non-null Slice<u8> domain, fold `icmp eq/ne ptr %p, null`
         // in `src` to the non-null branch so Alive2 checks the non-null Slice<u8> domain.
         if has_null_cure && l.contains("icmp eq ptr ") && l.trim_end().ends_with(", null") {
@@ -2417,6 +2422,37 @@ pub fn run_differential_fuzz(lifted: &Lifted, num_cases: u64) -> Result<u64, Dia
     Ok(num_cases)
 }
 
+/// Adds `noundef` after the type of each parameter of the `define` line that lacks it.
+fn add_noundef_params(line: &str, target_marker: &str) -> String {
+    let Some(open) = line.find(target_marker).map(|p| p + target_marker.len()) else {
+        return line.to_string();
+    };
+    let mut depth = 1;
+    let Some(close) = line[open..].char_indices().find_map(|(i, c)| {
+        depth += match c {
+            '(' => 1,
+            ')' => -1,
+            _ => 0,
+        };
+        (depth == 0).then_some(open + i)
+    }) else {
+        return line.to_string();
+    };
+    let params: Vec<String> = line[open..close]
+        .split(',')
+        .map(|p| {
+            let p = p.trim();
+            match p.split_once(' ') {
+                Some((ty, rest)) if !p.contains("noundef") && !ty.starts_with('{') => {
+                    format!("{ty} noundef {rest}")
+                }
+                _ => p.to_string(),
+            }
+        })
+        .collect();
+    format!("{}{}{}", &line[..open], params.join(", "), &line[close..])
+}
+
 fn strip_llvm_main(ir: &str) -> String {
     let mut out = String::with_capacity(ir.len());
     let mut in_main = false;
@@ -2545,8 +2581,16 @@ static inline uint64_t next_u64(void) {
             LiftedParam::Scalar {
                 bits, param_idx, ..
             } => {
+                // A GENERATE-driven fold has a scalar trip count: full-width draws would run up
+                // to 2^64 iterations, so every scalar comes from [0, 4096). Alive2 still covers
+                // all values up to its unroll bound.
+                let draw = if lifted.vgsym.contains("GENERATE(") {
+                    "next_u64() % 4096u"
+                } else {
+                    "next_u64()"
+                };
                 c.push_str(&format!(
-                    "        uint{bits}_t v_{vi} = (uint{bits}_t)next_u64();\n"
+                    "        uint{bits}_t v_{vi} = (uint{bits}_t)({draw});\n"
                 ));
                 orig_args[*param_idx] = format!("v_{vi}");
                 vg_args.push(format!("v_{vi}"));
@@ -2691,4 +2735,22 @@ static inline uint64_t next_u64(void) {
 
     c.push_str("    }\n    return 0;\n}\n");
     Ok(c)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_params_gain_noundef_once() {
+        let line = "define i64 @f(ptr nonnull readonly %0, i64 %1, i32 noundef %2) #0 {";
+        assert_eq!(
+            add_noundef_params(line, "@f("),
+            "define i64 @f(ptr noundef nonnull readonly %0, i64 noundef %1, i32 noundef %2) #0 {"
+        );
+        assert_eq!(
+            add_noundef_params("define void @f() {", "@f("),
+            "define void @f() {"
+        );
+    }
 }

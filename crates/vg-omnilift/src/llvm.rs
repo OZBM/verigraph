@@ -222,6 +222,21 @@ fn err(msg: impl Into<String>) -> Diagnostic {
 
 impl Module {
     /// Byte size of `ty` under aarch64-apple-darwin data layout.
+    /// `[1 x T]` and `{ T }` (named or not) as `T`, recursively. A one-index GEP over either
+    /// steps by the same allocation size as over `T`; Zig and Swift index bytes this way.
+    pub fn unwrap_singleton(&self, ty: &LlvmType) -> LlvmType {
+        let inner = match ty {
+            LlvmType::Array(1, elem) => Some(elem.as_ref()),
+            LlvmType::Struct { fields, .. } if fields.len() == 1 => fields.first(),
+            LlvmType::Named(name) => match self.types.get(name) {
+                Some(LlvmType::Struct { fields, .. }) if fields.len() == 1 => fields.first(),
+                _ => None,
+            },
+            _ => None,
+        };
+        inner.map_or_else(|| ty.clone(), |t| self.unwrap_singleton(t))
+    }
+
     pub fn sizeof(&self, ty: &LlvmType) -> Result<u64, Diagnostic> {
         Ok(self.size_align(ty)?.0)
     }
@@ -364,7 +379,16 @@ fn ensure_function_parsed(m: &mut Module, name: &str) -> Result<(), Diagnostic> 
         .get(name)
         .ok_or_else(|| err(format!("function @{name} not found in LLVM IR")))?
         .clone();
-    let func = parse_function_body(&raw)?;
+    let mut func = parse_function_body(&raw)?;
+    for inst in func.blocks.iter_mut().flat_map(|b| b.insts.iter_mut()) {
+        if let InstKind::Gep {
+            base_ty, indices, ..
+        } = &mut inst.kind
+            && indices.len() == 1
+        {
+            *base_ty = m.unwrap_singleton(base_ty);
+        }
+    }
     m.functions.insert(name.to_string(), func);
     Ok(())
 }
@@ -687,6 +711,8 @@ fn skip_one_attr(s: &str) -> Option<&str> {
         "default",
         "fastcc",
         "ccc",
+        "swiftcc",
+        "swifttailcc",
         "zeroext",
         "signext",
         "inreg",
@@ -1712,6 +1738,27 @@ fn parse_call(tail: bool, mut rest: &str) -> Result<InstKind, Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn singleton_aggregates_unwrap_for_one_index_geps() {
+        let mut m = Module::default();
+        m.types.insert(
+            "Byte".to_string(),
+            LlvmType::Struct {
+                packed: false,
+                fields: vec![LlvmType::Int(8)],
+            },
+        );
+        let byte_arr = LlvmType::Array(1, Box::new(LlvmType::Named("Byte".to_string())));
+        assert_eq!(m.unwrap_singleton(&byte_arr), LlvmType::Int(8));
+        let pair = LlvmType::Array(2, Box::new(LlvmType::Int(8)));
+        assert_eq!(m.unwrap_singleton(&pair), pair);
+        let two = LlvmType::Struct {
+            packed: false,
+            fields: vec![LlvmType::Int(8); 2],
+        };
+        assert_eq!(m.unwrap_singleton(&two), two);
+    }
 
     #[test]
     fn parses_arithmetic_flags_phi_icmp_select_and_loops() {
