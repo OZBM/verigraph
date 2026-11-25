@@ -27,4 +27,6 @@ zig       0.17.1
 # OmniLift ingest front ends (docs/08), 2026-11-25: Xcode's swiftc; glslc from Homebrew shaderc.
 swiftc    6.4.2
 glslc     2026.4
+# OmniLift's Python front end (ADR 0012) needs 3.11 or newer; python.org build, 2026-11-25.
+python3   3.13.2
 wasmtime  51.0.0

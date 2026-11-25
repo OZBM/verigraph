@@ -17,10 +17,6 @@ vg-codegen = { path = "../vg-codegen" }
 # The vg_lift report JSON (docs/15).
 serde_json = "1"
 
-[features]
-# Research track R-13 (docs/research/R-13-dynamic-language-lifting.md): Python ingest.
-r-13 = []
-
 [dev-dependencies]
 vg-mesh = { path = "../vg-mesh" }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }

@@ -1,10 +1,9 @@
-#![cfg(feature = "r-13")]
 //! R-13 experiment (docs/research/R-13-report.md): lift each function of
 //! research/r-13/corpus.tsv through OmniLift's Python path (Alive2 plus 1e6 fuzz cases inside
 //! `lift_source`), run each lift in vg-interp on seeded inputs, and let
 //! research/r-13/compare.py check every result against CPython.
 //!
-//! cargo test --release -p vg-omnilift --features r-13 --test r13 -- --ignored --nocapture
+//! cargo test --release -p vg-omnilift --test r13 -- --ignored --nocapture
 //! Writes research/r-13/results/{lift.json,summary.json}; the per-case file stays in target/.
 
 use std::collections::BTreeMap;

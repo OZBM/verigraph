@@ -6,7 +6,7 @@
 VeriGraph is an AI-native programming system. Programs are typed, content-addressed dataflow graphs
 with machine-checked contracts. SMT solvers check them while an AI writes them, verified graphs compile
 to native ARM64, x86_64 and WASM binaries, VG-Mesh lets agents find code by contract, and OmniLift
-imports legacy C, C++, Rust, Zig, Swift and GLSL functions.
+imports legacy C, C++, Rust, Zig, Swift, GLSL and Python functions.
 
 ```text
 NODE @add_sat [intent: "Add two bytes, saturating at 255"] {

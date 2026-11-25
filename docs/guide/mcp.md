@@ -17,7 +17,7 @@ when both are given.
 | `vg_mesh_publish` | none | as `vg mesh publish`: `accepted`, `rejected` |
 | `vg_run` | `node` (a label such as `@soft_knee`), `inputs` (an object keyed by parameter name) | as `vg run` |
 | `vg_build` | `root` (a label), `targets` (an array of target triples), `out_dir` (default `target/vg`) | as `vg build` |
-| `vg_lift` | `path` (source file), `function`, `language` (`c`, `cpp`, `rust`, `zig`, `swift` or `glsl`) | as `vg lift`: `node_hash`, `vgsym`, `report`, `provenance` |
+| `vg_lift` | `path` (source file), `function`, `language` (`c`, `cpp`, `rust`, `zig`, `swift`, `glsl` or `python`) | as `vg lift`: `node_hash`, `vgsym`, `report`, `provenance` |
 
 `vg_build` never builds a node that is not fully proven: the `--unverified` escape is only on the
 command line, for a person to choose. Give `out_dir` as an absolute path, since a relative one is read

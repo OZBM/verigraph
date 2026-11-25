@@ -200,4 +200,4 @@ NODE @parse_percent [intent: "Accept a percentage from 0 to 100, or error code 1
 - `vg_mesh_query` and `vg_mesh_publish`: query verified nodes in the project's Mesh registry by contract (`input_types`, `output_types`, `max_effects`, `pre`, `post`, `max_cost`, `intent`, `spec`, `limit`), and publish verified modules through the six-check ingestion gate. Pin resolved `@MESH_QUERY` bindings in `vg.lock` (`vg mesh resolve`).
 - `vg_run`: runs a node in `vg-interp` on docs/15 JSON `inputs` keyed by parameter name and checks `pre` and `post`.
 - `vg_build`: verifies the root closure first (never builds an unproven node over MCP) and compiles native/WASM artifacts (`aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, `wasm32-wasip1`) along with `<label>.manifest.toml`.
-- `vg_lift`: lifts a C, C++, Rust, Zig, Swift or GLSL function (`path`, `function`, `language`) into VG-Sym via OmniLift with Alive2 bounded refinement checking and differential fuzzing.
+- `vg_lift`: lifts a C, C++, Rust, Zig, Swift, GLSL or int-only Python function (`path`, `function`, `language`) into VG-Sym via OmniLift with Alive2 bounded refinement checking and differential fuzzing.

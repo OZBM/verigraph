@@ -52,7 +52,7 @@ Shared data types live only in vg-core.
 - MCP server: the official Rust SDK (rmcp), stdio transport.
 - Storage: files under .vg/objects/ plus SQLite (rusqlite) indexes.
 - Tests: proptest, cargo-fuzz, insta snapshots, criterion benchmarks.
-- Python 3.11+ only for research experiments.
+- Python 3.11+ only for research experiments and OmniLift's Python front end (ADR 0012).
 Add a dependency only with a one-line reason in the commit message, and only with a
 permissive license (MIT, Apache-2.0, BSD).
 

@@ -18,7 +18,6 @@ pub enum Language {
     Swift,
     Glsl,
     /// R-13: a typed, pure, int-only Python subset, translated to C by pylift.py.
-    #[cfg(feature = "r-13")]
     Python,
 }
 
@@ -30,7 +29,6 @@ impl Language {
         Language::Zig,
         Language::Swift,
         Language::Glsl,
-        #[cfg(feature = "r-13")]
         Language::Python,
     ];
 
@@ -42,7 +40,6 @@ impl Language {
             Language::Zig => "zig",
             Language::Swift => "swift",
             Language::Glsl => "glsl",
-            #[cfg(feature = "r-13")]
             Language::Python => "python",
         }
     }
@@ -67,7 +64,6 @@ impl Language {
             "zig" => Language::Zig,
             "swift" => Language::Swift,
             "glsl" | "comp" | "vert" | "frag" => Language::Glsl,
-            #[cfg(feature = "r-13")]
             "py" => Language::Python,
             _ => return None,
         })
@@ -77,7 +73,6 @@ impl Language {
 fn compiler_for(language: Language) -> PathBuf {
     match language {
         Language::C | Language::Cpp | Language::Glsl => find_clang(),
-        #[cfg(feature = "r-13")]
         Language::Python => find_clang(),
         Language::Rust => find_rustc(),
         Language::Zig => PathBuf::from("zig"),
@@ -88,7 +83,6 @@ fn compiler_for(language: Language) -> PathBuf {
 /// Whether the tools this language's ingest runs are installed (GLSL also needs glslc,
 /// Python a python3 of 3.11 or newer).
 pub fn has_compiler(language: Language) -> bool {
-    #[cfg(feature = "r-13")]
     if language == Language::Python
         && !Command::new("python3")
             .args([
@@ -267,7 +261,6 @@ fn prepare_glsl(path: &Path, temps: &mut Vec<PathBuf>) -> Result<PathBuf, Diagno
 }
 
 /// R-13: translate the Python function to C with pylift.py (embedded), run isolated.
-#[cfg(feature = "r-13")]
 fn prepare_python(
     path: &Path,
     function: &str,
@@ -455,7 +448,6 @@ pub fn ingest_to_llvm_ir(
     let mut temps = vec![raw_ll.clone(), norm_ll.clone()];
     let translated = match language {
         Language::Glsl => Some(prepare_glsl(path, &mut temps)?),
-        #[cfg(feature = "r-13")]
         Language::Python => Some(prepare_python(path, function, &mut temps)?),
         _ => None,
     };
@@ -465,7 +457,6 @@ pub fn ingest_to_llvm_ir(
 
     let compiler_path = compiler_for(language);
     let mut compiler_args = match language {
-        #[cfg(feature = "r-13")]
         Language::Python => {
             // -O0 without optnone: every Python operation stays one C operation with its nsw
             // and UB intact; -O1 may reassociate and drop nsw, letting an overflow wrap.
@@ -643,7 +634,6 @@ pub fn ingest_to_llvm_ir(
         Language::Zig => "-passes=mem2reg,loop-simplify,loop-rotate,lcssa,indvars",
         // -O0 code keeps empty join blocks between an if and a loop latch; simplifycfg with
         // speculation, hoisting and sinking off only merges such blocks, so no nsw is lost.
-        #[cfg(feature = "r-13")]
         Language::Python => {
             "-passes=mem2reg,simplifycfg<keep-loops;no-hoist-common-insts;no-sink-common-insts;\
              no-speculate-blocks>,loop-simplify,loop-rotate,lcssa,indvars"
@@ -700,7 +690,6 @@ pub fn ingest_to_llvm_ir(
         }
         if let Some(cpp) = &translated {
             let stable = match language {
-                #[cfg(feature = "r-13")]
                 Language::Python => "<pylift.c>",
                 _ => "<glsl.cpp>",
             };

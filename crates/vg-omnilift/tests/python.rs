@@ -1,4 +1,3 @@
-#![cfg(feature = "r-13")]
 //! R-13 Python ingest (docs/08, docs/research/R-13-report.md): lifts return CPython's value or
 //! Err where CPython raises or leaves int64, and code outside the subset is rejected.
 //! The lift tests skip when a tool is missing, unless VG_REQUIRE_ALIVE2=1.

@@ -25,6 +25,7 @@ found() {
     # zig cc links x86_64-unknown-linux-gnu against the glibc it carries.
     zig)      zig version 2>/dev/null ;;
     swiftc)   swiftc --version 2>&1 | sed -n 's/.*Apple Swift version \([0-9][0-9.]*\).*/\1/p' | head -n 1 ;;
+    python3)  python3 --version 2>/dev/null | awk '{print $2}' ;;
     glslc)    glslc --version 2>/dev/null | sed -n 's/^shaderc v\([0-9][0-9.]*\).*/\1/p' ;;
     wasmtime) wasmtime --version 2>/dev/null | awk '{print $2}' ;;
   esac

@@ -14,7 +14,7 @@ The MVP is about six weeks of agent-only work; the full vision is a 12-month pro
 | Differentiable execution | Learnable parameters tuned at runtime inside proven bounds | Parameters are explicit inputs, verified over their whole range | R-07 |
 | Causal telemetry | Minimal failing subgraph and counterexample instead of stack traces | Counterexample plus failing slice, as JSON | R-08 |
 | Native compilation | Proof erasure, then direct machine code | LLVM IR to x86_64, ARM64 and wasm32 | R-06 |
-| OmniLift | Lift legacy libraries with equivalence proofs | Simple C, C++, Rust, Zig, Swift and GLSL functions, bounded equivalence checking | R-03, R-13 |
+| OmniLift | Lift legacy libraries with equivalence proofs | Simple C, C++, Rust, Zig, Swift, GLSL and int-only Python functions, bounded equivalence checking | R-03, R-13 |
 | VG-Mesh | Find code by contract, not by package name | Local registry, query by spec, re-verifying ingestion | R-12 |
 | Self-hosting | The compiler compiles itself | After the alpha, around month 6 | R-11 |
 
