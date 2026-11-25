@@ -79,13 +79,13 @@ gantt
 Take the first unchecked task of your workstream whose dependencies are done. Tick it in the same commit that completes it. W2 and W3 start once P1.1 (data model) and P1.2 (parser) are merged, and their tasks that hash or store nodes also wait for P1.5 and P1.7. From then on, W1 announces any change to the vg-core data model in docs/interface-requests/ before making it.
 
 ### P0 · Scaffold — W0 — Oct 26 → Oct 28 — G0
-- [ ] P0.1 Cargo workspace with the 12 crates as skeletons (docs/01-architecture.md); rust-toolchain.toml; warnings denied
-- [ ] P0.2 CI on macOS ARM64 and Linux x86_64: fmt, clippy, tests
-- [ ] P0.3 toolchain.lock and scripts/check-toolchain.sh recording clang, z3, cvc5, bitwuzla and wasi-sdk versions
-- [ ] P0.4 Makefile with gate-g0 … gate-g8; unimplemented gates fail loudly
-- [ ] P0.5 Folders: tests/corpus/{good,bad,alpha}, benchmarks/{kernels,synthesis}, reports/, docs/adr/, docs/interface-requests/
-- [ ] P0.6 docs/adr/0001-format-encodings.md stub, completed in P1
-- [ ] P0.7 reports/gate-g0.md
+- [x] P0.1 Cargo workspace with the 12 crates as skeletons (docs/01-architecture.md); rust-toolchain.toml; warnings denied
+- [x] P0.2 CI on macOS ARM64 and Linux x86_64: fmt, clippy, tests
+- [x] P0.3 toolchain.lock and scripts/check-toolchain.sh recording clang, z3, cvc5, bitwuzla and wasi-sdk versions
+- [x] P0.4 Makefile with gate-g0 … gate-g8; unimplemented gates fail loudly
+- [x] P0.5 Folders: tests/corpus/{good,bad,alpha}, benchmarks/{kernels,synthesis}, reports/, docs/adr/, docs/interface-requests/
+- [x] P0.6 docs/adr/0001-format-encodings.md stub, completed in P1
+- [x] P0.7 reports/gate-g0.md
 
 ### P1 · Core IR — W1 — Oct 28 → Nov 6 — G1
 - [x] P1.1 Data model in vg-core: Module, Node, Op, Operand, Type, Contract, EffectMask, Learnable
@@ -103,14 +103,14 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 ### P2 · Types and interpreter — W2 — Nov 2 → Nov 13 — G2
 - [x] P2.1 Type checker for every MVP type and op (docs/04, docs/14), with the diagnostic codes of docs/15
 - [x] P2.2 Effect checker: masks, transitivity at CALL_HASH, handle reachability
-- [ ] P2.3 Resource accounting: static COST terms per op
+- [x] P2.3 Resource accounting: static COST terms per op
 - [x] P2.4 vg-interp: every MVP op and mode (docs/14), IEEE floats bit-exact with one NaN (docs/13), NaN-propagating FCLAMP, effect traces
 - [x] P2.5 Conformance suite: one case per opcode and mode; NaN, ±inf, −0.0 and subnormals; expected values from an independent oracle (docs/16)
 - [x] P2.6 Negative suite: type errors and capability escalation
 
 ### P3 · Verification — W3 — Nov 4 → Nov 20 — G3
-- [ ] P3.1 SMT encoding of every MVP op (docs/14): bitvectors, floats, arrays, uninterpreted functions; formula integers at the widths of docs/05; `fold:` and `spec:` instances (ADR 0008)
-- [ ] P3.2 Obligations from the combinator proof rules (docs/05), including the fresh-element rule, the non-vacuity check and well-definedness (ADR 0010), named as in docs/15
+- [x] P3.1 SMT encoding of every MVP op (docs/14): bitvectors, floats, arrays, uninterpreted functions; formula integers at the widths of docs/05; `fold:` and `spec:` instances (ADR 0008)
+- [x] P3.2 Obligations from the combinator proof rules (docs/05), including the fresh-element rule, the non-vacuity check and well-definedness (ADR 0010), named as in docs/15
 - [x] P3.3 Solver drivers for z3, cvc5 and bitwuzla: one long-lived process each over pipes, reset between obligations, timeouts, push and pop, routing
 - [ ] P3.4 Model decoding into VG values, small-model search, model-guided and concrete replay in vg-interp (ADR 0006); the concrete pre-screen of docs/05
 - [x] P3.5 Query cache keyed by query hash; proof records
@@ -119,39 +119,39 @@ Take the first unchecked task of your workstream whose dependencies are done. Ti
 - [x] P3.8 The soft-knee story: examples/soft_knee_draft.vgs is rejected with a reproducing counterexample; examples/audio_limiter.vgs verifies
 
 ### P4 · Codegen and runtime — W4 — Nov 9 → Nov 27 — G4
-- [ ] P4.1 Proof erasure, residual guard count, guard map, checked entry points (ADR 0009), `--no-proof-facts` builds
-- [ ] P4.2 Lowering of combinators to loops; memory placement; in-place updates for unique values
-- [ ] P4.3 Textual LLVM IR with proof facts: nsw, nuw, inbounds, noalias, llvm.assume
-- [ ] P4.4 clang driver for x86_64-unknown-linux-gnu, aarch64-apple-darwin and wasm32-wasip1
-- [ ] P4.5 vg-rt in C: entry point, handles, arenas, effect shims, telemetry, Linux sandbox
-- [ ] P4.6 Sandbox manifests: macOS entitlements, Linux Landlock and seccomp, WASI preopens
-- [ ] P4.7 Differential tests against vg-interp on 1,000 or more generated programs
+- [x] P4.1 Proof erasure, residual guard count, guard map, checked entry points (ADR 0009), `--no-proof-facts` builds
+- [x] P4.2 Lowering of combinators to loops; memory placement; in-place updates for unique values
+- [x] P4.3 Textual LLVM IR with proof facts: nsw, nuw, inbounds, noalias, llvm.assume
+- [x] P4.4 clang driver for x86_64-unknown-linux-gnu, aarch64-apple-darwin and wasm32-wasip1
+- [x] P4.5 vg-rt in C: entry point, handles, arenas, effect shims, telemetry, Linux sandbox
+- [x] P4.6 Sandbox manifests: macOS entitlements, Linux Landlock and seccomp, WASI preopens
+- [x] P4.7 Differential tests against vg-interp on 1,000 or more generated programs
 - [x] P4.8 Five kernels benchmarked against equivalent `clang -O2` C
-- [ ] P4.9 `vg build`, `vg run`
+- [x] P4.9 `vg build`, `vg run`
 
 ### P5 · Agent loop — W5 — Nov 11 → Nov 27 — G5
-- [ ] P5.1 `vg mcp`: MCP server (rmcp, stdio) with the eight tools and schemas of docs/15
-- [ ] P5.2 Structured JSON diagnostics for every check, with the codes, spans and plain-language contracts of docs/15
-- [ ] P5.3 Tier 1 grammar export: GBNF, Lark and llguidance formats
-- [ ] P5.4 Tier 2 incremental checker API, consumed later by R-01
-- [ ] P5.5 skills/verigraph-synthesis/SKILL.md kept in sync; its examples checked in CI
-- [ ] P5.6 benchmarks/synthesis: 30 tasks with request, reference contract and tests; grown to 50 for R-01 and R-09
+- [x] P5.1 `vg mcp`: MCP server (rmcp, stdio) with the eight tools and schemas of docs/15
+- [x] P5.2 Structured JSON diagnostics for every check, with the codes, spans and plain-language contracts of docs/15
+- [x] P5.3 Tier 1 grammar export: GBNF, Lark and llguidance formats
+- [x] P5.4 Tier 2 incremental checker API, consumed later by R-01
+- [x] P5.5 skills/verigraph-synthesis/SKILL.md kept in sync; its examples checked in CI
+- [x] P5.6 benchmarks/synthesis: 30 tasks with request, reference contract and tests; grown to 50 for R-01 and R-09
 - [x] P5.7 Hosted-loop harness: drive a hosted model through the tools; record rounds, tokens and outcomes
 
 ### P6 · Telemetry — W2 — Nov 18 → Dec 2 — G6
-- [ ] P6.1 Backward slice from a failed obligation, pruned by delta debugging
-- [ ] P6.2 Constraint diff from unsat cores
-- [ ] P6.3 FailureReport JSON schema (docs/15) and `vg explain`
-- [ ] P6.4 Runtime guard reports through the guard map
-- [ ] P6.5 60 seeded bugs, shared with R-08
+- [x] P6.1 Backward slice from a failed obligation, pruned by delta debugging
+- [x] P6.2 Constraint diff from unsat cores
+- [x] P6.3 FailureReport JSON schema (docs/15) and `vg explain`
+- [x] P6.4 Runtime guard reports through the guard map
+- [x] P6.5 60 seeded bugs, shared with R-08
 
 ### P7 · VG-Mesh lite — W6 — Nov 16 → Dec 2 — G7
-- [ ] P7.1 Mesh object types (docs/09) on top of vg-store
-- [ ] P7.2 Indexes: spec hash, type skeleton, effect mask; an embeddings table with a pluggable model
-- [ ] P7.3 Query pipeline: exact, structural, semantic, behavioral, rank
-- [ ] P7.4 Ingestion gate (six checks), Ed25519 signatures, append-only log
-- [ ] P7.5 HTTP API; `vg mesh query`, `vg mesh publish`
-- [ ] P7.6 Benchmark on 100,000 synthetic nodes; tamper tests
+- [x] P7.1 Mesh object types (docs/09) on top of vg-store
+- [x] P7.2 Indexes: spec hash, type skeleton, effect mask; an embeddings table with a pluggable model
+- [x] P7.3 Query pipeline: exact, structural, semantic, behavioral, rank
+- [x] P7.4 Ingestion gate (six checks), Ed25519 signatures, append-only log
+- [x] P7.5 HTTP API; `vg mesh query`, `vg mesh publish`
+- [x] P7.6 Benchmark on 100,000 synthetic nodes; tamper tests
 
 ### P8 · OmniLift lite — W7 — Nov 20 → Dec 4 — G8
 - [x] P8.1 Ingest with fixed flags: clang and rustc to LLVM IR at -O1, unrolling and vectorization off
