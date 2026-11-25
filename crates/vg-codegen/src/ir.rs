@@ -427,6 +427,20 @@ pub fn emit_load_scalar(
     Ok(r)
 }
 
+/// Stores a scalar `val` of `ty` to `ptr` without NaN canonicalization (internal registers/tuples).
+pub fn emit_store_scalar_raw(
+    f: &mut FnBuilder,
+    ty: &Type,
+    val: &str,
+    ptr: &str,
+    target: Target,
+) -> Result<(), Diagnostic> {
+    let lty = llvm_type(ty, target)?;
+    let align = align_of(ty, target)?;
+    f.emit(format!("store {lty} {val}, ptr {ptr}, align {align}"));
+    Ok(())
+}
+
 /// Stores a scalar `val` of `ty` to `ptr`, canonicalizing NaN if `ty` is a float (`docs/06`).
 pub fn emit_store_scalar_canon(
     f: &mut FnBuilder,
@@ -442,30 +456,101 @@ pub fn emit_store_scalar_canon(
     Ok(())
 }
 
-/// A node writes a scalar float result to its out pointer as it is, NaN payload included: a fold
-/// step or a call reads it back as a value, so canonicalizing there would only put a compare and
-/// select on the loop's critical path. Whoever turns that result into bytes (a MAP or GENERATE
-/// element, an exported output) canonicalizes it in place with this (ADR 0002).
+/// Copies a value into `dst_ptr` without per-field float canonicalization, for internal values
+/// (`TUPLE`, `OK`, `ERR`, `FOLD_BOUNDED` accumulators, and internal callee `RETURN`s).
+pub fn emit_store_value_raw(
+    f: &mut FnBuilder,
+    m: &mut ModBuilder,
+    ty: &Type,
+    src: &IrVal,
+    dst_ptr: &str,
+) -> Result<(), Diagnostic> {
+    if crate::layout::is_scalar_abi(ty) {
+        return emit_store_scalar_raw(f, ty, &src.ssa, dst_ptr, m.target);
+    }
+    if src.ssa != dst_ptr {
+        let sz = size_of(ty, m.target)?;
+        emit_memcpy(f, m, dst_ptr, &src.ssa, sz);
+    }
+    Ok(())
+}
+
+/// Internal nodes write scalar floats and float-bearing `Tuple`/`Result` values raw: `AS_BYTES`
+/// never accepts `Tuple` or `Result` (`VG-T0114`), and `formula.rs`'s `same()` canonicalizes
+/// before bit-comparing, so canonicalizing inside a `FOLD_BOUNDED` step would only put compare
+/// and select instructions on the loop's critical path. Whoever turns such a value into observable
+/// bytes (a `SIMD_MAP` or `GENERATE` element, `UPDATE` into a collection, or the checked entry's
+/// output) canonicalizes it in place with `emit_canon_raw_output` (ADR 0002, `docs/06`).
 pub fn is_raw_output(ty: &Type) -> bool {
     matches!(ty, Type::Float(_) | Type::BFloat16)
+        || (matches!(ty, Type::Tuple(_) | Type::Result(..)) && contains_float(ty))
 }
 
 /// Canonicalizes, in place, a result a node wrote raw to `ptr` (see `is_raw_output`).
 pub fn emit_canon_raw_output(
     f: &mut FnBuilder,
+    m: &mut ModBuilder,
     ty: &Type,
     ptr: &str,
-    target: Target,
 ) -> Result<(), Diagnostic> {
-    if is_raw_output(ty) {
-        let v = emit_load_scalar(f, ty, ptr, target)?;
-        emit_store_scalar_canon(f, ty, &v, ptr, target)?;
+    match ty {
+        Type::Float(_) | Type::BFloat16 => {
+            let v = emit_load_scalar(f, ty, ptr, m.target)?;
+            emit_store_scalar_canon(f, ty, &v, ptr, m.target)?;
+        }
+        Type::Tuple(ms) if contains_float(ty) => {
+            let lty = llvm_type(ty, m.target)?;
+            for (idx, member) in ms.iter().enumerate() {
+                if is_raw_output(member) {
+                    let mp = f.reg();
+                    f.emit(format!(
+                        "{mp} = getelementptr inbounds {lty}, ptr {ptr}, i32 0, i32 {idx}"
+                    ));
+                    emit_canon_raw_output(f, m, member, &mp)?;
+                }
+            }
+        }
+        Type::Result(ok_t, err_t) if contains_float(ty) => {
+            let lty = llvm_type(ty, m.target)?;
+            let tag_p = f.reg();
+            f.emit(format!(
+                "{tag_p} = getelementptr inbounds {lty}, ptr {ptr}, i32 0, i32 0"
+            ));
+            let tag = f.reg();
+            f.emit(format!("{tag} = load i8, ptr {tag_p}, align 1"));
+            let is_ok = f.reg();
+            f.emit(format!("{is_ok} = icmp ne i8 {tag}, 0"));
+            let pay_p = f.reg();
+            f.emit(format!(
+                "{pay_p} = getelementptr inbounds {lty}, ptr {ptr}, i32 0, i32 1"
+            ));
+            let ok_bb = f.lbl("raw_canon.ok");
+            let err_bb = f.lbl("raw_canon.err");
+            let done_bb = f.lbl("raw_canon.done");
+            f.cond_br(&is_ok, &ok_bb, &err_bb);
+
+            f.start_bb(&ok_bb);
+            if is_raw_output(ok_t) {
+                emit_canon_raw_output(f, m, ok_t, &pay_p)?;
+            }
+            f.br(&done_bb);
+
+            f.start_bb(&err_bb);
+            if is_raw_output(err_t) {
+                emit_canon_raw_output(f, m, err_t, &pay_p)?;
+            }
+            f.br(&done_bb);
+
+            f.start_bb(&done_bb);
+        }
+        _ => {}
     }
     Ok(())
 }
 
-/// Copies a value into `dst_ptr`, canonicalizing floats if scalar or recursively if aggregate
-/// containing floats (`docs/06`, ADR 0002).
+/// Copies a value into `dst_ptr`, canonicalizing floats if scalar or recursively if `Tuple`/`Result`
+/// containing floats (`docs/06`, ADR 0002). Collection elements (`Array`, `Tensor`, `Slice`) are
+/// already canonicalized when stored into the collection.
 pub fn emit_store_value_canon(
     f: &mut FnBuilder,
     m: &mut ModBuilder,
@@ -476,23 +561,14 @@ pub fn emit_store_value_canon(
     if crate::layout::is_scalar_abi(ty) {
         return emit_store_scalar_canon(f, ty, &src.ssa, dst_ptr, m.target);
     }
-    if !contains_float(ty) {
-        let sz = size_of(ty, m.target)?;
-        emit_memcpy(f, m, dst_ptr, &src.ssa, sz);
+    if !is_raw_output(ty) {
+        if src.ssa != dst_ptr {
+            let sz = size_of(ty, m.target)?;
+            emit_memcpy(f, m, dst_ptr, &src.ssa, sz);
+        }
         return Ok(());
     }
     match ty {
-        Type::Array(elem, n) => emit_canon_array_copy(f, m, elem, u64::from(*n), &src.ssa, dst_ptr),
-        Type::Tensor(elem, dims) => {
-            let count = crate::layout::tensor_elem_count(dims)?;
-            emit_canon_array_copy(f, m, elem, count, &src.ssa, dst_ptr)
-        }
-        Type::Slice(_) => {
-            // Slice elements live in input/arena and were canonicalized on store/validated on entry.
-            let sz = size_of(ty, m.target)?;
-            emit_memcpy(f, m, dst_ptr, &src.ssa, sz);
-            Ok(())
-        }
         Type::Tuple(ms) => {
             let lty = llvm_type(ty, m.target)?;
             for (idx, member) in ms.iter().enumerate() {
@@ -523,50 +599,12 @@ pub fn emit_store_value_canon(
             }
             Ok(())
         }
-        Type::Result(ok_t, err_t) => {
-            let lty = llvm_type(ty, m.target)?;
-            let sz = size_of(ty, m.target)?;
-            emit_memcpy(f, m, dst_ptr, &src.ssa, sz);
-            let tag_p = f.reg();
-            f.emit(format!(
-                "{tag_p} = getelementptr inbounds {lty}, ptr {dst_ptr}, i32 0, i32 0"
-            ));
-            let tag = f.reg();
-            f.emit(format!("{tag} = load i8, ptr {tag_p}, align 1"));
-            let is_ok = f.reg();
-            f.emit(format!("{is_ok} = icmp ne i8 {tag}, 0"));
-            let pay_p = f.reg();
-            f.emit(format!(
-                "{pay_p} = getelementptr inbounds {lty}, ptr {dst_ptr}, i32 0, i32 1"
-            ));
-            let ok_bb = f.lbl("res_canon.ok");
-            let err_bb = f.lbl("res_canon.err");
-            let done_bb = f.lbl("res_canon.done");
-            f.cond_br(&is_ok, &ok_bb, &err_bb);
-
-            f.start_bb(&ok_bb);
-            if contains_float(ok_t) {
-                if crate::layout::is_scalar_abi(ok_t) {
-                    let v = emit_load_scalar(f, ok_t, &pay_p, m.target)?;
-                    emit_store_scalar_canon(f, ok_t, &v, &pay_p, m.target)?;
-                } else {
-                    emit_canon_inplace(f, m, ok_t, &pay_p)?;
-                }
+        Type::Result(..) => {
+            if src.ssa != dst_ptr {
+                let sz = size_of(ty, m.target)?;
+                emit_memcpy(f, m, dst_ptr, &src.ssa, sz);
             }
-            f.br(&done_bb);
-
-            f.start_bb(&err_bb);
-            if contains_float(err_t) {
-                if crate::layout::is_scalar_abi(err_t) {
-                    let v = emit_load_scalar(f, err_t, &pay_p, m.target)?;
-                    emit_store_scalar_canon(f, err_t, &v, &pay_p, m.target)?;
-                } else {
-                    emit_canon_inplace(f, m, err_t, &pay_p)?;
-                }
-            }
-            f.br(&done_bb);
-            f.start_bb(&done_bb);
-            Ok(())
+            emit_canon_raw_output(f, m, ty, dst_ptr)
         }
         _ => Err(Diagnostic::error(
             "VG-T0101",
@@ -574,77 +612,6 @@ pub fn emit_store_value_canon(
             format!("cannot store value of type {ty}"),
         )),
     }
-}
-
-fn emit_canon_inplace(
-    f: &mut FnBuilder,
-    m: &mut ModBuilder,
-    ty: &Type,
-    ptr: &str,
-) -> Result<(), Diagnostic> {
-    emit_store_value_canon(
-        f,
-        m,
-        ty,
-        &IrVal {
-            ty: ty.clone(),
-            ssa: ptr.to_string(),
-        },
-        ptr,
-    )
-}
-
-fn emit_canon_array_copy(
-    f: &mut FnBuilder,
-    m: &mut ModBuilder,
-    elem: &Type,
-    count: u64,
-    src_ptr: &str,
-    dst_ptr: &str,
-) -> Result<(), Diagnostic> {
-    if count == 0 {
-        return Ok(());
-    }
-    let elem_lty = llvm_type(elem, m.target)?;
-    let idx_ptr = f.alloca("i64", 8);
-    f.emit(format!("store i64 0, ptr {idx_ptr}, align 8"));
-    let cond_bb = f.lbl("arr_copy.cond");
-    let body_bb = f.lbl("arr_copy.body");
-    let done_bb = f.lbl("arr_copy.done");
-    f.br(&cond_bb);
-
-    f.start_bb(&cond_bb);
-    let idx = f.reg();
-    f.emit(format!("{idx} = load i64, ptr {idx_ptr}, align 8"));
-    let cmp = f.reg();
-    f.emit(format!("{cmp} = icmp ult i64 {idx}, {count}"));
-    f.cond_br(&cmp, &body_bb, &done_bb);
-
-    f.start_bb(&body_bb);
-    let sp = emit_gep_bytes(f, m.target, true, &elem_lty, src_ptr, &idx);
-    let dp = emit_gep_bytes(f, m.target, true, &elem_lty, dst_ptr, &idx);
-    if crate::layout::is_scalar_abi(elem) {
-        let v = emit_load_scalar(f, elem, &sp, m.target)?;
-        emit_store_scalar_canon(f, elem, &v, &dp, m.target)?;
-    } else {
-        emit_store_value_canon(
-            f,
-            m,
-            elem,
-            &IrVal {
-                ty: elem.clone(),
-                ssa: sp,
-            },
-            &dp,
-        )?;
-    }
-    let next = f.reg();
-    f.emit(format!("{next} = add nuw i64 {idx}, 1"));
-    f.emit(format!("store i64 {next}, ptr {idx_ptr}, align 8"));
-    f.br(&cond_bb);
-
-    f.start_bb(&done_bb);
-    Ok(())
 }
 
 pub fn contains_float(ty: &Type) -> bool {

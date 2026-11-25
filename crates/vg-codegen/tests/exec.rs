@@ -1095,6 +1095,106 @@ fn a_nan_becomes_canonical_bytes_on_every_path() {
 }
 
 #[test]
+fn fused_generate_fold_inplace_tuple_and_strict_select_match_semantics() {
+    let src = r#"
+module m;
+NODE @iota {
+  SIGNATURE: (k: u64) -> (u64);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY { RETURN(k); }
+}
+NODE @keep {
+  SIGNATURE: (h: Array<u32, 4>, blk: Array<u8, 8>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY { RETURN(h); }
+}
+NODE @mix {
+  SIGNATURE: (h: Array<u32, 4>, blk: Array<u8, 8>) -> (Array<u32, 4>);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY {
+    %0 = INDEX(h, 0:u64);
+    %1 = INDEX(blk, 7:u64);
+    %2 = CAST.u32(%1);
+    %3 = ADD.wrap(%0, %2);
+    %4 = UPDATE(h, 0:u64, %3);
+    %5 = UPDATE(%4, 3:u64, 99:u32);
+    RETURN(%5);
+  }
+}
+NODE @absorb {
+  SIGNATURE: (st: Tuple<Array<u32, 4>, Array<u8, 8>, u64>, k: u64) -> (Tuple<Array<u32, 4>, Array<u8, 8>, u64>);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY {
+    %0 = PROJ(st, 0:u32);
+    %1 = PROJ(st, 1:u32);
+    %2 = PROJ(st, 2:u32);
+    %3 = AND(%2, 7:u64);
+    %4 = CAST.u8(%3);
+    %5 = UPDATE(%1, %3, %4);
+    %6 = EQ(%3, 7:u64);
+    %7 = ASSERT_GUARD.branch(%6, @mix, %0, %5, else=@keep);
+    %8 = ADD.wrap(%2, 1:u64);
+    %9 = TUPLE(%7, %5, %8);
+    RETURN(%9);
+  }
+}
+NODE @run_absorb {
+  SIGNATURE: (init_word: u32) -> (u32, u64);
+  EFFECTS: [];
+  CONTRACT {
+    INVARIANT @inv(k, acc): k <= 16;
+  }
+  BODY {
+    %0 = IDENTITY([0, 0, 0, 0]:Array<u32, 4>);
+    %1 = UPDATE(%0, 0:u64, init_word);
+    %2 = IDENTITY([0, 0, 0, 0, 0, 0, 0, 0]:Array<u8, 8>);
+    %3 = TUPLE(%1, %2, 0:u64);
+    %4 = GENERATE(@iota, 16:u64);
+    %5 = FOLD_BOUNDED(@absorb, %4, init=%3, invariant=@inv);
+    %6 = PROJ(%5, 0:u32);
+    %7 = INDEX(%6, 0:u64);
+    %8 = INDEX(%6, 3:u64);
+    %9 = ADD.wrap(%7, %8);
+    %10 = PROJ(%5, 2:u32);
+    RETURN(%9, %10);
+  }
+}
+NODE @strict_select_unverified {
+  SIGNATURE: (c: Bool, x: u32) -> (u32, u32, u32);
+  EFFECTS: [];
+  CONTRACT {}
+  BODY {
+    %0 = ADD.wrap(x, 1:u32);
+    %1 = ADD.wrap(%0, 2:u32);
+    %2 = ADD.checked(x, 10:u32);
+    %3 = SELECT(c, %0, 0:u32);
+    %4 = SELECT(c, %1, 0:u32);
+    %5 = SELECT(c, %2, 0:u32);
+    RETURN(%3, %4, %5);
+  }
+}
+"#;
+    let m = Module::new(src);
+    for (facts, checks) in [(false, true), (true, false)] {
+        let e = exe(&m, "run_absorb", facts, checks);
+        // 16 steps: at k=7 and k=15, blk[7] == 7, so h[0] += 7 twice (+14), h[3] = 99, count = 16.
+        let o = run(&e, &100u32.to_le_bytes());
+        assert_eq!(o.code, 0, "{}", o.stderr);
+        let mut want = (114u32 + 99u32).to_le_bytes().to_vec();
+        want.extend(16u64.to_le_bytes());
+        assert_eq!(o.stdout, want, "facts={facts} checks={checks}");
+    }
+    // Unverified `SELECT` must remain strict when an operand can trap (`ADD.checked` at x = MAX, c = false).
+    let e_unv = exe(&m, "strict_select_unverified", false, true);
+    let o_trap = run(&e_unv, &cat(&[vec![0u8], u32::MAX.to_le_bytes().to_vec()]));
+    assert_eq!(o_trap.code, 4, "unverified strict SELECT must still trap");
+}
+
+#[test]
 fn generate_builds_arrays_and_slices() {
     // a35: Array<u64, 8> from a literal count; the kernel is a saturating product.
     let m = Module::new(&corpus(

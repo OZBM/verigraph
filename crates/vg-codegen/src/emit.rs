@@ -7,15 +7,16 @@ use vg_core::ir::{Builtin, Hash, Node, Op, Operand, Term};
 use vg_core::types::{Handle, Type};
 
 use crate::analysis::{
-    NodeAnalysis, OP_ASSERT_GUARD, OP_CALL_HASH, OP_FOLD_BOUNDED, OP_GENERATE, OP_SIMD_MAP,
-    analyze_graph, is_const_bool,
+    InplaceFoldPlan, LazySelectGroup, NodeAnalysis, OP_ASSERT_GUARD, OP_CALL_HASH, OP_FOLD_BOUNDED,
+    OP_GENERATE, OP_SIMD_MAP, TupleFieldAction, analyze_graph, is_const_bool,
 };
 use crate::formula::{FormulaCx, emit_arena_bytes_fn, eval_bool_term};
 use crate::ir::{
     FnBuilder, IrVal, ModBuilder, emit_branch_trap_if_false, emit_canon_float,
     emit_canon_raw_output, emit_const_val, emit_gep_bytes, emit_load_scalar, emit_memcpy,
-    emit_memcpy_dyn, emit_slice_parts, emit_store_scalar_canon, emit_store_slice,
-    emit_store_value_canon, f32_const_expr, f64_const_expr, is_raw_output, needs_input_validation,
+    emit_memcpy_dyn, emit_slice_parts, emit_store_scalar_canon, emit_store_scalar_raw,
+    emit_store_slice, emit_store_value_canon, emit_store_value_raw, f32_const_expr, f64_const_expr,
+    needs_input_validation,
 };
 use crate::layout::{
     CallGraph, align_of, collect_graph, docs13_fixed_byte_size, is_erased, is_scalar_abi,
@@ -34,14 +35,34 @@ pub fn emit_module(
     opts: &Options,
 ) -> Result<EmittedModule, Diagnostic> {
     let graph = collect_graph(root, callee)?;
-    let (analyses, guards) = analyze_graph(&graph, opts.target)?;
+    let (analyses, guards) = analyze_graph(&graph, opts)?;
     let mut m = ModBuilder::new(opts.target, opts.proof_facts, opts.runtime_checks);
     m.require_vg_rt_core();
+
+    // Track which kernels are actually invoked in-place by at least one `FOLD_BOUNDED`.
+    let mut inplace_callees = std::collections::BTreeSet::new();
+    for (_, caller) in &graph.order {
+        for op in &caller.ops {
+            if op.opcode == OP_FOLD_BOUNDED
+                && let Some(Operand::Callee(ci)) = op.operands.first().copied()
+            {
+                let kh = caller.calls[ci as usize];
+                if analyses.get(&kh).is_some_and(|a| a.inplace_fold.is_some()) {
+                    inplace_callees.insert(kh);
+                }
+            }
+        }
+    }
 
     for (h, node) in &graph.order {
         let prefix = &graph.prefixes[h];
         let an = &analyses[h];
-        emit_internal_node(&mut m, &graph, h, prefix, node, an)?;
+        emit_internal_node(&mut m, &graph, &analyses, h, prefix, node, an)?;
+        if inplace_callees.contains(h)
+            && let Some(plan) = &an.inplace_fold
+        {
+            emit_inplace_fold_node(&mut m, &graph, &analyses, h, prefix, node, an, plan)?;
+        }
     }
 
     emit_arena_bytes_fn(&mut m, &graph, &analyses)?;
@@ -93,6 +114,7 @@ fn pre_term_is_simple_assume(t: &Term) -> bool {
 fn emit_internal_node(
     m: &mut ModBuilder,
     graph: &CallGraph,
+    analyses: &BTreeMap<Hash, NodeAnalysis>,
     node_hash: &Hash,
     prefix: &str,
     node: &Node,
@@ -175,12 +197,48 @@ fn emit_internal_node(
         }
     }
 
-    let mut op_vals: Vec<Vec<IrVal>> = Vec::with_capacity(node.ops.len());
+    let mut op_vals: Vec<Vec<IrVal>> = node
+        .ops
+        .iter()
+        .map(|op| {
+            op.results
+                .iter()
+                .map(|t| IrVal {
+                    ty: t.clone(),
+                    ssa: String::new(),
+                })
+                .collect()
+        })
+        .collect();
     for (i, op) in node.ops.iter().enumerate() {
+        if an.deferred_ops.contains(&i) {
+            continue;
+        }
+        if let Some(grp) = an.lazy_select_groups.get(&i) {
+            emit_lazy_select_group(
+                &mut f,
+                m,
+                graph,
+                analyses,
+                prefix,
+                node_hash,
+                node,
+                an,
+                grp,
+                ctx_ptr,
+                scratch_base.as_deref(),
+                &out_ptrs,
+                None,
+                &inputs,
+                &mut op_vals,
+            )?;
+            continue;
+        }
         let res = emit_op(
             &mut f,
             m,
             graph,
+            analyses,
             prefix,
             node_hash,
             node,
@@ -189,14 +247,16 @@ fn emit_internal_node(
             op,
             ctx_ptr,
             scratch_base.as_deref(),
+            &out_ptrs,
+            None,
             &inputs,
             &op_vals,
         )?;
-        op_vals.push(res);
+        op_vals[i] = res;
     }
 
-    // Store outputs, canonicalizing NaN (`docs/06`) except in a scalar float, which the caller
-    // canonicalizes where it becomes bytes (`is_raw_output`).
+    // Store outputs raw: Whoever turns a result into bytes (`SIMD_MAP`, `GENERATE`, `vg_<prefix>`)
+    // canonicalizes floats in place (`emit_canon_raw_output`), and `direct_return_outs` skips self-copy.
     let non_eff_outputs: Vec<(&Type, &Operand)> = node
         .results
         .iter()
@@ -205,16 +265,7 @@ fn emit_internal_node(
         .collect();
     for ((ty, opnd), out_ptr) in non_eff_outputs.into_iter().zip(&out_ptrs) {
         let val = operand_val(&mut f, m, node, *opnd, &inputs, &op_vals)?;
-        if is_raw_output(ty) {
-            let lty = llvm_type(ty, m.target)?;
-            let align = align_of(ty, m.target)?;
-            f.emit(format!(
-                "store {lty} {}, ptr {out_ptr}, align {align}",
-                val.ssa
-            ));
-        } else {
-            emit_store_value_canon(&mut f, m, ty, &val, out_ptr)?;
-        }
+        emit_store_value_raw(&mut f, m, ty, &val, out_ptr)?;
     }
 
     f.ret_void();
@@ -233,6 +284,291 @@ fn emit_internal_node(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn emit_inplace_fold_node(
+    m: &mut ModBuilder,
+    graph: &CallGraph,
+    analyses: &BTreeMap<Hash, NodeAnalysis>,
+    node_hash: &Hash,
+    prefix: &str,
+    node: &Node,
+    an: &NodeAnalysis,
+    plan: &InplaceFoldPlan,
+) -> Result<(), Diagnostic> {
+    let mut sig_params = vec!["ptr %ctx".to_string()];
+    let mut inputs: Vec<IrVal> = vec![
+        IrVal {
+            ty: Type::Eff,
+            ssa: String::new(),
+        };
+        node.input_count()
+    ];
+
+    for (i, ty) in node
+        .params
+        .iter()
+        .chain(node.learnable.iter().map(|l| &l.ty))
+        .enumerate()
+    {
+        if is_erased(ty) {
+            continue;
+        }
+        let name = format!("%in{i}");
+        if i == 0 {
+            // Parameter 0 is the mutable accumulator buffer (`acc_buf`).
+            sig_params.push(format!("ptr {name}"));
+        } else if is_scalar_abi(ty) {
+            sig_params.push(format!("{} {name}", llvm_type(ty, m.target)?));
+        } else {
+            sig_params.push(format!("ptr readonly {name}"));
+        }
+        inputs[i] = IrVal {
+            ty: ty.clone(),
+            ssa: name,
+        };
+    }
+
+    let mut f = FnBuilder::new();
+    let ctx_ptr = "%ctx";
+    let acc_ptr = "%in0";
+
+    if m.proof_facts && !m.runtime_checks && !node.contract.pre.is_empty() {
+        let mut fcx = FormulaCx {
+            node,
+            graph,
+            ctx_ptr,
+            inputs: &inputs,
+            bound: Vec::new(),
+        };
+        for t in &node.contract.pre {
+            if pre_term_is_simple_assume(t) {
+                let cond = eval_bool_term(&mut f, m, &mut fcx, t)?;
+                m.require_decl("declare void @llvm.assume(i1)");
+                f.emit(format!("call void @llvm.assume(i1 {cond})"));
+            }
+        }
+    }
+
+    let mut op_vals: Vec<Vec<IrVal>> = node
+        .ops
+        .iter()
+        .map(|op| {
+            op.results
+                .iter()
+                .map(|t| IrVal {
+                    ty: t.clone(),
+                    ssa: String::new(),
+                })
+                .collect()
+        })
+        .collect();
+    let empty_outs: &[String] = &[];
+    for (i, op) in node.ops[..plan.tup_idx].iter().enumerate() {
+        if an.deferred_ops.contains(&i) {
+            continue;
+        }
+        if let Some(grp) = an.lazy_select_groups.get(&i) {
+            emit_lazy_select_group(
+                &mut f,
+                m,
+                graph,
+                analyses,
+                prefix,
+                node_hash,
+                node,
+                an,
+                grp,
+                ctx_ptr,
+                None,
+                empty_outs,
+                Some((plan, acc_ptr)),
+                &inputs,
+                &mut op_vals,
+            )?;
+            continue;
+        }
+        let res = emit_op(
+            &mut f,
+            m,
+            graph,
+            analyses,
+            prefix,
+            node_hash,
+            node,
+            an,
+            i,
+            op,
+            ctx_ptr,
+            None,
+            empty_outs,
+            Some((plan, acc_ptr)),
+            &inputs,
+            &op_vals,
+        )?;
+        op_vals[i] = res;
+    }
+
+    // Final `TUPLE` writes modified scalar/fresh fields straight into `%in0`; `AlreadyInPlace` is free.
+    let tup_op = &node.ops[plan.tup_idx];
+    let tup_ty = &tup_op.results[0];
+    let tup_lty = llvm_type(tup_ty, m.target)?;
+    for (j, (&o, action)) in tup_op.operands.iter().zip(&plan.field_actions).enumerate() {
+        match action {
+            TupleFieldAction::AlreadyInPlace => {}
+            TupleFieldAction::StoreScalar => {
+                let v = operand_val(&mut f, m, node, o, &inputs, &op_vals)?;
+                let fp = f.reg();
+                f.emit(format!(
+                    "{fp} = getelementptr inbounds {tup_lty}, ptr {acc_ptr}, i32 0, i32 {j}"
+                ));
+                emit_store_scalar_raw(&mut f, &v.ty, &v.ssa, &fp, m.target)?;
+            }
+            TupleFieldAction::CopyFromFresh => {
+                let v = operand_val(&mut f, m, node, o, &inputs, &op_vals)?;
+                let fp = f.reg();
+                f.emit(format!(
+                    "{fp} = getelementptr inbounds {tup_lty}, ptr {acc_ptr}, i32 0, i32 {j}"
+                ));
+                emit_store_value_raw(&mut f, m, &v.ty, &v, &fp)?;
+            }
+        }
+    }
+
+    f.ret_void();
+    let header = format!(
+        "define internal void @vgi_{prefix}_inplace({})",
+        sig_params.join(", ")
+    );
+    m.fns.push(f.finish(&header));
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_lazy_select_group(
+    f: &mut FnBuilder,
+    m: &mut ModBuilder,
+    graph: &CallGraph,
+    analyses: &BTreeMap<Hash, NodeAnalysis>,
+    prefix: &str,
+    node_hash: &Hash,
+    node: &Node,
+    an: &NodeAnalysis,
+    grp: &LazySelectGroup,
+    ctx_ptr: &str,
+    scratch_base: Option<&str>,
+    out_ptrs: &[String],
+    inplace_ctx: Option<(&InplaceFoldPlan, &str)>,
+    inputs: &[IrVal],
+    op_vals: &mut [Vec<IrVal>],
+) -> Result<(), Diagnostic> {
+    for &c_idx in &grp.common_ops {
+        let res = emit_op(
+            f,
+            m,
+            graph,
+            analyses,
+            prefix,
+            node_hash,
+            node,
+            an,
+            c_idx,
+            &node.ops[c_idx],
+            ctx_ptr,
+            scratch_base,
+            out_ptrs,
+            inplace_ctx,
+            inputs,
+            op_vals,
+        )?;
+        op_vals[c_idx] = res;
+    }
+
+    let first_sel = grp.select_ops[0];
+    let cond_val = operand_val(f, m, node, node.ops[first_sel].operands[0], inputs, op_vals)?;
+    let cond = f.reg();
+    f.emit(format!("{cond} = icmp ne i8 {}, 0", cond_val.ssa));
+
+    let mut slots = Vec::with_capacity(grp.select_ops.len());
+    for &s_idx in &grp.select_ops {
+        let rty = &node.ops[s_idx].results[0];
+        let rlty = llvm_type(rty, m.target)?;
+        let ralign = align_of(rty, m.target)?;
+        slots.push(f.alloca(&rlty, ralign));
+    }
+
+    let excl_bb = f.lbl("sel.excl");
+    let fast_bb = f.lbl("sel.fast");
+    let done_bb = f.lbl("sel.done");
+    if grp.branch_on_true {
+        f.cond_br(&cond, &excl_bb, &fast_bb);
+    } else {
+        f.cond_br(&cond, &fast_bb, &excl_bb);
+    }
+
+    f.start_bb(&excl_bb);
+    for &k in &grp.excl_ops {
+        let res = emit_op(
+            f,
+            m,
+            graph,
+            analyses,
+            prefix,
+            node_hash,
+            node,
+            an,
+            k,
+            &node.ops[k],
+            ctx_ptr,
+            scratch_base,
+            out_ptrs,
+            inplace_ctx,
+            inputs,
+            op_vals,
+        )?;
+        op_vals[k] = res;
+    }
+    let excl_arm = if grp.branch_on_true { 1 } else { 2 };
+    let fast_arm = if grp.branch_on_true { 2 } else { 1 };
+    for (offset, &s_idx) in grp.select_ops.iter().enumerate() {
+        let v = operand_val(
+            f,
+            m,
+            node,
+            node.ops[s_idx].operands[excl_arm],
+            inputs,
+            op_vals,
+        )?;
+        emit_store_scalar_raw(f, &v.ty, &v.ssa, &slots[offset], m.target)?;
+    }
+    f.br(&done_bb);
+
+    f.start_bb(&fast_bb);
+    for (offset, &s_idx) in grp.select_ops.iter().enumerate() {
+        let v = operand_val(
+            f,
+            m,
+            node,
+            node.ops[s_idx].operands[fast_arm],
+            inputs,
+            op_vals,
+        )?;
+        emit_store_scalar_raw(f, &v.ty, &v.ssa, &slots[offset], m.target)?;
+    }
+    f.br(&done_bb);
+
+    f.start_bb(&done_bb);
+    for (offset, &s_idx) in grp.select_ops.iter().enumerate() {
+        let rty = node.ops[s_idx].results[0].clone();
+        let loaded = emit_load_scalar(f, &rty, &slots[offset], m.target)?;
+        op_vals[s_idx] = vec![IrVal {
+            ty: rty,
+            ssa: loaded,
+        }];
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn alloc_result_buf(
     f: &mut FnBuilder,
     m: &mut ModBuilder,
@@ -241,7 +577,13 @@ fn alloc_result_buf(
     slot: usize,
     ty: &Type,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
 ) -> Result<String, Diagnostic> {
+    if let Some(&out_idx) = an.direct_return_outs.get(&(op_idx, slot))
+        && let Some(out_p) = out_ptrs.get(out_idx)
+    {
+        return Ok(out_p.clone());
+    }
     if let Some(off) = an.scratch_offsets.get(&(op_idx, slot))
         && let Some(base) = scratch_base
     {
@@ -262,6 +604,7 @@ fn emit_op(
     f: &mut FnBuilder,
     m: &mut ModBuilder,
     graph: &CallGraph,
+    analyses: &BTreeMap<Hash, NodeAnalysis>,
     prefix: &str,
     _node_hash: &Hash,
     node: &Node,
@@ -270,6 +613,8 @@ fn emit_op(
     op: &Op,
     ctx_ptr: &str,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
+    inplace_ctx: Option<(&InplaceFoldPlan, &str)>,
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
@@ -281,14 +626,14 @@ fn emit_op(
             // TUPLE
             let ty = op.results[0].clone();
             let lty = llvm_type(&ty, m.target)?;
-            let buf = alloc_result_buf(f, m, an, op_idx, 0, &ty, scratch_base)?;
+            let buf = alloc_result_buf(f, m, an, op_idx, 0, &ty, scratch_base, out_ptrs)?;
             for (idx, &o) in op.operands.iter().enumerate() {
                 let v = operand_val(f, m, node, o, inputs, op_vals)?;
                 let fp = f.reg();
                 f.emit(format!(
                     "{fp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 {idx}"
                 ));
-                emit_store_value_canon(f, m, &v.ty.clone(), &v, &fp)?;
+                emit_store_value_raw(f, m, &v.ty, &v, &fp)?;
             }
             one(ty, buf)
         }
@@ -359,7 +704,8 @@ fn emit_op(
             let v = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
             let slice_ty = op.results[0].clone();
             if is_scalar_abi(&v.ty) {
-                let spill_buf = alloc_result_buf(f, m, an, op_idx, 0, &v.ty, scratch_base)?;
+                let spill_buf =
+                    alloc_result_buf(f, m, an, op_idx, 0, &v.ty, scratch_base, out_ptrs)?;
                 let hdr_buf = f.alloca("{ ptr, i64 }", 8);
                 emit_store_scalar_canon(f, &v.ty, &v.ssa, &spill_buf, m.target)?;
                 let sz = docs13_fixed_byte_size(&v.ty)?.ok_or_else(|| {
@@ -397,7 +743,7 @@ fn emit_op(
             let v = operand_val(f, m, node, op.operands[0], inputs, op_vals)?;
             let res_ty = op.results[0].clone();
             let lty = llvm_type(&res_ty, m.target)?;
-            let buf = alloc_result_buf(f, m, an, op_idx, 0, &res_ty, scratch_base)?;
+            let buf = alloc_result_buf(f, m, an, op_idx, 0, &res_ty, scratch_base, out_ptrs)?;
             let tp = f.reg();
             f.emit(format!(
                 "{tp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 0"
@@ -408,7 +754,7 @@ fn emit_op(
             f.emit(format!(
                 "{pp} = getelementptr inbounds {lty}, ptr {buf}, i32 0, i32 1"
             ));
-            emit_store_value_canon(f, m, &v.ty.clone(), &v, &pp)?;
+            emit_store_value_raw(f, m, &v.ty, &v, &pp)?;
             one(res_ty, buf)
         }
         0x000A => {
@@ -538,17 +884,41 @@ fn emit_op(
             let elem_ty = out_ty.elem().expect("collection elem").clone();
             let elem_lty = llvm_type(&elem_ty, m.target)?;
             let elem_sz = size_of(&elem_ty, m.target)?;
-            let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base)?;
 
             match &out_ty {
                 Type::Array(_, n) => {
-                    emit_memcpy(f, m, &out_buf, &src_dp, u64::from(*n) * elem_sz);
-                    let ep =
-                        emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &out_buf, &idx.ssa);
-                    emit_store_value_canon(f, m, &elem_ty, &val, &ep)?;
-                    one(out_ty, out_buf)
+                    let inplace_proj = inplace_ctx
+                        .is_some_and(|(plan, _)| plan.inplace_proj_updates.contains_key(&op_idx));
+                    if inplace_proj || an.inplace_array_update[op_idx] {
+                        let ep = emit_gep_bytes(
+                            f,
+                            m.target,
+                            m.proof_facts,
+                            &elem_lty,
+                            &src_dp,
+                            &idx.ssa,
+                        );
+                        emit_store_value_canon(f, m, &elem_ty, &val, &ep)?;
+                        one(out_ty, src_dp)
+                    } else {
+                        let out_buf =
+                            alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base, out_ptrs)?;
+                        emit_memcpy(f, m, &out_buf, &src_dp, u64::from(*n) * elem_sz);
+                        let ep = emit_gep_bytes(
+                            f,
+                            m.target,
+                            m.proof_facts,
+                            &elem_lty,
+                            &out_buf,
+                            &idx.ssa,
+                        );
+                        emit_store_value_canon(f, m, &elem_ty, &val, &ep)?;
+                        one(out_ty, out_buf)
+                    }
                 }
                 Type::Slice(_) => {
+                    let out_buf =
+                        alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base, out_ptrs)?;
                     let dst_dp = if an.inplace_update[op_idx] {
                         src_dp
                     } else {
@@ -597,7 +967,7 @@ fn emit_op(
             let new_dp = emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &dp, &lo.ssa);
             let new_len = f.reg();
             f.emit(format!("{new_len} = sub i64 {}, {}", hi.ssa, lo.ssa));
-            let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base)?;
+            let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base, out_ptrs)?;
             emit_store_slice(f, &out_buf, &new_dp, &new_len);
             one(out_ty, out_buf)
         }
@@ -611,7 +981,7 @@ fn emit_op(
             let elem_ty = out_ty.elem().expect("concat elem").clone();
             let elem_lty = llvm_type(&elem_ty, m.target)?;
             let elem_sz = size_of(&elem_ty, m.target)?;
-            let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base)?;
+            let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base, out_ptrs)?;
 
             match &out_ty {
                 Type::Array(_, n) => {
@@ -687,6 +1057,7 @@ fn emit_op(
             op,
             ctx_ptr,
             scratch_base,
+            out_ptrs,
             inputs,
             op_vals,
         ),
@@ -694,12 +1065,14 @@ fn emit_op(
             f,
             m,
             graph,
+            analyses,
             node,
             an,
             op_idx,
             op,
             ctx_ptr,
             scratch_base,
+            out_ptrs,
             inputs,
             op_vals,
         ),
@@ -713,6 +1086,7 @@ fn emit_op(
             op,
             ctx_ptr,
             scratch_base,
+            out_ptrs,
             inputs,
             op_vals,
         ),
@@ -727,6 +1101,8 @@ fn emit_op(
             op,
             ctx_ptr,
             scratch_base,
+            out_ptrs,
+            inplace_ctx,
             inputs,
             op_vals,
         ),
@@ -740,6 +1116,7 @@ fn emit_op(
             op,
             ctx_ptr,
             scratch_base,
+            out_ptrs,
             inputs,
             op_vals,
         ),
@@ -749,7 +1126,7 @@ fn emit_op(
             let h = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
             let max_b = operand_val(f, m, node, op.operands[2], inputs, op_vals)?;
             let res_ty = op.results[1].clone();
-            let buf = alloc_result_buf(f, m, an, op_idx, 1, &res_ty, scratch_base)?;
+            let buf = alloc_result_buf(f, m, an, op_idx, 1, &res_ty, scratch_base, out_ptrs)?;
             f.emit(format!(
                 "call void @vg_rt_file_read(ptr {ctx_ptr}, i32 {}, i64 {}, ptr {buf})",
                 h.ssa, max_b.ssa
@@ -771,7 +1148,7 @@ fn emit_op(
             let h = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
             let data = operand_val(f, m, node, op.operands[2], inputs, op_vals)?;
             let res_ty = op.results[1].clone();
-            let buf = alloc_result_buf(f, m, an, op_idx, 1, &res_ty, scratch_base)?;
+            let buf = alloc_result_buf(f, m, an, op_idx, 1, &res_ty, scratch_base, out_ptrs)?;
             f.emit(format!(
                 "call void @vg_rt_file_write(ptr {ctx_ptr}, i32 {}, ptr {}, ptr {buf})",
                 h.ssa, data.ssa
@@ -1744,6 +2121,7 @@ fn emit_simd_map(
     op: &Op,
     ctx_ptr: &str,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
@@ -1767,7 +2145,7 @@ fn emit_simd_map(
     let in_elem_lty = llvm_type(&in_elem_ty, m.target)?;
     let out_elem_lty = llvm_type(&out_elem_ty, m.target)?;
     let out_elem_sz = size_of(&out_elem_ty, m.target)?;
-    let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base)?;
+    let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base, out_ptrs)?;
 
     let dst_dp = if matches!(out_ty, Type::Slice(_)) {
         let bytes = f.reg();
@@ -1821,7 +2199,7 @@ fn emit_simd_map(
     }
     cargs.push(format!("ptr {dp}"));
     f.emit(format!("call void @vgi_{kprefix}({})", cargs.join(", ")));
-    emit_canon_raw_output(f, &out_elem_ty, &dp, m.target)?;
+    emit_canon_raw_output(f, m, &out_elem_ty, &dp)?;
 
     let next = f.reg();
     f.emit(format!("{next} = add nuw i64 {idx}, 1"));
@@ -1840,12 +2218,14 @@ fn emit_fold_bounded(
     f: &mut FnBuilder,
     m: &mut ModBuilder,
     graph: &CallGraph,
+    analyses: &BTreeMap<Hash, NodeAnalysis>,
     node: &Node,
     an: &NodeAnalysis,
     op_idx: usize,
     op: &Op,
     ctx_ptr: &str,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
@@ -1856,9 +2236,39 @@ fn emit_fold_bounded(
     let kh = node.calls[ci as usize];
     let knode = &graph.by_hash[&kh];
     let kprefix = &graph.prefixes[&kh];
+    let use_inplace_callee = analyses
+        .get(&kh)
+        .is_some_and(|ka| ka.inplace_fold.is_some());
 
-    let xs = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
-    let (src_dp, len) = collection_ptr_len(f, &xs)?;
+    let fused_gen = an.fused_generate.get(&op_idx).copied();
+    let (src_dp, len, elem_ty, fused_gen_info) = if let Some(gen_i) = fused_gen {
+        let gen_op = &node.ops[gen_i];
+        let Operand::Callee(gci) = gen_op.operands[0] else {
+            unreachable!()
+        };
+        let gkh = node.calls[gci as usize];
+        let count = operand_val(f, m, node, gen_op.operands[1], inputs, op_vals)?;
+        let mut gen_bcasts = Vec::new();
+        for &bo in &gen_op.operands[2..] {
+            gen_bcasts.push(operand_val(f, m, node, bo, inputs, op_vals)?);
+        }
+        let ety = gen_op.results[0].elem().expect("gen elem").clone();
+        let elty = llvm_type(&ety, m.target)?;
+        let ealign = align_of(&ety, m.target)?;
+        let elem_buf = f.alloca(&elty, ealign);
+        (
+            String::new(),
+            count.ssa,
+            ety,
+            Some((gkh, gen_bcasts, elem_buf)),
+        )
+    } else {
+        let xs = operand_val(f, m, node, op.operands[1], inputs, op_vals)?;
+        let (sdp, l) = collection_ptr_len(f, &xs)?;
+        let ety = xs.ty.elem().expect("fold elem").clone();
+        (sdp, l, ety, None)
+    };
+
     let init_op = op.operands[op.operands.len() - 2];
     let init_v = operand_val(f, m, node, init_op, inputs, op_vals)?;
     let mut broadcasts = Vec::new();
@@ -1869,12 +2279,15 @@ fn emit_fold_bounded(
     let acc_ty = op.results[0].clone();
     let acc_lty = llvm_type(&acc_ty, m.target)?;
     let acc_align = align_of(&acc_ty, m.target)?;
-    let elem_ty = xs.ty.elem().expect("fold elem").clone();
     let elem_lty = llvm_type(&elem_ty, m.target)?;
 
-    let acc_buf = alloc_result_buf(f, m, an, op_idx, 0, &acc_ty, scratch_base)?;
-    emit_store_value_canon(f, m, &acc_ty, &init_v, &acc_buf)?;
-    let next_buf = f.alloca(&acc_lty, acc_align);
+    let acc_buf = alloc_result_buf(f, m, an, op_idx, 0, &acc_ty, scratch_base, out_ptrs)?;
+    emit_store_value_raw(f, m, &acc_ty, &init_v, &acc_buf)?;
+    let next_buf = if use_inplace_callee {
+        None
+    } else {
+        Some(f.alloca(&acc_lty, acc_align))
+    };
 
     let idx_ptr = f.alloca("i64", 8);
     f.emit(format!("store i64 0, ptr {idx_ptr}, align 8"));
@@ -1891,7 +2304,30 @@ fn emit_fold_bounded(
     f.cond_br(&cmp, &body_bb, &done_bb);
 
     f.start_bb(&body_bb);
-    let sp = emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &src_dp, &idx);
+    let sp = if let Some((gkh, ref gen_bcasts, ref elem_buf)) = fused_gen_info {
+        let gknode = &graph.by_hash[&gkh];
+        let gkprefix = &graph.prefixes[&gkh];
+        let mut gargs = vec![format!("ptr {ctx_ptr}"), format!("i64 {idx}")];
+        for bv in gen_bcasts {
+            if is_scalar_abi(&bv.ty) {
+                gargs.push(format!("{} {}", llvm_type(&bv.ty, m.target)?, bv.ssa));
+            } else {
+                gargs.push(format!("ptr {}", bv.ssa));
+            }
+        }
+        for l in &gknode.learnable {
+            let c = &gknode.consts[l.lo as usize];
+            let iv = emit_const_val(f, m, &c.ty, &c.bytes)?;
+            gargs.push(format!("{} {}", llvm_type(&c.ty, m.target)?, iv.ssa));
+        }
+        gargs.push(format!("ptr {elem_buf}"));
+        f.emit(format!("call void @vgi_{gkprefix}({})", gargs.join(", ")));
+        emit_canon_raw_output(f, m, &elem_ty, elem_buf)?;
+        elem_buf.clone()
+    } else {
+        emit_gep_bytes(f, m.target, m.proof_facts, &elem_lty, &src_dp, &idx)
+    };
+
     let mut cargs = vec![format!("ptr {ctx_ptr}")];
     if is_scalar_abi(&acc_ty) {
         let av = emit_load_scalar(f, &acc_ty, &acc_buf, m.target)?;
@@ -1917,17 +2353,23 @@ fn emit_fold_bounded(
         let iv = emit_const_val(f, m, &c.ty, &c.bytes)?;
         cargs.push(format!("{} {}", llvm_type(&c.ty, m.target)?, iv.ssa));
     }
-    cargs.push(format!("ptr {next_buf}"));
-    f.emit(format!("call void @vgi_{kprefix}({})", cargs.join(", ")));
-
-    if is_scalar_abi(&acc_ty) {
-        let nv = emit_load_scalar(f, &acc_ty, &next_buf, m.target)?;
-        f.emit(format!(
-            "store {acc_lty} {nv}, ptr {acc_buf}, align {acc_align}"
-        ));
+    if let Some(ref nb) = next_buf {
+        cargs.push(format!("ptr {nb}"));
+        f.emit(format!("call void @vgi_{kprefix}({})", cargs.join(", ")));
+        if is_scalar_abi(&acc_ty) {
+            let nv = emit_load_scalar(f, &acc_ty, nb, m.target)?;
+            f.emit(format!(
+                "store {acc_lty} {nv}, ptr {acc_buf}, align {acc_align}"
+            ));
+        } else {
+            let sz = size_of(&acc_ty, m.target)?;
+            emit_memcpy(f, m, &acc_buf, nb, sz);
+        }
     } else {
-        let sz = size_of(&acc_ty, m.target)?;
-        emit_memcpy(f, m, &acc_buf, &next_buf, sz);
+        f.emit(format!(
+            "call void @vgi_{kprefix}_inplace({})",
+            cargs.join(", ")
+        ));
     }
 
     let next = f.reg();
@@ -1955,6 +2397,7 @@ fn emit_generate(
     op: &Op,
     ctx_ptr: &str,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
@@ -1975,7 +2418,7 @@ fn emit_generate(
     let out_elem_ty = out_ty.elem().expect("gen elem").clone();
     let out_elem_lty = llvm_type(&out_elem_ty, m.target)?;
     let out_elem_sz = size_of(&out_elem_ty, m.target)?;
-    let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base)?;
+    let out_buf = alloc_result_buf(f, m, an, op_idx, 0, &out_ty, scratch_base, out_ptrs)?;
 
     let dst_dp = if matches!(out_ty, Type::Slice(_)) {
         let bytes = f.reg();
@@ -2021,7 +2464,7 @@ fn emit_generate(
     }
     cargs.push(format!("ptr {dp}"));
     f.emit(format!("call void @vgi_{kprefix}({})", cargs.join(", ")));
-    emit_canon_raw_output(f, &out_elem_ty, &dp, m.target)?;
+    emit_canon_raw_output(f, m, &out_elem_ty, &dp)?;
 
     let next = f.reg();
     f.emit(format!("{next} = add nuw i64 {idx}, 1"));
@@ -2047,6 +2490,8 @@ fn emit_assert_guard(
     op: &Op,
     ctx_ptr: &str,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
+    inplace_ctx: Option<(&InplaceFoldPlan, &str)>,
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
@@ -2070,6 +2515,91 @@ fn emit_assert_guard(
         args.push(operand_val(f, m, node, ao, inputs, op_vals)?);
     }
 
+    if let Some((plan, acc_ptr)) = inplace_ctx
+        && let Some(&(field_j, then_noop, else_noop)) = plan.inplace_guard_fields.get(&op_idx)
+    {
+        let acc_lty = llvm_type(&node.params[0], m.target)?;
+        let res_ty = op.results[0].clone();
+        let res_lty = llvm_type(&res_ty, m.target)?;
+        let res_align = align_of(&res_ty, m.target)?;
+        let res_sz = size_of(&res_ty, m.target)?;
+        let field_ptr = f.reg();
+        f.emit(format!(
+            "{field_ptr} = getelementptr inbounds {acc_lty}, ptr {acc_ptr}, i32 0, i32 {field_j}"
+        ));
+        let tmp_buf = if !then_noop || !else_noop {
+            Some(f.alloca(&res_lty, res_align))
+        } else {
+            None
+        };
+        let emit_inplace_branch = |f: &mut FnBuilder,
+                                   m: &mut ModBuilder,
+                                   bnode: &Node,
+                                   bprefix: &str,
+                                   is_noop: bool|
+         -> Result<(), Diagnostic> {
+            if is_noop {
+                return Ok(());
+            }
+            let tmp = tmp_buf.as_ref().expect("tmp_buf");
+            let mut cargs = vec![format!("ptr {ctx_ptr}")];
+            for av in &args {
+                if is_erased(&av.ty) {
+                    continue;
+                }
+                if is_scalar_abi(&av.ty) {
+                    cargs.push(format!("{} {}", llvm_type(&av.ty, m.target)?, av.ssa));
+                } else {
+                    cargs.push(format!("ptr {}", av.ssa));
+                }
+            }
+            for l in &bnode.learnable {
+                let c = &bnode.consts[l.lo as usize];
+                let iv = emit_const_val(f, m, &c.ty, &c.bytes)?;
+                cargs.push(format!("{} {}", llvm_type(&c.ty, m.target)?, iv.ssa));
+            }
+            cargs.push(format!("ptr {tmp}"));
+            f.emit(format!("call void @vgi_{bprefix}({})", cargs.join(", ")));
+            emit_memcpy(f, m, &field_ptr, tmp, res_sz);
+            Ok(())
+        };
+
+        if op.mode == 0 && is_const_bool(node, op.operands[0], true) {
+            emit_inplace_branch(f, m, tnode, tprefix, then_noop)?;
+        } else {
+            let cond_i1 = f.reg();
+            f.emit(format!("{cond_i1} = icmp ne i8 {}, 0", cond.ssa));
+            let then_bb = f.lbl("guard.then");
+            let else_bb = f.lbl("guard.else");
+            let done_bb = f.lbl("guard.done");
+            f.cond_br(&cond_i1, &then_bb, &else_bb);
+
+            f.start_bb(&then_bb);
+            emit_inplace_branch(f, m, tnode, tprefix, then_noop)?;
+            f.br(&done_bb);
+
+            f.start_bb(&else_bb);
+            if op.mode == 0
+                && let Some(ginfo) = an.guards.get(&op_idx)
+            {
+                let gid = m.intern_cstr(&ginfo.guard_id);
+                let gob = m.intern_cstr(&ginfo.obligation);
+                let gn = m.intern_cstr(prefix);
+                f.emit(format!(
+                    "call void @vg_emit_guard(ptr {ctx_ptr}, ptr {gid}, ptr {gob}, ptr {gn})"
+                ));
+            }
+            emit_inplace_branch(f, m, enode, eprefix, else_noop)?;
+            f.br(&done_bb);
+
+            f.start_bb(&done_bb);
+        }
+        return Ok(vec![IrVal {
+            ty: res_ty,
+            ssa: field_ptr,
+        }]);
+    }
+
     let mut res_bufs = Vec::new();
     for (slot, ty) in op.results.iter().enumerate() {
         if is_erased(ty) {
@@ -2083,6 +2613,7 @@ fn emit_assert_guard(
                 slot,
                 ty,
                 scratch_base,
+                out_ptrs,
             )?));
         }
     }
@@ -2180,6 +2711,7 @@ fn emit_call_hash(
     op: &Op,
     ctx_ptr: &str,
     scratch_base: Option<&str>,
+    out_ptrs: &[String],
     inputs: &[IrVal],
     op_vals: &[Vec<IrVal>],
 ) -> Result<Vec<IrVal>, Diagnostic> {
@@ -2213,7 +2745,7 @@ fn emit_call_hash(
         if is_erased(ty) {
             res_bufs.push(None);
         } else {
-            let buf = alloc_result_buf(f, m, an, op_idx, slot, ty, scratch_base)?;
+            let buf = alloc_result_buf(f, m, an, op_idx, slot, ty, scratch_base, out_ptrs)?;
             cargs.push(format!("ptr {buf}"));
             res_bufs.push(Some(buf));
         }
@@ -2650,7 +3182,7 @@ fn emit_checked_entry(
     f.emit(format!("call void @vgi_{prefix}({})", call_args.join(", ")));
     for (j, ty) in root.results.iter().enumerate() {
         if !is_erased(ty) {
-            emit_canon_raw_output(&mut f, ty, &format!("%out{j}"), m.target)?;
+            emit_canon_raw_output(&mut f, m, ty, &format!("%out{j}"))?;
         }
     }
     f.emit(format!("call void @vg_fp_leave(i64 {saved_fp})"));

@@ -8,13 +8,13 @@ reported only. Timings vary from run to run and machine to machine; the outputs 
 
 | Kernel | Target | VeriGraph (µs) | C (µs) | Ratio | 95% interval | Same bytes |
 | --- | --- | --- | --- | --- | --- | --- |
-| blend | `aarch64-apple-darwin` | 44.4 | 56.7 | 0.783 | [0.782, 0.783] | yes |
-| blend | `wasm32-wasip1` | 37.6 | 27.8 | 1.352 | [1.352, 1.353] | yes |
-| crc32 | `aarch64-apple-darwin` | 2,233.1 | 2,232.9 | 1.000 | [0.998, 1.002] | yes |
-| crc32 | `wasm32-wasip1` | 2,367.0 | 2,365.2 | 1.001 | [0.999, 1.003] | yes |
-| mandelbrot | `aarch64-apple-darwin` | 11,445.5 | 2,556.5 | 4.477 | [4.471, 4.482] | yes |
-| mandelbrot | `wasm32-wasip1` | 11,750.5 | 2,439.2 | 4.817 | [4.811, 4.823] | yes |
-| matmul | `aarch64-apple-darwin` | 13,439.8 | 9,755.4 | 1.378 | [1.375, 1.380] | yes |
-| matmul | `wasm32-wasip1` | 14,139.8 | 10,152.1 | 1.393 | [1.391, 1.395] | yes |
-| sha256 | `aarch64-apple-darwin` | 7,774.9 | 2,944.8 | 2.640 | [2.637, 2.643] | yes |
-| sha256 | `wasm32-wasip1` | 9,472.0 | 3,335.7 | 2.840 | [2.836, 2.842] | yes |
+| blend | `aarch64-apple-darwin` | 28.0 | 56.8 | 0.493 | [0.493, 0.493] | yes |
+| blend | `wasm32-wasip1` | 25.5 | 27.9 | 0.913 | [0.912, 0.913] | yes |
+| crc32 | `aarch64-apple-darwin` | 2,377.2 | 2,372.5 | 1.002 | [1.000, 1.004] | yes |
+| crc32 | `wasm32-wasip1` | 2,522.2 | 2,524.1 | 0.999 | [0.997, 1.000] | yes |
+| mandelbrot | `aarch64-apple-darwin` | 2,813.7 | 2,666.5 | 1.055 | [1.051, 1.060] | yes |
+| mandelbrot | `wasm32-wasip1` | 2,565.0 | 2,587.3 | 0.991 | [0.989, 0.993] | yes |
+| matmul | `aarch64-apple-darwin` | 9,659.1 | 9,638.9 | 1.002 | [1.002, 1.003] | yes |
+| matmul | `wasm32-wasip1` | 9,840.3 | 9,993.8 | 0.985 | [0.984, 0.986] | yes |
+| sha256 | `aarch64-apple-darwin` | 2,875.3 | 2,903.9 | 0.990 | [0.988, 0.993] | yes |
+| sha256 | `wasm32-wasip1` | 3,855.8 | 3,291.5 | 1.171 | [1.169, 1.174] | yes |
