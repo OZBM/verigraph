@@ -259,6 +259,7 @@ impl SmtObligationContext {
                         let wanted_tag_match = |tag: &str| -> bool {
                             let mapped = match (info.name, tag) {
                                 ("ADD" | "SUB" | "MUL" | "NEG", _) => "no_overflow",
+                                ("DIV", "no_overflow") => "no_overflow",
                                 ("DIV" | "MOD", _) => "nonzero",
                                 ("SHL" | "SHR", _) => "amount",
                                 ("CAST", _) => "in_range",

@@ -597,6 +597,16 @@ impl Names {
                     };
                     match (op_name.as_str(), kind.as_str()) {
                         ("DIV" | "MOD", "nonzero") => format!("{} != 0", arg(1)),
+                        ("DIV", "no_overflow") => {
+                            let min_v = node
+                                .operand_type(op.operands[0])
+                                .and_then(|t| match t {
+                                    Type::SInt(w) => Some(-(1i128 << (w - 1))),
+                                    _ => None,
+                                })
+                                .unwrap_or(i128::from(i32::MIN));
+                            format!("!({} == {min_v} && {} == -1)", arg(0), arg(1))
+                        }
                         ("INDEX" | "UPDATE", "in_bounds") => {
                             format!("{} < len({})", arg(1), arg(0))
                         }

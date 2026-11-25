@@ -3893,7 +3893,22 @@ pub fn eval_op_core(
                 unreachable!()
             };
             let (normal, domain) = encode_div_mod(info.name, op.mode, ty, a, b);
-            let res = guard_partial(qb, &domain, normal, ty, arg_syms, info.name);
+            let res = if mode == DomainMode::Strict
+                && info.name == "DIV"
+                && op.mode == 0
+                && let Type::SInt(w) = ty
+            {
+                let w = u32::from(*w);
+                let nonzero = format!("(not (= {b} {}))", bv_lit_u128(0, w));
+                let min_lit = bv_lit_i128(-(1i128 << (w - 1)), w);
+                let neg1_lit = bv_lit_i128(-1, w);
+                let no_ov = format!("(not (and (= {a} {min_lit}) (= {b} {neg1_lit})))");
+                qb.domains.push(("nonzero".to_string(), nonzero));
+                qb.domains.push(("no_overflow".to_string(), no_ov));
+                normal
+            } else {
+                guard_partial(qb, &domain, normal, ty, arg_syms, info.name)
+            };
             single(res)
         }
         "NEG" => {

@@ -1,0 +1,14 @@
+// expect: reject @f/%0/DIV.no_overflow
+module b22_div_overflow;
+
+NODE @f {
+  SIGNATURE: (x: i32, d: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d != 0;
+  }
+  BODY {
+    %0 = DIV.checked(x, d);
+    RETURN(%0);
+  }
+}

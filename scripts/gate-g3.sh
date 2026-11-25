@@ -15,7 +15,7 @@ c=met; test_ran corpus known_good_verify_and_known_bad_are_refuted || c="not met
 # no input of vg-interp can show them: CONCAT.length (slices of 2^64 elements), COST (not measured by
 # vg-interp), PRE.wd (no input meets an undefined PRE), NONVACUOUS (a vacuity, not a refutation).
 missing=""
-for k in ADD.no_overflow NEG.no_overflow DIV.nonzero SHL.amount CAST.in_range GET_OK.is_ok GET_ERR.is_err \
+for k in ADD.no_overflow NEG.no_overflow DIV.nonzero DIV.no_overflow SHL.amount CAST.in_range GET_OK.is_ok GET_ERR.is_err \
   FCLAMP.bounds FCOPYSIGN.sign INDEX.in_bounds CALL.pre MAP.pre FOLD.base FOLD.pre FOLD.step GEN.pre \
   GUARD.then.pre GUARD.else.pre "POST.0" ".wd."; do
   awk 'FNR == 1' tests/corpus/bad/*.vgs | grep -q -- "$k" || missing="$missing $k"

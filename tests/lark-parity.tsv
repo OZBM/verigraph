@@ -192,6 +192,7 @@ tests/corpus/bad/b18_gen_pre.vgs	1	100	640f40a3bb4aae18
 tests/corpus/bad/b19_guard_then_pre.vgs	1	150	baa26a0ee06b7ba6
 tests/corpus/bad/b20_guard_else_pre.vgs	1	148	70d9d77aee110028
 tests/corpus/bad/b21_post_wd.vgs	1	54	562606d0806eef7e
+tests/corpus/bad/b22_div_overflow.vgs	1	56	b4db9fb8c0d7d6c8
 tests/corpus/distinct/d01_sub_operand_swap/01.vgs	1	50	6c8c1d4fa73fbd5a
 tests/corpus/distinct/d01_sub_operand_swap/02.vgs	1	50	be8fcf4459d8b932
 tests/corpus/distinct/d02_fdiv_operand_swap/01.vgs	1	48	f2ee4af885d0f998

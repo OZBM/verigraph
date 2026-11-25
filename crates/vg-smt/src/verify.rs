@@ -350,6 +350,7 @@ fn restrict(qb: &QueryBuilder, facts: &[OpFacts], cone: &BTreeSet<usize>) -> Que
 fn kind(op: &str, tag: &str) -> String {
     let k = match (op, tag) {
         ("ADD" | "SUB" | "MUL" | "NEG", _) => "no_overflow",
+        ("DIV", "no_overflow") => "no_overflow",
         ("DIV" | "MOD", _) => "nonzero",
         ("SHL" | "SHR", _) => "amount",
         ("CAST", _) => "in_range",
