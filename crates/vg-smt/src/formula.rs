@@ -1285,6 +1285,14 @@ pub fn eval_const_int(t: &Term, node: &Node) -> Option<i128> {
 }
 
 fn eval_int_bin(op: Bin, a: FVal, b: FVal, qb: &mut QueryBuilder) -> FVal {
+    let a_orig = match &a {
+        FVal::Int { orig, .. } => orig.clone(),
+        _ => None,
+    };
+    let b_orig = match &b {
+        FVal::Int { orig, .. } => orig.clone(),
+        _ => None,
+    };
     let (ae, aw) = a.into_int().expect("int lhs");
     let (be, bw) = b.into_int().expect("int rhs");
     match op {
@@ -1313,13 +1321,54 @@ fn eval_int_bin(op: Bin, a: FVal, b: FVal, qb: &mut QueryBuilder) -> FVal {
             }
         }
         Bin::Div => {
-            let w_op = aw.max(bw);
             let uf = format!("fdiv_zero_{aw}");
             qb.declare_fun_once(
                 &uf,
                 vec![format!("(_ BitVec {aw})")],
                 format!("(_ BitVec {aw})"),
             );
+            // When both operands come unmodified from the same VG integer type, evaluate the
+            // non-zero, non-overflowing case at that native width so the solver shares the exact
+            // `bvudiv` / `bvsdiv` circuit with `DIV` ops in the body instead of bit-blasting two
+            // dividers of widths w and w+1.
+            if let (Some((ta, raw_a)), Some((tb, raw_b))) = (&a_orig, &b_orig)
+                && ta == tb
+            {
+                match ta {
+                    Type::UInt(w8) => {
+                        let w = u32::from(*w8);
+                        debug_assert_eq!(aw, w + 1);
+                        let q = zext(&format!("(bvudiv {raw_a} {raw_b})"), w, aw);
+                        return FVal::Int {
+                            expr: format!(
+                                "(ite (= {raw_b} {}) ({uf} {ae}) {q})",
+                                bv_lit_u128(0, w)
+                            ),
+                            width: aw,
+                            orig: None,
+                        };
+                    }
+                    Type::SInt(w8) => {
+                        let w = u32::from(*w8);
+                        debug_assert_eq!(aw, w + 1);
+                        let min_lit = bv_lit_i128(-(1i128 << (w - 1)), w);
+                        let neg1_lit = bv_lit_i128(-1, w);
+                        let pos_min = bv_lit_i128(1i128 << (w - 1), aw);
+                        let q = sext(&format!("(bvsdiv {raw_a} {raw_b})"), w, aw);
+                        return FVal::Int {
+                            expr: format!(
+                                "(ite (= {raw_b} {}) ({uf} {ae}) \
+                                  (ite (and (= {raw_a} {min_lit}) (= {raw_b} {neg1_lit})) {pos_min} {q}))",
+                                bv_lit_u128(0, w)
+                            ),
+                            width: aw,
+                            orig: None,
+                        };
+                    }
+                    _ => {}
+                }
+            }
+            let w_op = aw.max(bw);
             let a_ext = sext(&ae, aw, w_op);
             let b_ext = sext(&be, bw, w_op);
             let q = extract_lo(&format!("(bvsdiv {a_ext} {b_ext})"), w_op, aw);
@@ -1338,6 +1387,43 @@ fn eval_int_bin(op: Bin, a: FVal, b: FVal, qb: &mut QueryBuilder) -> FVal {
                 vec![format!("(_ BitVec {aw})")],
                 format!("(_ BitVec {w_res})"),
             );
+            if let (Some((ta, raw_a)), Some((tb, raw_b))) = (&a_orig, &b_orig)
+                && ta == tb
+            {
+                match ta {
+                    Type::UInt(w8) => {
+                        let w = u32::from(*w8);
+                        debug_assert_eq!(w_res, w + 1);
+                        let r = zext(&format!("(bvurem {raw_a} {raw_b})"), w, w_res);
+                        return FVal::Int {
+                            expr: format!(
+                                "(ite (= {raw_b} {}) ({uf} {ae}) {r})",
+                                bv_lit_u128(0, w)
+                            ),
+                            width: w_res,
+                            orig: None,
+                        };
+                    }
+                    Type::SInt(w8) => {
+                        let w = u32::from(*w8);
+                        debug_assert_eq!(w_res, w + 1);
+                        let min_lit = bv_lit_i128(-(1i128 << (w - 1)), w);
+                        let neg1_lit = bv_lit_i128(-1, w);
+                        let r = sext(&format!("(bvsrem {raw_a} {raw_b})"), w, w_res);
+                        return FVal::Int {
+                            expr: format!(
+                                "(ite (= {raw_b} {}) ({uf} {ae}) \
+                                  (ite (and (= {raw_a} {min_lit}) (= {raw_b} {neg1_lit})) {} {r}))",
+                                bv_lit_u128(0, w),
+                                bv_lit_u128(0, w_res)
+                            ),
+                            width: w_res,
+                            orig: None,
+                        };
+                    }
+                    _ => {}
+                }
+            }
             let a_ext = sext(&ae, aw, w_op);
             let b_ext = sext(&be, bw, w_op);
             let r = extract_lo(&format!("(bvsrem {a_ext} {b_ext})"), w_op, w_res);
@@ -5552,5 +5638,72 @@ NODE @test_fold {
         let q = qb.into_pruned_query();
         let mut sess = Z3Session::new(&crate::find_z3(), 2000);
         assert_eq!(sess.check_query(&q), CheckResult::Unsat);
+    }
+
+    #[test]
+    fn same_type_int_div_mod_is_bit_exact_with_wide_bvsdiv() {
+        let mut sess = Z3Session::new(&crate::find_z3(), 5000);
+        // Universal 8-bit equivalence covers all 65,536 (a, b) pairs including 0, ±1, MIN and MAX,
+        // without bit-blasting two distinct 16/17-bit hardware dividers against one another.
+        for ty in [Type::UInt(8), Type::SInt(8)] {
+            for op in [Bin::Div, Bin::Mod] {
+                let mut qb = QueryBuilder::default();
+                let sa = declare_symval("a0", &ty, &mut qb.decls, &mut qb.next_coll_id);
+                let sb = declare_symval("a1", &ty, &mut qb.decls, &mut qb.next_coll_id);
+                let fa = symval_to_fval(&sa, &ty);
+                let fb = symval_to_fval(&sb, &ty);
+                let fast = eval_int_bin(op, fa.clone(), fb.clone(), &mut qb)
+                    .into_int()
+                    .unwrap();
+                let strip = |f: FVal| match f {
+                    FVal::Int { expr, width, .. } => FVal::Int {
+                        expr,
+                        width,
+                        orig: None,
+                    },
+                    other => other,
+                };
+                let wide = eval_int_bin(op, strip(fa), strip(fb), &mut qb)
+                    .into_int()
+                    .unwrap();
+                assert_eq!(fast.1, wide.1);
+                qb.assertions
+                    .push(format!("(not (= {} {}))", fast.0, wide.0));
+                let q = qb.into_pruned_query();
+                assert_eq!(
+                    sess.check_query(&q),
+                    CheckResult::Unsat,
+                    "mismatch for {ty} {op:?}"
+                );
+            }
+        }
+
+        // Soundness check at 32 bits: `DIV.wrap(MIN, -1)` wraps to MIN while formula `x / d` is
+        // mathematical `+2^31`, so omitting `!(x == MIN && d == -1)` MUST be refuted.
+        let unguarded = r#"module t;
+NODE @bad_wrap_div {
+  SIGNATURE: (x: i32, d: i32) -> (i32);
+  EFFECTS: [];
+  CONTRACT {
+    PRE: d != 0;
+    POST: result == x / d;
+  }
+  BODY {
+    %0 = DIV.wrap(x, d);
+    RETURN(%0);
+  }
+}"#;
+        let asm = vg_core::asm_local(unguarded).unwrap();
+        let outs = crate::verify(
+            &asm[0].node,
+            "bad_wrap_div",
+            &|_| None,
+            &crate::Options::default(),
+        );
+        let post0 = outs
+            .iter()
+            .find(|o| o.id == "@bad_wrap_div/POST.0")
+            .unwrap();
+        assert_eq!(post0.verdict, crate::Verdict::Counterexample, "{post0:?}");
     }
 }

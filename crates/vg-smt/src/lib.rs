@@ -83,6 +83,12 @@ pub fn find_z3() -> PathBuf {
     find_solver("z3").unwrap_or_else(|| PathBuf::from("z3"))
 }
 
+/// Static proof-obligation count of `node` (0 for a `SPEC`), matching `verify(...).len()` without
+/// invoking a solver or pre-screen.
+pub fn obligation_count(node: &Node, callee: &dyn Fn(&Hash) -> Option<Node>) -> usize {
+    verify::obligation_count(node, callee)
+}
+
 /// Every obligation of `node` (docs/05, docs/14), each with its verdict; see verify.rs.
 pub fn verify(
     node: &Node,

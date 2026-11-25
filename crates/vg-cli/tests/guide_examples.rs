@@ -153,3 +153,137 @@ fn every_guide_example_holds() {
     assert!(n >= 8, "only {n} examples in docs/guide");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// Every ```text block holding a `NODE` in `skills/verigraph-synthesis/SKILL.md` must pass both
+/// `vg check` (with non-empty `contract_text`) and `vg verify` (P5.5, AGENTS.md section 9).
+#[test]
+fn every_synthesis_skill_example_verifies() {
+    let skill_path = repo().join("skills/verigraph-synthesis/SKILL.md");
+    let md = fs::read_to_string(&skill_path).expect("SKILL.md exists");
+    let mut text_blocks = Vec::new();
+    let mut open: Option<(usize, String)> = None;
+    for (i, line) in md.lines().enumerate() {
+        match open.as_mut() {
+            None if line.trim() == "```text" => open = Some((i + 1, String::new())),
+            None => {}
+            Some(_) if line.trim() == "```" => {
+                let (ln, blk) = open.take().unwrap();
+                if blk.contains("NODE @") {
+                    text_blocks.push((ln, blk));
+                }
+            }
+            Some((_, src)) => {
+                src.push_str(line);
+                src.push('\n');
+            }
+        }
+    }
+    assert!(open.is_none(), "unclosed ```text block in SKILL.md");
+    assert!(
+        text_blocks.len() >= 4,
+        "expected at least 4 VG-Sym blocks in SKILL.md, found {}",
+        text_blocks.len()
+    );
+
+    let tmp = std::env::temp_dir().join(format!("vg-skill-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).unwrap();
+
+    let mut failures = Vec::new();
+    for (idx, (line, raw)) in text_blocks.iter().enumerate() {
+        let src = if raw.trim_start().starts_with("module ") {
+            raw.clone()
+        } else {
+            format!("module skill_{idx};\n\n{raw}")
+        };
+        let f = tmp.join(format!("skill_{idx}.vgs"));
+        fs::write(&f, &src).unwrap();
+        let path = f.to_str().unwrap();
+
+        let chk = vg(&["check", path]);
+        if chk["ok"] != true {
+            failures.push(format!(
+                "SKILL.md:{line}: vg check failed: {}",
+                chk["diagnostics"]
+            ));
+            continue;
+        }
+        let nodes = chk["nodes"].as_array().expect("nodes array");
+        for node in nodes {
+            let ct = node["contract_text"].as_str().unwrap_or("");
+            let obs = node["obligations"].as_u64().unwrap_or(0);
+            if ct.is_empty() || obs == 0 {
+                failures.push(format!(
+                    "SKILL.md:{line}: node {} missing contract_text or obligations: {node}",
+                    node["label"]
+                ));
+            }
+        }
+        let ver = vg(&["verify", path]);
+        if ver["ok"] != true {
+            failures.push(format!("SKILL.md:{line}: {}", not_proven(&ver)));
+        } else {
+            let proven_count = ver["results"].as_array().map_or(0, Vec::len) as u64;
+            let expected_count: u64 = nodes.iter().filter_map(|n| n["obligations"].as_u64()).sum();
+            if proven_count != expected_count {
+                failures.push(format!(
+                    "SKILL.md:{line}: vg check counted {expected_count} obligations, vg verify ran {proven_count}"
+                ));
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn vg_check_renders_soft_knee_contract_text_and_caps_diagnostics() {
+    let tmp = std::env::temp_dir().join(format!("vg-check-ct-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).unwrap();
+
+    // Extract @soft_knee from examples/audio_limiter.vgs into a standalone module.
+    let limiter = fs::read_to_string(repo().join("examples/audio_limiter.vgs")).unwrap();
+    let start = limiter.find("NODE @soft_knee").unwrap();
+    let end = limiter.find("NODE @limit_frame").unwrap();
+    let soft_knee_mod = format!("module soft_knee_only;\n\n{}", &limiter[start..end]);
+    let f = tmp.join("soft_knee.vgs");
+    fs::write(&f, &soft_knee_mod).unwrap();
+
+    let r = vg(&["check", f.to_str().unwrap()]);
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["module"], "soft_knee_only");
+    let n0 = &r["nodes"][0];
+    assert_eq!(n0["label"], "@soft_knee");
+    assert_eq!(n0["signature"], "(x: f32, knee: f32) -> (f32)");
+    assert_eq!(
+        n0["contract_text"],
+        "Requires: x is finite, and knee ≥ 0.5, and knee ≤ 0.99 \
+         (the f32 value 0.9900000095367431640625). \
+         Ensures: the result ≥ −1.0, and the result ≤ 1.0, and \
+         (x ≥ 0.0) is true exactly when (the result ≥ 0.0) is true."
+    );
+
+    // 25 unused ops (VG-W0001) + 1 real type error -> ok MUST stay false even when capped at 20.
+    let mut many = String::from(
+        "module cap_test;\nNODE @w {\n  SIGNATURE: (x: u32) -> (u32);\n  EFFECTS: [];\n  CONTRACT { }\n  BODY {\n",
+    );
+    for i in 0..25 {
+        many.push_str(&format!("    %{i} = ADD.wrap(x, 1:u32);\n"));
+    }
+    many.push_str("    RETURN(x);\n  }\n}\n");
+    many.push_str(
+        "NODE @bad {\n  SIGNATURE: (x: u32) -> (u32);\n  EFFECTS: [];\n  CONTRACT { }\n  BODY {\n    %0 = FADD(x, x);\n    RETURN(%0);\n  }\n}\n",
+    );
+    let f_cap = tmp.join("cap.vgs");
+    fs::write(&f_cap, &many).unwrap();
+    let rc = vg(&["check", f_cap.to_str().unwrap()]);
+    assert_eq!(rc["ok"], false, "error past cap must still fail ok: {rc}");
+    assert_eq!(rc["diagnostics"].as_array().unwrap().len(), 20);
+    assert!(
+        rc["truncated_diagnostics"].as_u64().unwrap_or(0) >= 6,
+        "{rc}"
+    );
+
+    let _ = fs::remove_dir_all(&tmp);
+}

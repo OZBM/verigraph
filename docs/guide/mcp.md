@@ -10,10 +10,14 @@ when both are given.
 
 | Tool | Other arguments | Result |
 | --- | --- | --- |
-| `vg_check` | none | as `vg check`: `ok`, `nodes`, `diagnostics` |
-| `vg_verify` | `timeout_ms` (per obligation, default 10000) | as `vg verify`: `ok`, `nodes`, `results` |
+| `vg_check` | none | as `vg check`: `ok`, `module`, `nodes` (`signature`, `obligations`, `contract_text`), `diagnostics` |
+| `vg_verify` | `mode` (`edit`, `ci`, `release`), `timeout_ms` (default 10000), `detail` (`0`, `1`, `2`) | as `vg verify`: `ok`, `nodes`, `results` |
+| `vg_explain` | `obligation` (an obligation ID such as `@soft_knee/POST.0`) | as `vg explain`: `report`, `prose` |
+| `vg_mesh_query` | `input_types`, `output_types`, `max_effects`, `pre`, `post`, `max_cost`, `intent`, `spec`, `limit` | as `vg mesh query`: `candidates` |
+| `vg_mesh_publish` | none | as `vg mesh publish`: `accepted`, `rejected` |
 | `vg_run` | `node` (a label such as `@soft_knee`), `inputs` (an object keyed by parameter name) | as `vg run` |
 | `vg_build` | `root` (a label), `targets` (an array of target triples), `out_dir` (default `target/vg`) | as `vg build` |
+| `vg_lift` | `path` (C or Rust file), `function`, `language` (`c` or `rust`) | as `vg lift`: `node_hash`, `vgsym`, `report`, `provenance` |
 
 `vg_build` never builds a node that is not fully proven: the `--unverified` escape is only on the
 command line, for a person to choose. Give `out_dir` as an absolute path, since a relative one is read
@@ -62,5 +66,4 @@ the server; see [Antigravity IDE](antigravity.md). By hand, the entry goes in
 
 `skills/verigraph-synthesis/SKILL.md` teaches an agent the workflow (contract first, check, verify,
 repair, build), the rules of the language, and patterns that prove. Give it to the agent with the
-server; the Antigravity plugin does both. The tools of docs/15 that are not in version 0
-(`vg_mesh_query`, `vg_mesh_publish`, `vg_lift`, `vg_explain`) arrive with phases P6 to P8.
+server; the Antigravity plugin does both. Every VG-Sym example in the skill is verified in CI.

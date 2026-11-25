@@ -42,8 +42,9 @@ fn tools_list() -> Vec<Tool> {
         ),
         tool(
             "vg_verify",
-            "Prove every obligation of every node with the SMT solver; counterexamples are replayed in vg-interp.",
+            "Prove every obligation of every node with the SMT solver (or those matching `obligations` prefixes); counterexamples are replayed in vg-interp.",
             json!({
+                "obligations": { "type": "array", "items": { "type": "string" }, "description": "optional obligation ID prefixes to check, such as [\"@soft_knee/POST\"]" },
                 "mode": { "type": "string", "enum": ["edit", "ci", "release"], "description": "edit: 2 s per query; ci: 60 s; release: 60 s, and two solvers must agree. Default: 10 s" },
                 "timeout_ms": { "type": "integer", "description": "per query, overriding the mode's" },
                 "detail": { "type": "integer", "description": "0: no reports; 1 (default): reports for the first 3 failures; 2: all" },
@@ -167,13 +168,19 @@ pub fn dispatch(name: &str, args: &JsonObject) -> J {
     match name {
         "vg_check" => tools::check(&src, &env),
         "vg_verify" => {
+            let prefixes: Option<Vec<String>> =
+                args.get("obligations").and_then(J::as_array).map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                });
             let mode = args.get("mode").and_then(J::as_str);
             let t = args.get("timeout_ms").and_then(J::as_u64);
             let detail = args.get("detail").and_then(J::as_u64).unwrap_or(1).min(2) as u8;
             match tools::mode_options(mode, t) {
                 Ok(mut smt) => {
                     smt.cache = Some(std::path::PathBuf::from(".vg/proofs"));
-                    tools::verify(&src, &env, &smt, detail)
+                    tools::verify_filtered(&src, &env, &smt, detail, prefixes.as_deref())
                 }
                 Err(e) => json!({ "ok": false, "error": e }),
             }

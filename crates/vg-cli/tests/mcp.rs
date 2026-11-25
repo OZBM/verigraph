@@ -71,6 +71,26 @@ fn mcp_lists_and_calls_tools() {
         "params": {"name": "vg_check", "arguments": {"source": MODULE}}}))
     .unwrap();
     assert_eq!(check["result"]["structuredContent"]["ok"], true, "{check}");
+    assert_eq!(check["result"]["structuredContent"]["module"], "m");
+    assert_eq!(
+        check["result"]["structuredContent"]["nodes"][0]["contract_text"],
+        "Requires: x < 255. Ensures: the result = x + 1."
+    );
+    let partial = call(json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+        "params": {"name": "vg_verify", "arguments": {"source": MODULE, "obligations": ["@inc/NONVACUOUS"]}}}))
+    .unwrap();
+    assert_eq!(
+        partial["result"]["structuredContent"]["results"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "{partial}"
+    );
+    assert_eq!(
+        partial["result"]["structuredContent"]["nodes"][0]["verified"], false,
+        "partial prefix selection must not mark the node verified: {partial}"
+    );
     let run = call(json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
         "params": {"name": "vg_run", "arguments": {"source": MODULE, "node": "@inc", "inputs": {"x": 41}}}}))
     .unwrap();

@@ -60,7 +60,7 @@ impl SmtQuery {
             out.push_str("(check-sat)\n");
         } else {
             out.push_str(
-                "(check-sat-using (then simplify propagate-values solve-eqs simplify smt))\n",
+                "(check-sat-using (then simplify propagate-values solve-eqs ctx-simplify simplify smt))\n",
             );
         }
         out
@@ -92,6 +92,15 @@ impl SmtQuery {
 /// Whether SMT-LIB2 text uses floating point.
 pub fn has_fp(text: &str) -> bool {
     text.contains("FloatingPoint") || text.contains("(fp.") || text.contains("RNE")
+}
+
+/// Whether SMT-LIB2 text uses bitvector division or remainder, where Bitwuzla's bit-blasting and
+/// local rewriting are orders of magnitude faster than cvc5's as a second solver.
+pub fn has_bv_div(text: &str) -> bool {
+    text.contains("(bvsdiv ")
+        || text.contains("(bvudiv ")
+        || text.contains("(bvsrem ")
+        || text.contains("(bvurem ")
 }
 
 /// The floating-point formats (eb, sb) that SMT-LIB2 text names. vg-smt writes every format as an

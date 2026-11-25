@@ -21,25 +21,35 @@ pub struct Env<'a> {
 
 /// A module assembled from VG-Sym, with its syntax tree for names.
 pub struct Loaded<'a> {
+    pub module: String,
     pub nodes: Vec<Assembled>,
+    items: Vec<Item>,
     defs: Vec<NodeDef>,
+    sigs: vg_telemetry::CalleeSigs,
+    mesh: MeshLookup<'a>,
     fetch: &'a dyn Fn(&Hash) -> Option<Node>,
 }
 
 pub fn load<'a>(src: &str, env: &Env<'a>) -> Result<Loaded<'a>, Diagnostic> {
     let ast = parser::parse(src)?;
+    let sigs = vg_telemetry::module_callee_sigs(&ast);
     let nodes = vg_core::asm_module(&ast, src, env.mesh, false)?;
-    let defs = ast
-        .items
-        .into_iter()
+    let module = ast.name;
+    let items = ast.items;
+    let defs = items
+        .iter()
         .filter_map(|i| match i {
-            Item::Node(n) => Some(n),
+            Item::Node(n) => Some(n.clone()),
             Item::Query(_) => None,
         })
         .collect();
     Ok(Loaded {
+        module,
         nodes,
+        items,
         defs,
+        sigs,
+        mesh: env.mesh,
         fetch: env.fetch,
     })
 }
@@ -114,6 +124,11 @@ pub fn diag(d: &Diagnostic) -> J {
         "op": d.op,
         "line": d.span.line,
         "col": d.span.col,
+        "span": {
+            "line": d.span.line,
+            "col": d.span.col,
+            "len": d.span.len,
+        },
         "message": d.message,
     })
 }
@@ -122,29 +137,88 @@ fn failed(d: &Diagnostic) -> J {
     json!({ "ok": false, "diagnostics": [diag(d)] })
 }
 
-/// vg_check: parse, validate, canonicalize, type- and effect-check every node.
+fn format_node_signature(def: &NodeDef) -> String {
+    let params: Vec<String> = def
+        .params
+        .iter()
+        .map(|p| format!("{}: {}", p.name.text, vg_core::printer::ty(&p.ty)))
+        .collect();
+    let results: Vec<String> = def.results.iter().map(vg_core::printer::ty).collect();
+    format!("({}) -> ({})", params.join(", "), results.join(", "))
+}
+
+fn format_query_signature(q: &vg_core::ast::MeshQuery) -> String {
+    let params: Vec<String> = q.params.iter().map(vg_core::printer::ty).collect();
+    let results: Vec<String> = q.results.iter().map(vg_core::printer::ty).collect();
+    format!("({}) -> ({})", params.join(", "), results.join(", "))
+}
+
+/// vg_check: parse, validate, canonicalize, type- and effect-check every node (docs/15).
 pub fn check(src: &str, env: &Env) -> J {
+    const MAX_DIAGNOSTICS: usize = 20;
     let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
     let callee = m.callee();
     let (mut nodes, mut diags) = (vec![], vec![]);
-    for a in &m.nodes {
-        diags.extend(a.warnings.iter().map(diag));
-        match vg_types::check_node(&a.node, &callee) {
-            Ok(s) => nodes.push(json!({
-                "label": format!("@{}", a.label),
-                "kind": if a.node.spec { "spec" } else { "node" },
-                "node_hash": hex(&a.hashes.node),
-                "effects": s.effects.names(),
-                "cost_ops": s.cost_ops,
-            })),
-            Err(ds) => diags.extend(ds.into_iter().map(|d| diag(&d.at_node(&a.label)))),
+    for item in &m.items {
+        match item {
+            Item::Query(q) => {
+                let resolved_hash = (m.mesh)(&q.label).map(|(h, _)| hex(&h)).unwrap_or_default();
+                let effects: Vec<String> = q.effects.iter().map(|e| e.text.clone()).collect();
+                nodes.push(json!({
+                    "label": format!("@{}", q.label),
+                    "kind": "mesh_query",
+                    "node_hash": resolved_hash,
+                    "signature": format_query_signature(q),
+                    "effects": effects,
+                    "obligations": 0,
+                    "contract_text": vg_telemetry::query_contract_text(q, &m.sigs),
+                }));
+            }
+            Item::Node(def) => {
+                let Some(a) = m.nodes.iter().find(|a| a.label == def.label) else {
+                    continue;
+                };
+                diags.extend(a.warnings.iter().map(diag));
+                match vg_types::check_node(&a.node, &callee) {
+                    Ok(s) => nodes.push(json!({
+                        "label": format!("@{}", a.label),
+                        "kind": if a.node.spec { "spec" } else { "node" },
+                        "node_hash": hex(&a.hashes.node),
+                        "signature": format_node_signature(def),
+                        "effects": s.effects.names(),
+                        "cost_ops": s.cost_ops,
+                        "obligations": vg_smt::obligation_count(&a.node, &callee),
+                        "contract_text": vg_telemetry::contract_text(def, &m.sigs),
+                    })),
+                    Err(ds) => diags.extend(ds.into_iter().map(|d| diag(&d.at_node(&a.label)))),
+                }
+            }
         }
     }
+    diags.sort_by_key(|d| {
+        (
+            d["line"].as_u64().unwrap_or(0),
+            d["col"].as_u64().unwrap_or(0),
+        )
+    });
     let ok = !diags.iter().any(|d| d["severity"] == "error");
-    json!({ "ok": ok, "nodes": nodes, "diagnostics": diags })
+    let rest = diags.len().saturating_sub(MAX_DIAGNOSTICS);
+    if rest > 0 {
+        diags.truncate(MAX_DIAGNOSTICS);
+    }
+    let mut out = json!({
+        "ok": ok,
+        "module": m.module,
+        "nodes": nodes,
+        "diagnostics": diags,
+    });
+    if rest > 0 {
+        out["truncated_diagnostics"] = json!(rest);
+    }
+    out
 }
 
 fn verdict_name(v: &vg_smt::Verdict) -> &'static str {
@@ -207,10 +281,16 @@ fn failure_report(
     })
 }
 
-/// Verifies the nodes `which` selects; returns (all proven, docs/15 VerifyOut). `detail` follows
-/// docs/15's budget: 0 attaches no report, 1 reports the first 3 failing obligations in ID order,
-/// 2 reports every one.
-fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail: u8) -> (bool, J) {
+/// Verifies the nodes `which` selects (optionally filtered to obligations matching `prefixes`);
+/// returns `(all_full_nodes_proven, docs/15 VerifyOut)`. `detail` follows docs/15's budget:
+/// 0 attaches no report, 1 reports the first 3 failing obligations in ID order, 2 reports every one.
+fn verify_nodes(
+    m: &Loaded,
+    which: &[&Assembled],
+    opts: &vg_smt::Options,
+    detail: u8,
+    prefixes: Option<&[String]>,
+) -> (bool, J) {
     let callee = m.callee();
     let (mut nodes, mut results, mut all) = (vec![], vec![], true);
     let mut failed = std::collections::BTreeMap::new();
@@ -221,8 +301,18 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail
         let Ok((_, d)) = m.find(&a.label) else {
             continue;
         };
-        let mut verified = true;
-        for o in vg_smt::verify(&a.node, &a.label, &callee, opts) {
+        let outcomes = vg_smt::verify(&a.node, &a.label, &callee, opts);
+        let total = outcomes.len();
+        let mut selected = 0usize;
+        let mut proven_selected = true;
+        for o in outcomes {
+            if let Some(ps) = prefixes
+                && !ps.is_empty()
+                && !ps.iter().any(|p| o.id.starts_with(p.as_str()))
+            {
+                continue;
+            }
+            selected += 1;
             let (o, reproduced) = classify(&o);
             let verdict = verdict_name(&o.verdict);
             let mut r =
@@ -240,11 +330,22 @@ fn verify_nodes(m: &Loaded, which: &[&Assembled], opts: &vg_smt::Options, detail
             if verdict != "proven" {
                 failed.insert(o.id.clone(), (*a, d, o, reproduced));
             }
-            verified &= verdict == "proven";
+            proven_selected &= verdict == "proven";
             results.push(r);
         }
-        all &= verified;
-        nodes.push(json!({ "label": format!("@{}", a.label), "verified": verified }));
+        if prefixes.is_some_and(|ps| !ps.is_empty()) && selected == 0 {
+            continue;
+        }
+        // Soundness: a node is marked `verified` only when every obligation of that node ran and
+        // was proven; a partial prefix selection never marks a node verified.
+        let node_verified = proven_selected && selected == total;
+        let step_ok = if prefixes.is_some_and(|ps| !ps.is_empty()) {
+            proven_selected
+        } else {
+            node_verified
+        };
+        all &= step_ok;
+        nodes.push(json!({ "label": format!("@{}", a.label), "verified": node_verified }));
     }
     results.sort_by(|x, y| x["id"].as_str().cmp(&y["id"].as_str()));
     let cap = match detail {
@@ -328,14 +429,25 @@ pub fn mode_options(
     })
 }
 
-/// vg_verify: prove every obligation of every node in the module.
+/// vg_verify: prove every obligation of every node in the module (or those matching `prefixes`).
 pub fn verify(src: &str, env: &Env, opts: &vg_smt::Options, detail: u8) -> J {
+    verify_filtered(src, env, opts, detail, None)
+}
+
+/// vg_verify with optional docs/15 `obligations` ID-prefix selection.
+pub fn verify_filtered(
+    src: &str,
+    env: &Env,
+    opts: &vg_smt::Options,
+    detail: u8,
+    prefixes: Option<&[String]>,
+) -> J {
     let m = match load(src, env) {
         Ok(m) => m,
         Err(d) => return failed(&d),
     };
     let all: Vec<&Assembled> = m.nodes.iter().collect();
-    verify_nodes(&m, &all, opts, detail).1
+    verify_nodes(&m, &all, opts, detail, prefixes).1
 }
 
 /// vg_run: run a node in vg-interp. `inputs` maps parameter (and LEARNABLE) names to docs/15 values;
@@ -422,7 +534,7 @@ pub fn build(
         Ok(x) => x,
         Err(e) => return json!({ "ok": false, "error": e }),
     };
-    let (proven, report) = verify_nodes(&m, &m.closure(a), smt, 1);
+    let (proven, report) = verify_nodes(&m, &m.closure(a), smt, 1, None);
     if !proven && !unverified {
         return json!({
             "ok": false,

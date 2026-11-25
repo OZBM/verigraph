@@ -66,9 +66,10 @@ Commands save the file first, since `vg` reads it from disk.
 The plugin appears as **VeriGraph** on Antigravity's Customizations page, where you can turn it off and
 on. While it is on:
 
-- The agent has the tools `vg_check`, `vg_verify`, `vg_run` and `vg_build` ([MCP server](mcp.md)).
-- The agent has the **verigraph-synthesis** skill: write a contract first, check, verify, repair from
-  counterexamples, never ship an unproven node.
+- The agent has all eight MCP tools: `vg_check`, `vg_verify`, `vg_explain`, `vg_mesh_query`,
+  `vg_mesh_publish`, `vg_run`, `vg_build` and `vg_lift` ([MCP server](mcp.md)).
+- The agent has the **verigraph-synthesis** skill: write a contract first, confirm `contract_text`,
+  check, verify, repair from counterexamples, never ship an unproven node.
 - The plugin suggests prompts such as *"Write a VeriGraph node that adds two u32 with saturation, and
   prove it"* and *"Verify examples/soft_knee_draft.vgs and explain each counterexample"*.
 
@@ -76,7 +77,7 @@ A good request names the behavior and the guarantees, and lets the agent write t
 confirm: *"Write a node that returns the larger of two f32, never NaN when both inputs are finite;
 prove it and build it for aarch64-apple-darwin."*
 
-To confirm that the agent loaded the server, open a conversation and look for the four `vg_` tools,
+To confirm that the agent loaded the server, open a conversation and look for the eight `vg_` tools,
 or check that a `vg mcp` process runs under the agent:
 
 ```bash
@@ -91,7 +92,7 @@ ps -axo pid,ppid,args | grep "[v]g mcp"
 | Every obligation comes back as `error` or `unknown` | z3 is missing: `brew install z3`, then check that `z3 --version` says 5.4.1. |
 | No colors and no diagnostics | The extension is not loaded: check that `antigravity-ide --list-extensions` lists `verigraph.verigraph`, then reload the window. |
 | The agent has no `vg_` tools | Check `~/.gemini/config/plugins/verigraph/mcp_config.json` names an existing `vg`, that the plugin is on in Customizations, and restart the IDE. |
-| The agent mentions `contract_text`, Mesh or `vg_explain` | Those tools come after version 0; the skill says so, and the agent works without them. |
+| The agent has an older skill or tool list | Re-run `editors/antigravity/install.sh` to refresh `~/.cargo/bin/vg` and the copied plugin files, then reload the IDE. |
 
 ## Uninstall
 

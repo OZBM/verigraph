@@ -45,18 +45,13 @@ uses (VG-W0001). Use `vg disasm` on the node's hash to see the canonical form.
 **The Antigravity extension or plugin does not work.** See the troubleshooting table in
 [Antigravity IDE](antigravity.md#troubleshooting).
 
-## What version 0 does not do yet
+## Current MVP limits
 
-| Missing | Arrives with |
+| Limit | Planned phase |
 | --- | --- |
-| COST obligations (reported as `unknown`) | P3 follow-up |
-| cvc5 and Bitwuzla, small-model search, the proof cache | P3 follow-up |
-| Plain-language `contract_text`, `fix` edits in diagnostics, failing slices (`vg explain`) | P5 |
-| Telemetry and runtime guard reports | P6 |
-| VG-Mesh queries and publishing, beyond `vg.lock` pins | P7 |
-| Lifting existing code (`vg lift`) | P8 |
-| Linked binaries for Linux x86_64 and WASM, sandbox manifests | P4 follow-up |
-| Obligation IDs that use the ports written in the source | P3 follow-up |
-| An LSP server (hover, completion, go to definition) in the editor | not planned yet |
+| Recursion (`REC_CALL` / `DECREASES`), sum types (`MATCH_DISJOINT`), generics, symbolic tensor shapes, explicit `Arena<N>` | P9 (Alpha) |
+| Learnable parameter training and forward-mode autodiff (`LEARNABLE` boxes are verified as frozen inputs in MVP) | P9 / R-07 |
+| Automatic `fix` edit suggestions on static diagnostics | P5 follow-up |
+| An LSP server (hover, completion, go to definition) in the editor | post-MVP |
 
 ROADMAP.md tracks every phase, and PROGRESS.md what is done.

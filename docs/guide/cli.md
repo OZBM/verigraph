@@ -37,8 +37,9 @@ effects. Nothing is proven.
 | Field | Content |
 | --- | --- |
 | `ok` | `true` when no diagnostic is an error |
-| `nodes` | for each node that checks: `label`, `kind` (`node` or `spec`), `node_hash`, `effects`, `cost_ops` |
-| `diagnostics` | `code`, `severity` (`error` or `warning`), `node`, `op`, `line`, `col`, `message` ([Diagnostics](diagnostics.md)) |
+| `module` | the module name declared in `module <name>;` |
+| `nodes` | for each item that checks: `label`, `kind` (`node`, `spec` or `mesh_query`), `node_hash`, `signature`, `effects`, `cost_ops` (for nodes/specs), `obligations`, `contract_text` |
+| `diagnostics` | up to 20 items sorted by `(line, col)`: `code`, `severity` (`error` or `warning`), `node`, `op`, `line`, `col`, `span` (`{line, col, len}`), `message` ([Diagnostics](diagnostics.md)); `truncated_diagnostics` counts any remainder |
 
 `line` and `col` are 1-based. A type or effect error found on the canonical node has `line` 0 and
 names its node instead.

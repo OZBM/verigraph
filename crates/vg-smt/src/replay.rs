@@ -249,6 +249,12 @@ pub(crate) fn prescreen(
     ) else {
         return out;
     };
+    if u128::from(summary.cost_ops) > PRESCREEN_OPS
+        || !can_eval_static_ops(&summary.ops_expr)
+        || input_static_elems(node) > PRESCREEN_OPS
+    {
+        return out;
+    }
     let lits = literals(node);
     let cands: Vec<Vec<Value>> = (0..n as u32)
         .map(|i| {
@@ -405,6 +411,37 @@ pub(crate) fn prescreen(
         }
     }
     out
+}
+
+/// True when `static_ops` can evaluate `c` from concrete inputs alone (no callee cost terms).
+fn can_eval_static_ops(c: &CostExpr) -> bool {
+    match c {
+        CostExpr::Const(_) => true,
+        CostExpr::Len(o) | CostExpr::Val(o) => matches!(o, Operand::Input(_)),
+        CostExpr::CalleeOps(_) | CostExpr::CalleeArenaBytes(_) => false,
+        CostExpr::Add(a, b) | CostExpr::Mul(a, b) | CostExpr::Max(a, b) => {
+            can_eval_static_ops(a) && can_eval_static_ops(b)
+        }
+        CostExpr::Align16(a) => can_eval_static_ops(a),
+    }
+}
+
+/// Static scalar leaf count across a node's fixed-size parameters (docs/05: skip > 20,000 elements).
+fn input_static_elems(node: &Node) -> u128 {
+    fn elems(ty: &Type) -> u128 {
+        match ty {
+            Type::Array(e, n) => elems(e).saturating_mul(u128::from(*n)),
+            Type::Tensor(e, dims) => dims
+                .iter()
+                .fold(elems(e), |acc, &d| acc.saturating_mul(u128::from(d))),
+            Type::Tuple(ms) => ms.iter().fold(0u128, |acc, m| acc.saturating_add(elems(m))),
+            Type::Result(a, b) => 1u128.saturating_add(elems(a).max(elems(b))),
+            _ => 1,
+        }
+    }
+    node.params
+        .iter()
+        .fold(0u128, |acc, t| acc.saturating_add(elems(t)))
 }
 
 /// The static op count of the node on these inputs, when every term of the cost is known from

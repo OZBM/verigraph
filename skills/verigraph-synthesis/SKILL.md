@@ -49,7 +49,7 @@ Mesh queries: sub-problems you will look up instead of writing
 - Use `.checked` arithmetic unless wrapping or saturation is the intended behavior.
 - The graph is strict: SELECT evaluates both inputs. Make operands safe before dividing, then select. When no safe operand exists (an INDEX into a slice that may be empty), put the step in a kernel and call it through `ASSERT_GUARD.branch(c, @step, args…, else=@other)`, which runs only the branch it takes. Plain `ASSERT_GUARD` is for a safety check whose else branch means failure: it counts as residual cost and reports at runtime.
 - Floats: NaN and ±inf exist. State finiteness in PRE where inputs enter, and prefer forms that stay finite at the extremes (1 − 1/(1+t), not t/(1+t)). In formulas `==` is IEEE equality (NaN equals nothing, −0.0 equals 0.0); use `same(a, b)` for identity. FCOPYSIGN needs a sign operand that is not NaN.
-- Strong POSTs: a range check alone lets wrong answers through; add relational facts. For a fold, the exact invariant `acc == fold:step(init, xs, k, …)` is always inductive; add only the extra facts the POST needs.
+- Strong POSTs: a range check alone lets wrong answers through; add relational facts. For a fold, the exact invariant `acc == fold:step(init, xs, k, …)` is inductive once `@step`'s POST pins `result`; add only the extra facts the POST needs.
 - Well-defined contracts: guard every division, index, `ok`/`err` and `spec:` call that might be undefined, as in `d != 0 ==> result == x / d`; `vg_verify` checks this (`.wd` obligations).
 - A returned slice must view an input or arena memory; to return bytes of a value computed in the node, return the value itself.
 - Effects: the smallest set; handles only from the root; `[]` (pure) for everything that can be.
@@ -65,7 +65,7 @@ NODE @count_step {
   EFFECTS: [];
   CONTRACT {
     PRE:  acc < 4294967295;
-    POST: result == acc || result == acc + 1;
+    POST: (x > thr ==> result == acc + 1) && (!(x > thr) ==> result == acc);
   }
   BODY {
     %0 = GT.f(x, thr);
@@ -192,11 +192,12 @@ NODE @parse_percent [intent: "Accept a percentage from 0 to 100, or error code 1
 
 ## Tools
 
-`vg_check`, `vg_verify`, `vg_build`, `vg_run`, `vg_mesh_query`, `vg_mesh_publish`, `vg_lift`, `vg_explain`; inputs and outputs are in docs/07-generation-loop.md.
+`vg mcp` serves all eight tools of docs/15-agent-interface.md over stdio (also available on the command line; see docs/guide/mcp.md and docs/guide/cli.md):
 
-What the v0 server (`vg mcp`) provides today; docs/guide/mcp.md has the exact inputs and results:
-
-- `vg_check`, `vg_verify`, `vg_run` and `vg_build`, each taking the module text as `source`.
-- `vg_check` renders no `contract_text` yet: show the user the CONTRACT block itself and get their confirmation of it. Its diagnostics carry `code`, `severity`, `node`, `op`, `line`, `col` and `message`, with no `fix`.
-- `vg_verify` reports COST obligations as `unknown` (not encoded yet), so a node with a COST clause never verifies fully.
-- `vg_mesh_query`, `vg_mesh_publish`, `vg_lift` and `vg_explain` arrive with phases P6 to P8. Until then, write every node yourself; a `@MESH_QUERY` resolves only through a pin in vg.lock.
+- `vg_check`: takes `source` or `path`; returns `ok`, `module`, `nodes` (`label`, `kind`, `node_hash`, `signature`, `effects`, `obligations`, `contract_text`), and up to 20 `diagnostics` sorted by `(line, col)` with `span: {line, col, len}`. Always show `contract_text` to the user for confirmation before proving or shipping.
+- `vg_verify`: takes `source` or `path`, plus optional `mode` (`"edit"` 2 s, `"ci"` 60 s, `"release"` 60 s with two independent solvers), `timeout_ms`, and `detail` (`0`, `1` default, `2`). Proves functional, domain, combinator, well-definedness (`.wd`), non-vacuity, and static `COST` obligations (`ops`, `arena_bytes`, `heap_bytes`), replaying counterexamples in `vg-interp` and attaching `FailureReport` slices and diffs.
+- `vg_explain`: takes `source` or `path` and `obligation` (such as `@soft_knee/POST.0`); returns the obligation's `FailureReport` and a plain-language `prose` explanation.
+- `vg_mesh_query` and `vg_mesh_publish`: query verified nodes in the project's Mesh registry by contract (`input_types`, `output_types`, `max_effects`, `pre`, `post`, `max_cost`, `intent`, `spec`, `limit`), and publish verified modules through the six-check ingestion gate. Pin resolved `@MESH_QUERY` bindings in `vg.lock` (`vg mesh resolve`).
+- `vg_run`: runs a node in `vg-interp` on docs/15 JSON `inputs` keyed by parameter name and checks `pre` and `post`.
+- `vg_build`: verifies the root closure first (never builds an unproven node over MCP) and compiles native/WASM artifacts (`aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, `wasm32-wasip1`) along with `<label>.manifest.toml`.
+- `vg_lift`: lifts a C or Rust function (`path`, `function`, `language`) into VG-Sym via OmniLift with Alive2 bounded refinement checking and differential fuzzing.

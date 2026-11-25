@@ -19,7 +19,7 @@ use crate::formula::{
 };
 use crate::model::{DecodedModel, decode_with_small_model};
 use crate::replay::{Prescreen, classify, prescreen};
-use crate::solver::{CheckResult, Session, SmtQuery, Solver, SolverKind, has_fp};
+use crate::solver::{CheckResult, Session, SmtQuery, Solver, SolverKind, has_bv_div, has_fp};
 use crate::sort::{
     SymVal, bv_lit_i128, const_to_symval, declare_symval, scalar_const_smt, symval_atoms,
     symval_select,
@@ -165,6 +165,8 @@ impl<'a> Solvers<'a> {
         use SolverKind::{Bitwuzla, Cvc5, Z3};
         let order = if has_fp(text) {
             [Bitwuzla, Z3, Cvc5]
+        } else if has_bv_div(text) {
+            [Z3, Bitwuzla, Cvc5]
         } else {
             [Z3, Cvc5, Bitwuzla]
         };
@@ -587,13 +589,21 @@ fn step_count(expr: String, width: u32) -> FVal {
     }
 }
 
-/// Every obligation of one node, then the solver's verdict on each.
-pub fn verify(
+type BuiltNodeObligations = (
+    Vec<Ob>,
+    Vec<(Type, SymVal)>,
+    Vec<Vec<SymVal>>,
+    BTreeMap<u32, SymVal>,
+    QueryBuilder,
+    Vec<(Type, SymVal)>,
+    BTreeMap<(u32, u8), (Type, SymVal)>,
+);
+
+fn build_node_obligations(
     node: &Node,
     label: &str,
     callee: &dyn Fn(&Hash) -> Option<Node>,
-    opts: &Options,
-) -> Vec<Outcome> {
+) -> BuiltNodeObligations {
     let label = label.trim_start_matches('@');
     let mut obs: Vec<Ob> = Vec::new();
     let mut qb = QueryBuilder::default();
@@ -1004,6 +1014,28 @@ pub fn verify(
         }
     }
 
+    (obs, inputs, vals, consts, qb, results, ports)
+}
+
+/// Static obligation count for `node` (`0` for a `SPEC`), matching `verify(...).len()`.
+pub fn obligation_count(node: &Node, callee: &dyn Fn(&Hash) -> Option<Node>) -> usize {
+    if node.spec {
+        return 0;
+    }
+    let (obs, ..) = build_node_obligations(node, "n", callee);
+    obs.len() + node.contract.cost.len()
+}
+
+/// Every obligation of one node, then the solver's verdict on each.
+pub fn verify(
+    node: &Node,
+    label: &str,
+    callee: &dyn Fn(&Hash) -> Option<Node>,
+    opts: &Options,
+) -> Vec<Outcome> {
+    let label = label.trim_start_matches('@');
+    let (obs, inputs, vals, mut consts, qb, results, ports) =
+        build_node_obligations(node, label, callee);
     let mut solvers = Solvers::new(opts, node);
     let input_syms: Vec<SymVal> = inputs.iter().map(|(_, s)| s.clone()).collect();
     let screened = prescreen(node, label, callee);

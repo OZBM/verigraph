@@ -10,7 +10,7 @@ for f in ["examples/audio_limiter.vgs", "examples/soft_knee_draft.vgs"]:
 docs = sorted(str(p.relative_to(kit)) for p in (kit / "docs").rglob("*.md") if "source" not in p.parts)
 for f in docs + ["skills/verigraph-synthesis/SKILL.md"]:
     for i, blk in enumerate(re.findall(r"```text\n(.*?)```", (kit / f).read_text(), re.S)):
-        if "NODE" in blk:
+        if re.search(r"^\s*(?:NODE|SPEC)\s+@", blk, re.M):
             src = blk if blk.lstrip().startswith("module") else "module snippet;\n" + blk
             cases.append((f"{f}#{i}", src, True))
 def node(params, post, body):
