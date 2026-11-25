@@ -1,0 +1,342 @@
+{
+ "examples": [
+  {
+   "args": [
+    3,
+    -5729018387428706812
+   ],
+   "class": "err_partial",
+   "cpython": "-1",
+   "function": "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_pydecimal.py::_div_nearest",
+   "lifted": {
+    "err": true
+   }
+  },
+  {
+   "args": [
+    -7177466677192659421,
+    -6888582928420004700
+   ],
+   "class": "err_partial",
+   "cpython": "1",
+   "function": "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/punycode.py::T",
+   "lifted": {
+    "err": true
+   }
+  },
+  {
+   "args": [
+    -9223372036854775808
+   ],
+   "class": "err_partial",
+   "cpython": "False",
+   "function": "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/enum.py::_is_single_bit",
+   "lifted": {
+    "err": true
+   }
+  },
+  {
+   "args": [
+    9223372036854775807,
+    -10,
+    4611686018427387904
+   ],
+   "class": "err_partial",
+   "cpython": "False",
+   "function": "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/dateutil/utils.py::within_delta",
+   "lifted": {
+    "err": true
+   }
+  }
+ ],
+ "functions": {
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_pydatetime.py::_cmp": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_pydatetime.py::_is_leap": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_pydecimal.py::_div_nearest": {
+   "WRONG": 0,
+   "agree_err": 2199,
+   "agree_value": 89742,
+   "err_non_int": 0,
+   "err_overflow": 72,
+   "err_partial": 7987,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/unix_events.py::_sighandler_noop": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 0,
+   "err_non_int": 100000,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/calendar.py::_validate_month": {
+   "WRONG": 0,
+   "agree_err": 88059,
+   "agree_value": 0,
+   "err_non_int": 11941,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/calendar.py::isleap": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/copy.py::_copy_immutable": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/copy.py::_deepcopy_atomic": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ctypes/__init__.py::ARRAY": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 50910,
+   "err_non_int": 0,
+   "err_overflow": 49090,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ctypes/wintypes.py::RGB": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 42127,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 57873
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/dataclasses.py::_hash_exception": {
+   "WRONG": 0,
+   "agree_err": 100000,
+   "agree_value": 0,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/email/encoders.py::encode_noop": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 0,
+   "err_non_int": 100000,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/punycode.py::T": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 64800,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 35200,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/enum.py::_is_single_bit": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 98524,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 1476,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/dummy/__init__.py::freeze_support": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 0,
+   "err_non_int": 100000,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/dummy/__init__.py::shutdown": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 0,
+   "err_non_int": 100000,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/pool.py::_helper_reraises_exception": {
+   "WRONG": 0,
+   "agree_err": 100000,
+   "agree_value": 0,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/resource_tracker.py::cleanup_noop": {
+   "WRONG": 0,
+   "agree_err": 100000,
+   "agree_value": 0,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/plistlib.py::_count_to_size": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/dateutil/utils.py::within_delta": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 91345,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 8655,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/tarfile.py::fully_trusted_filter": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/token.py::ISEOF": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/token.py::ISNONTERMINAL": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/token.py::ISTERMINAL": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/tomllib/_parser.py::is_unicode_scalar_value": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/typing.py::cast": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/case.py::_id": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/util.py::three_way_cmp": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/parse.py::_noop": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/uuid.py::_is_universal": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/zipfile/__init__.py::_gen_crc": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 100000,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 0
+  },
+  "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/zipimport.py::_eq_mtime": {
+   "WRONG": 0,
+   "agree_err": 0,
+   "agree_value": 92430,
+   "err_non_int": 0,
+   "err_overflow": 0,
+   "err_partial": 0,
+   "err_unchecked": 7570
+  }
+ }
+}
