@@ -27,8 +27,8 @@ const USAGE: &str = "usage:
   vg run FILE.vgs @NODE JSON                    run a node in vg-interp; JSON maps parameter names to values
   vg build FILE.vgs @NODE [--target TRIPLE]... [-o DIR] [--timeout MS] [--unverified] [--emit-llvm]
                                                 verify, then compile (default target: aarch64-apple-darwin)
-  vg lift FILE FUNCTION [--lang c|rust] [--root DIR]
-                                                lift a C or Rust function with Alive2 and fuzzing (JSON)
+  vg lift FILE FUNCTION [--lang LANG] [--root DIR]
+                                                lift a C, C++, Rust, Zig, Swift or GLSL function (JSON)
   vg mesh publish FILE.vgs [--root DIR]         publish the module's nodes to DIR/.vg/mesh (ingestion gate)
   vg mesh query QUERY.json [--root DIR]         candidates for a docs/09 MeshContractQuery
   vg mesh resolve FILE.vgs [--root DIR]         bind each @MESH_QUERY, pin it in vg.lock, fetch its nodes

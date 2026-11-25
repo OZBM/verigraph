@@ -101,11 +101,15 @@ fn tools_list() -> Vec<Tool> {
         ),
         tool(
             "vg_lift",
-            "Lift a C or Rust function through OmniLift with Alive2 bounded refinement and 1e6-input differential fuzzing (docs/08, docs/15).",
+            "Lift a C, C++, Rust, Zig, Swift or GLSL function through OmniLift with Alive2 bounded refinement and 1e6-input differential fuzzing (docs/08, docs/15).",
             json!({
-                "path": { "type": "string", "description": "path to the C or Rust source file" },
+                "path": { "type": "string", "description": "path to the source file" },
                 "function": { "type": "string", "description": "name of the function to lift" },
-                "language": { "type": "string", "enum": ["c", "rust"], "description": "c or rust" },
+                "language": {
+                    "type": "string",
+                    "enum": vg_omnilift::ingest::Language::ALL.map(vg_omnilift::ingest::Language::as_str),
+                    "description": "source language",
+                },
             }),
             &["path", "function", "language"],
         ),

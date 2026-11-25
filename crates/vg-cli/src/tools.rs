@@ -621,30 +621,27 @@ fn root_manifest(a: &Assembled, d: &NodeDef) -> String {
     s
 }
 
-/// vg_lift: lift a C or Rust function through OmniLift (P8.7, docs/08, docs/15).
+/// vg_lift: lift a function through OmniLift from any ingest language (P8.7, docs/08, docs/15).
 pub fn lift(path: &Path, function: &str, language: Option<&str>, root: &Path) -> J {
+    use vg_omnilift::ingest::Language;
+    let names = Language::ALL.map(Language::as_str).join(", ");
     let lang = match language {
-        Some("c" | "C") => vg_omnilift::ingest::Language::C,
-        Some("rust" | "rs" | "Rust") => vg_omnilift::ingest::Language::Rust,
-        Some(other) => {
-            return json!({
-                "ok": false,
-                "error": format!("unsupported language {other}; expected \"c\" or \"rust\""),
-            });
-        }
-        None => match path.extension().and_then(|e| e.to_str()) {
-            Some("c" | "h") => vg_omnilift::ingest::Language::C,
-            Some("rs") => vg_omnilift::ingest::Language::Rust,
-            _ => {
-                return json!({
-                    "ok": false,
-                    "error": format!(
-                        "cannot infer language for {}; pass --lang c or --lang rust",
-                        path.display()
-                    ),
-                });
-            }
-        },
+        Some(name) => Language::from_name(name)
+            .ok_or_else(|| format!("unsupported language {name}; expected one of {names}")),
+        None => path
+            .extension()
+            .and_then(|e| e.to_str())
+            .and_then(Language::from_extension)
+            .ok_or_else(|| {
+                format!(
+                    "cannot infer language for {}; pass --lang with one of {names}",
+                    path.display()
+                )
+            }),
+    };
+    let lang = match lang {
+        Ok(l) => l,
+        Err(e) => return json!({ "ok": false, "error": e }),
     };
     let lifted = match vg_omnilift::lift::lift_source(path, function, lang, &[]) {
         Ok(l) => l,
