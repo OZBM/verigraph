@@ -4,7 +4,18 @@ OmniLift turns legacy functions into verified VG-IR nodes without pretending tha
 
 ## Pipeline
 
-1. **Ingest.** Compile C, C++, Rust or Zig to LLVM IR at `-O1`, with unrolling and vectorization off (`-fno-unroll-loops -fno-vectorize -fno-slp-vectorize` for clang; the equivalent codegen options for rustc), so loops stay recognizable.
+1. **Ingest.** Compile the source to LLVM IR with unrolling and vectorization off, so loops stay recognizable (crates/vg-omnilift/src/ingest.rs; `vg lift --lang`):
+
+   | Language | Front end and flags | Notes |
+   | --- | --- | --- |
+   | C | clang `-O1 -fno-unroll-loops -fno-vectorize -fno-slp-vectorize` | the G8 pipeline |
+   | C++ | the same, with `-x c++ -std=c++20` | entry points `extern "C"`, or pass the mangled name |
+   | Rust | rustc `opt-level=1`, `-unroll-threshold=0`, `no-vectorize-loops`, `no-vectorize-slp` | `#[unsafe(no_mangle)] extern "C"` entry points |
+   | Zig | `zig build-obj -O ReleaseSmall -fstrip` | Zig has no -O1 or loop switches; ReleaseSmall neither unrolls nor vectorizes and has no safety calls. `export fn` aliases are folded back into definitions, `minsize`/`optsize` hints are dropped, and normalization adds `loop-rotate` |
+   | Swift | swiftc `-O -emit-ir`, `-Xllvm -vectorize-loops=false -vectorize-slp=false -unroll-threshold=0` | `@_cdecl` entry points. Trapping arithmetic (`+`) lowers to overflow intrinsics and a trap, which are rejected; the wrapping operators (`&+`, `&*`) lift |
+   | GLSL | `glslc` validates the source as a compute shader, then clang compiles it as C++ with `-fwrapv` and a prelude (`uint`, `min`, `max`, `clamp`, `abs`) | the scalar integer subset. GLSL int arithmetic wraps, hence `-fwrapv`. Rejected because their C++ meaning differs: unsuffixed hex or octal literals above `0x7FFFFFFF` (an `int` in GLSL, `unsigned` in C++), and any pointer parameter after lowering (an array or struct passed by value in GLSL becomes a reference) |
+
+   Every language shares the rest of the pipeline, so its lifts get the same Alive2 check and differential fuzzing. A shading language other than GLSL was tried: Homebrew's clang ships no HLSL headers, and the Metal compiler emits typed-pointer IR for the `air64` triple, which LLVM 23's `opt` and Alive2 cannot read.
 2. **Normalize.** Run `mem2reg`, loop-simplify, LCSSA and the induction-variable passes with `opt`.
 3. **Lift mechanically.** Every counted loop becomes FOLD_BOUNDED over its whole mutable state, pointers become (buffer, offset) pairs with bounds, and constant tables, such as crc32's lookup table and SHA-256's round constants, become array constants. This lift always works and becomes the reference.
 4. **Cure undefined behavior.** Where the original has UB (out-of-bounds access, signed overflow, division by zero), strengthen PRE or insert an ASSERT_GUARD that returns `Result::Err`. The lifted node agrees with the original wherever the original is defined, and fails safely where it is not.
@@ -14,7 +25,7 @@ OmniLift turns legacy functions into verified VG-IR nodes without pretending tha
 
 ## MVP scope
 
-C and Rust functions with no I/O, recursion or pointer-to-pointer data, whose loops have computable trip counts. Targets for G8: zlib's `crc32` and `adler32`, one C implementation of SHA-256, and the portable backend of Rust's `sha2` crate. Both SHA-256 lifts must join the SHA-256 spec class (docs/09), with `proved` evidence where a fold invariant carries the proof and `bounded(n)` evidence otherwise, stated in the G8 report.
+Functions in the languages above with no I/O, recursion or pointer-to-pointer data, whose loops have computable trip counts. When a lift folds over a `GENERATE`d index range, its trip count is a scalar argument, and the fuzzer draws scalars from `[0, 4096)` so that each case ends; Alive2 still covers every value up to its unroll bound. Targets for G8: zlib's `crc32` and `adler32`, one C implementation of SHA-256, and the portable backend of Rust's `sha2` crate. Both SHA-256 lifts must join the SHA-256 spec class (docs/09), with `proved` evidence where a fold invariant carries the proof and `bounded(n)` evidence otherwise, stated in the G8 report.
 
 ## Prior art
 
