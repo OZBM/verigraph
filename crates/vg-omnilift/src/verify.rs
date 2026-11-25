@@ -216,8 +216,13 @@ pub fn run_alive2_check(lifted: &Lifted, unroll: u32) -> Result<(String, u32), D
     let (raw_tgt, large_globals, capped_64) = lower_vgir_to_alive_llvm(lifted, unroll)?;
     let raw_src = prepare_original_llvm_for_alive(lifted, unroll, capped_64)?;
 
-    let src_opt = optimize_for_alive(&raw_src, &lifted.entry_fn_name, &large_globals)?;
-    let tgt_opt = optimize_for_alive(&raw_tgt, &lifted.entry_fn_name, &large_globals)?;
+    // R-13: the Python front end puts its only UB, py_fail, behind a boolean error flag,
+    // which instcombine would assume false and fold away, leaving `src` more defined than
+    // CPython. Its `src` keeps py_fail out of reach of the UB-exploiting passes (see
+    // optimize_for_alive); a less optimized `src` only makes the check stricter.
+    let keep_src_ub = lifted.provenance.language.as_str() == "python";
+    let src_opt = optimize_for_alive(&raw_src, &lifted.entry_fn_name, &large_globals, keep_src_ub)?;
+    let tgt_opt = optimize_for_alive(&raw_tgt, &lifted.entry_fn_name, &large_globals, false)?;
 
     let src_file = temp_path("alive_src", "ll");
     let tgt_file = temp_path("alive_tgt", "ll");
@@ -325,43 +330,104 @@ fn insert_alwaysinline_before_attrs(prefix: &str) -> String {
     }
 }
 
+const ALIVE_PREP_PASSES: &str = "-passes=always-inline,sroa,mem2reg,simplifycfg,loop-simplify,lcssa,indvars,loop-unroll<no-runtime;full-unroll-max=64>,instcombine,simplifycfg,sroa,mem2reg,reassociate,instcombine,gvn,simplifycfg,loop-simplify,lcssa";
+
 fn optimize_for_alive(
     ir: &str,
     entry_fn: &str,
     large_globals: &BTreeMap<String, (u32, u64)>,
+    keep_ub: bool,
 ) -> Result<String, Diagnostic> {
     // Strip `!llvm.loop` metadata before running `opt` so constant-trip loops <= 64 (e.g. SHA-256 16/64 rounds)
     // can be unrolled and promoted to SSA by `loop-unroll,sroa,mem2reg`.
     let cleaned_input = strip_loop_metadata(ir);
+    let opt_ir = match keep_ub
+        .then(|| hide_function(&cleaned_input, "py_fail"))
+        .flatten()
+    {
+        // R-13: the full pipeline runs while py_fail is only a declaration, so nothing can
+        // reason about its division; then its body comes back and only passes that never
+        // assume UB away inline it.
+        Some((hidden, body)) => {
+            let mid = run_opt(&hidden, ALIVE_PREP_PASSES, entry_fn)?;
+            // The inliner refuses a callee whose target features differ from the caller's:
+            // give py_fail the entry function's attribute group.
+            let entry_marker = format!("@{entry_fn}(");
+            let group = mid
+                .lines()
+                .find(|l| l.starts_with("define ") && l.contains(&entry_marker))
+                .and_then(|l| l.split_whitespace().find(|w| w.starts_with('#')))
+                .unwrap_or("");
+            let body = body.replacen(" alwaysinline {", &format!(" alwaysinline {group} {{"), 1);
+            let restored: String = mid
+                .lines()
+                .filter(|l| !(l.starts_with("declare ") && l.contains("@py_fail(")))
+                .map(|l| format!("{l}\n"))
+                .collect::<String>()
+                + &body;
+            run_opt(
+                &restored,
+                "-passes=always-inline,instsimplify,simplifycfg",
+                entry_fn,
+            )?
+        }
+        None => run_opt(&cleaned_input, ALIVE_PREP_PASSES, entry_fn)?,
+    };
+    Ok(sanitize_ir_for_alive_tv(&opt_ir, entry_fn, large_globals))
+}
+
+/// Splits `define ... @name(...) { ... }` out of `ir`, leaving a declaration. Returns the IR
+/// and the definition, rewritten as an alwaysinline internal function with no attribute group.
+fn hide_function(ir: &str, name: &str) -> Option<(String, String)> {
+    let marker = format!("@{name}(");
+    let mut lines = ir.lines();
+    let mut kept = String::new();
+    let mut body = String::new();
+    while let Some(line) = lines.next() {
+        if !(line.starts_with("define ") && line.contains(&marker)) {
+            kept += line;
+            kept.push('\n');
+            continue;
+        }
+        let close = line.rfind(')')?;
+        let header = line[..=close].replace("noinline", "");
+        body += &format!("{header} alwaysinline {{\n");
+        for l in lines.by_ref() {
+            body += l;
+            body.push('\n');
+            if l == "}" {
+                break;
+            }
+        }
+        kept += &format!("declare i64 {marker}i64, i64)\n");
+    }
+    (!body.is_empty()).then_some((kept, body))
+}
+
+fn run_opt(ir: &str, passes: &str, entry_fn: &str) -> Result<String, Diagnostic> {
     let in_file = temp_path("opt_in", "ll");
     let out_file = temp_path("opt_out", "ll");
     let _guard = TempFiles(vec![in_file.clone(), out_file.clone()]);
-
-    std::fs::write(&in_file, &cleaned_input)
+    std::fs::write(&in_file, ir)
         .map_err(|e| err_alive2(format!("failed to write opt input: {e}")))?;
-
     let opt = find_opt();
     let out = Command::new(&opt)
         .arg("-S")
         .arg("-unroll-threshold=100000")
-        .arg("-passes=always-inline,sroa,mem2reg,simplifycfg,loop-simplify,lcssa,indvars,loop-unroll<no-runtime;full-unroll-max=64>,instcombine,simplifycfg,sroa,mem2reg,reassociate,instcombine,gvn,simplifycfg,loop-simplify,lcssa")
+        .arg(passes)
         .arg(&in_file)
         .arg("-o")
         .arg(&out_file)
         .output()
         .map_err(|e| err_alive2(format!("failed to invoke {}: {e}", opt.display())))?;
-
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         return Err(err_alive2(format!(
             "opt failed while preparing `{entry_fn}` for Alive2: {stderr}"
         )));
     }
-
-    let opt_ir = std::fs::read_to_string(&out_file)
-        .map_err(|e| err_alive2(format!("failed to read opt output: {e}")))?;
-
-    Ok(sanitize_ir_for_alive_tv(&opt_ir, entry_fn, large_globals))
+    std::fs::read_to_string(&out_file)
+        .map_err(|e| err_alive2(format!("failed to read opt output: {e}")))
 }
 
 fn strip_loop_metadata(ir: &str) -> String {
@@ -1156,8 +1222,11 @@ fn lower_const_to_alive(
                         format!("i{elem_bits} {}", (*x as u64) & mask)
                     })
                     .collect();
+                // Aligned at least to the element: an i64 table at align 4 makes the
+                // lowered `load i64, align 8` UB.
+                let align = (elem_bits / 8).max(4);
                 ctx.globals.push(format!(
-                    "{gname} = internal constant [{len} x i{elem_bits}] [{}], align 4",
+                    "{gname} = internal constant [{len} x i{elem_bits}] [{}], align {align}",
                     items.join(", ")
                 ));
                 Ok(AliveVal::Array {

@@ -17,16 +17,21 @@ pub enum Language {
     Zig,
     Swift,
     Glsl,
+    /// R-13: a typed, pure, int-only Python subset, translated to C by pylift.py.
+    #[cfg(feature = "r-13")]
+    Python,
 }
 
 impl Language {
-    pub const ALL: [Language; 6] = [
+    pub const ALL: &[Language] = &[
         Language::C,
         Language::Cpp,
         Language::Rust,
         Language::Zig,
         Language::Swift,
         Language::Glsl,
+        #[cfg(feature = "r-13")]
+        Language::Python,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -37,6 +42,8 @@ impl Language {
             Language::Zig => "zig",
             Language::Swift => "swift",
             Language::Glsl => "glsl",
+            #[cfg(feature = "r-13")]
+            Language::Python => "python",
         }
     }
 
@@ -46,9 +53,10 @@ impl Language {
         let n = match n.as_str() {
             "c++" | "cxx" => "cpp",
             "rs" => "rust",
+            "py" => "python",
             other => other,
         };
-        Language::ALL.into_iter().find(|l| l.as_str() == n)
+        Language::ALL.iter().copied().find(|l| l.as_str() == n)
     }
 
     pub fn from_extension(ext: &str) -> Option<Language> {
@@ -59,6 +67,8 @@ impl Language {
             "zig" => Language::Zig,
             "swift" => Language::Swift,
             "glsl" | "comp" | "vert" | "frag" => Language::Glsl,
+            #[cfg(feature = "r-13")]
+            "py" => Language::Python,
             _ => return None,
         })
     }
@@ -67,14 +77,30 @@ impl Language {
 fn compiler_for(language: Language) -> PathBuf {
     match language {
         Language::C | Language::Cpp | Language::Glsl => find_clang(),
+        #[cfg(feature = "r-13")]
+        Language::Python => find_clang(),
         Language::Rust => find_rustc(),
         Language::Zig => PathBuf::from("zig"),
         Language::Swift => PathBuf::from("swiftc"),
     }
 }
 
-/// Whether the tools this language's ingest runs are installed (GLSL also needs glslc).
+/// Whether the tools this language's ingest runs are installed (GLSL also needs glslc,
+/// Python a python3 of 3.11 or newer).
 pub fn has_compiler(language: Language) -> bool {
+    #[cfg(feature = "r-13")]
+    if language == Language::Python
+        && !Command::new("python3")
+            .args([
+                "-I",
+                "-c",
+                "import sys; sys.exit(sys.version_info < (3, 11))",
+            ])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    {
+        return false;
+    }
     let runs = |tool: &Path, arg: &str| {
         Command::new(tool)
             .arg(arg)
@@ -240,6 +266,37 @@ fn prepare_glsl(path: &Path, temps: &mut Vec<PathBuf>) -> Result<PathBuf, Diagno
     Ok(cpp_path)
 }
 
+/// R-13: translate the Python function to C with pylift.py (embedded), run isolated.
+#[cfg(feature = "r-13")]
+fn prepare_python(
+    path: &Path,
+    function: &str,
+    temps: &mut Vec<PathBuf>,
+) -> Result<PathBuf, Diagnostic> {
+    let script = fresh_temp_path("pylift", "py");
+    let c_path = fresh_temp_path("pylift", "c");
+    temps.extend([script.clone(), c_path.clone()]);
+    std::fs::write(&script, include_str!("pylift.py"))
+        .map_err(|e| ingest_err(format!("write failed: {e}")))?;
+    let out = Command::new("python3")
+        .arg("-I")
+        .arg(&script)
+        .arg(path)
+        .arg(function)
+        .arg(&c_path)
+        .output()
+        .map_err(|e| ingest_err(format!("failed to invoke python3: {e}")))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(ingest_err(format!(
+            "{} is outside the OmniLift Python subset: {}",
+            path.display(),
+            stderr.chars().take(300).collect::<String>().trim()
+        )));
+    }
+    Ok(c_path)
+}
+
 /// GLSL has no pointers: a `ptr` parameter means an array or struct passed by value in GLSL
 /// became a reference in C++, which a callee could write through.
 fn check_no_pointer_params(ir: &str) -> Result<(), Diagnostic> {
@@ -396,8 +453,10 @@ pub fn ingest_to_llvm_ir(
     let raw_ll = fresh_temp_path("raw", "ll");
     let norm_ll = fresh_temp_path("norm", "ll");
     let mut temps = vec![raw_ll.clone(), norm_ll.clone()];
-    let glsl_cpp = match language {
+    let translated = match language {
         Language::Glsl => Some(prepare_glsl(path, &mut temps)?),
+        #[cfg(feature = "r-13")]
+        Language::Python => Some(prepare_python(path, function, &mut temps)?),
         _ => None,
     };
     let zig_cache = fresh_temp_path("zig_cache", "d");
@@ -406,6 +465,29 @@ pub fn ingest_to_llvm_ir(
 
     let compiler_path = compiler_for(language);
     let mut compiler_args = match language {
+        #[cfg(feature = "r-13")]
+        Language::Python => {
+            // -O0 without optnone: every Python operation stays one C operation with its nsw
+            // and UB intact; -O1 may reassociate and drop nsw, letting an overflow wrap.
+            let mut args = [
+                "-O0",
+                "-Xclang",
+                "-disable-O0-optnone",
+                "-Wno-unused-function",
+                "-std=c11",
+                "-S",
+                "-emit-llvm",
+                "-target",
+                "aarch64-apple-darwin",
+            ]
+            .map(String::from)
+            .to_vec();
+            args.extend(extra_args.iter().cloned());
+            args.push(translated.as_deref().unwrap_or(path).display().to_string());
+            args.push("-o".to_string());
+            args.push(raw_ll.display().to_string());
+            args
+        }
         Language::C | Language::Cpp | Language::Glsl => {
             let mut args = vec![
                 "-O1".to_string(),
@@ -434,7 +516,7 @@ pub fn ingest_to_llvm_ir(
                 }
                 args.extend(extra_args.iter().cloned());
             }
-            args.push(glsl_cpp.as_deref().unwrap_or(path).display().to_string());
+            args.push(translated.as_deref().unwrap_or(path).display().to_string());
             args.push("-o".to_string());
             args.push(raw_ll.display().to_string());
             args
@@ -559,6 +641,13 @@ pub fn ingest_to_llvm_ir(
     // (Zig at -Oz) also get loop-rotate, so every loop exits from its latch.
     let passes = match language {
         Language::Zig => "-passes=mem2reg,loop-simplify,loop-rotate,lcssa,indvars",
+        // -O0 code keeps empty join blocks between an if and a loop latch; simplifycfg with
+        // speculation, hoisting and sinking off only merges such blocks, so no nsw is lost.
+        #[cfg(feature = "r-13")]
+        Language::Python => {
+            "-passes=mem2reg,simplifycfg<keep-loops;no-hoist-common-insts;no-sink-common-insts;\
+             no-speculate-blocks>,loop-simplify,loop-rotate,lcssa,indvars"
+        }
         _ => "-passes=mem2reg,loop-simplify,lcssa,indvars",
     };
     let opt_args = vec![
@@ -609,8 +698,13 @@ pub fn ingest_to_llvm_ir(
         for (temp, stable) in &temp_names {
             *arg = arg.replace(temp, stable);
         }
-        if let Some(cpp) = &glsl_cpp {
-            *arg = arg.replace(&cpp.display().to_string(), "<glsl.cpp>");
+        if let Some(cpp) = &translated {
+            let stable = match language {
+                #[cfg(feature = "r-13")]
+                Language::Python => "<pylift.c>",
+                _ => "<glsl.cpp>",
+            };
+            *arg = arg.replace(&cpp.display().to_string(), stable);
         }
     }
     let stable_opt_args = vec![
@@ -687,7 +781,7 @@ mod tests {
 
     #[test]
     fn language_names_and_extensions_round_trip() {
-        for l in Language::ALL {
+        for &l in Language::ALL {
             assert_eq!(Language::from_name(l.as_str()), Some(l));
         }
         assert_eq!(Language::from_name("C++"), Some(Language::Cpp));
