@@ -113,6 +113,8 @@ fn build_writer(dir: &Path, target: &str) -> Option<PathBuf> {
         "build",
         src.to_str().unwrap(),
         "@main",
+        "--root",
+        dir.to_str().unwrap(),
         "--target",
         target,
         "-o",
